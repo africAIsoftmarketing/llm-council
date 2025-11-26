@@ -53,7 +53,8 @@ Name: "startupicon"; Description: "Start LLM Council when Windows starts"; Group
 Source: "..\..\backend\*"; DestDir: "{app}\backend"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,*.pyc,*.pyo,.env"
 
 ; Frontend built files (run 'npm run build' in frontend folder first)
-Source: "..\..\frontend\dist\*"; DestDir: "{app}\frontend"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: DirExists(ExpandConstant('..\..\frontend\dist'))
+; NOTE: Comment this line if frontend/dist doesn't exist
+Source: "..\..\frontend\dist\*"; DestDir: "{app}\frontend"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; Embedded Python (run download_python.bat first)
 Source: "..\embedded-python\*"; DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs createallsubdirs
