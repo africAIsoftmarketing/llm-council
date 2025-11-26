@@ -38,7 +38,7 @@ echo Waiting for server to start...
 set /a count=0
 :waitloop
 timeout /t 1 /nobreak >nul
-curl -s http://localhost:8001/ >nul 2>&1
+curl -s http://localhost:8001/api/health >nul 2>&1
 if %ERRORLEVEL% EQU 0 goto serverready
 set /a count+=1
 if %count% LSS 15 goto waitloop
