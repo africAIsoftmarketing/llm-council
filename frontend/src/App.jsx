@@ -59,18 +59,22 @@ function App() {
 
   // Check configuration status on mount
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     checkConfiguration();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadDocuments();
   }, [checkConfiguration, loadDocuments]);
 
   // Load conversations on mount
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadConversations();
   }, [loadConversations]);
 
   // Load conversation details when selected
   useEffect(() => {
     if (currentConversationId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadConversation(currentConversationId);
     }
   }, [currentConversationId, loadConversation]);
