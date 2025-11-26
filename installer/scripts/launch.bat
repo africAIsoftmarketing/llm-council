@@ -7,12 +7,9 @@ set "APP_DIR=%SCRIPT_DIR%.."
 set "PYTHON_DIR=%APP_DIR%\python"
 set "BACKEND_DIR=%APP_DIR%\backend"
 set "PYTHON_EXE=%PYTHON_DIR%\python.exe"
-set "DATA_DIR=%APP_DIR%\data"
 
-REM Create data directories if not exist
-if not exist "%DATA_DIR%" mkdir "%DATA_DIR%"
-if not exist "%DATA_DIR%\conversations" mkdir "%DATA_DIR%\conversations"
-if not exist "%DATA_DIR%\documents" mkdir "%DATA_DIR%\documents"
+REM Data will be stored in AppData (handled by Python)
+REM %APPDATA%\LLM Council\data\
 
 REM Check if backend is already running
 curl -s http://localhost:8001/ >nul 2>&1
@@ -24,14 +21,17 @@ if %ERRORLEVEL% EQU 0 (
 
 REM Set environment
 set "PYTHONPATH=%BACKEND_DIR%"
-set "DATA_DIR=%DATA_DIR%"
 
-echo Starting LLM Council...
+echo ============================================
+echo   LLM Council - Starting Server
+echo ============================================
+echo.
+echo Data location: %APPDATA%\LLM Council\data
 echo.
 
 REM Start backend server in background
 cd /d "%BACKEND_DIR%"
-start "LLM Council" /B /MIN "%PYTHON_EXE%" -m uvicorn main:app --host 127.0.0.1 --port 8001
+start "LLM Council Server" /MIN "%PYTHON_EXE%" -m uvicorn main:app --host 127.0.0.1 --port 8001
 
 REM Wait for server to start
 echo Waiting for server to start...
@@ -42,7 +42,9 @@ curl -s http://localhost:8001/ >nul 2>&1
 if %ERRORLEVEL% EQU 0 goto serverready
 set /a count+=1
 if %count% LSS 15 goto waitloop
-echo Server failed to start in time.
+echo.
+echo ERROR: Server failed to start in time.
+echo Check if port 8001 is already in use.
 pause
 exit /b 1
 
@@ -53,7 +55,15 @@ echo Opening LLM Council in your browser...
 start http://localhost:8001
 
 echo.
-echo LLM Council is running at: http://localhost:8001
+echo ============================================
+echo   LLM Council is running!
+echo ============================================
 echo.
-echo To stop: Close this window or run stop_services.bat
+echo Web Dashboard: http://localhost:8001
 echo.
+echo To stop: Close this window or press any key
+echo.
+pause >nul
+REM Stop server when user presses a key
+taskkill /FI "WINDOWTITLE eq LLM Council Server*" >nul 2>&1
+echo Server stopped.
