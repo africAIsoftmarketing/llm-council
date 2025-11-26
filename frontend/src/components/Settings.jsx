@@ -32,16 +32,21 @@ export default function Settings({ onConfigUpdate, showToast }) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [showToast]);
 
-  const loadAvailableModels = async () => {
+  const loadAvailableModels = useCallback(async () => {
     try {
       const result = await api.getAvailableModels();
       setAvailableModels(result.models || []);
     } catch (error) {
       console.error('Failed to load models:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadConfiguration();
+    loadAvailableModels();
+  }, [loadConfiguration, loadAvailableModels]);
 
   const handleValidateKey = async () => {
     if (!apiKey.trim()) {
