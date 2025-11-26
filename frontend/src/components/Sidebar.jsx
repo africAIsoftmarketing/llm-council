@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import './Sidebar.css';
 
 export default function Sidebar({
@@ -6,17 +6,68 @@ export default function Sidebar({
   currentConversationId,
   onSelectConversation,
   onNewConversation,
+  onDeleteConversation,
+  currentView,
+  onViewChange,
+  isConfigured,
 }) {
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  const handleDeleteClick = (e, convId) => {
+    e.stopPropagation();
+    if (deleteConfirm === convId) {
+      onDeleteConversation(convId);
+      setDeleteConfirm(null);
+    } else {
+      setDeleteConfirm(convId);
+      setTimeout(() => setDeleteConfirm(null), 3000);
+    }
+  };
+
   return (
-    <div className="sidebar">
+    <div className="sidebar" data-testid="sidebar">
       <div className="sidebar-header">
         <h1>LLM Council</h1>
-        <button className="new-conversation-btn" onClick={onNewConversation}>
-          + New Conversation
+        <div className="config-status">
+          <span className={`status-dot ${isConfigured ? 'configured' : 'not-configured'}`}></span>
+          <span>{isConfigured ? 'Ready' : 'Not Configured'}</span>
+        </div>
+      </div>
+
+      <button 
+        className="new-conversation-btn" 
+        onClick={onNewConversation}
+        data-testid="btn-new-conversation"
+      >
+        + New Conversation
+      </button>
+
+      <div className="sidebar-nav">
+        <button
+          className={`nav-btn ${currentView === 'chat' ? 'active' : ''}`}
+          onClick={() => onViewChange('chat')}
+          data-testid="nav-chat"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          Chat
+        </button>
+        <button
+          className={`nav-btn ${currentView === 'settings' ? 'active' : ''}`}
+          onClick={() => onViewChange('settings')}
+          data-testid="nav-settings"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          Settings
         </button>
       </div>
 
       <div className="conversation-list">
+        <div className="list-header">Conversations</div>
         {conversations.length === 0 ? (
           <div className="no-conversations">No conversations yet</div>
         ) : (
@@ -24,16 +75,27 @@ export default function Sidebar({
             <div
               key={conv.id}
               className={`conversation-item ${
-                conv.id === currentConversationId ? 'active' : ''
+                conv.id === currentConversationId && currentView === 'chat' ? 'active' : ''
               }`}
               onClick={() => onSelectConversation(conv.id)}
+              data-testid={`conversation-${conv.id}`}
             >
-              <div className="conversation-title">
-                {conv.title || 'New Conversation'}
+              <div className="conversation-content">
+                <div className="conversation-title">
+                  {conv.title || 'New Conversation'}
+                </div>
+                <div className="conversation-meta">
+                  {conv.message_count} message{conv.message_count !== 1 ? 's' : ''}
+                </div>
               </div>
-              <div className="conversation-meta">
-                {conv.message_count} messages
-              </div>
+              <button
+                className={`delete-btn ${deleteConfirm === conv.id ? 'confirm' : ''}`}
+                onClick={(e) => handleDeleteClick(e, conv.id)}
+                title={deleteConfirm === conv.id ? 'Click again to confirm' : 'Delete conversation'}
+                data-testid={`delete-${conv.id}`}
+              >
+                {deleteConfirm === conv.id ? '✓' : '×'}
+              </button>
             </div>
           ))
         )}
