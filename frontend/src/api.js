@@ -1,8 +1,12 @@
 /**
  * API client for the LLM Council backend.
+ * Uses relative URLs when served from the same origin (production),
+ * or full URL in development.
  */
 
-const API_BASE = import.meta.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
+// Use relative URL (empty string) when frontend is served by backend
+// Use full URL only in development with Vite dev server
+const API_BASE = import.meta.env.DEV ? 'http://localhost:8001' : '';
 
 export const api = {
   // ===== Configuration APIs =====
