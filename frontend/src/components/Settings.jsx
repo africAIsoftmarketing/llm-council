@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
 import './Settings.css';
 
@@ -18,12 +18,7 @@ export default function Settings({ onConfigUpdate, showToast }) {
   const [customModel, setCustomModel] = useState({ id: '', name: '', provider: '' });
   const [theme, setTheme] = useState('light');
 
-  useEffect(() => {
-    loadConfiguration();
-    loadAvailableModels();
-  }, []);
-
-  const loadConfiguration = async () => {
+  const loadConfiguration = useCallback(async () => {
     try {
       setIsLoading(true);
       const cfg = await api.getConfig();
