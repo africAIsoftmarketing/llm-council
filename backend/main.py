@@ -467,6 +467,43 @@ My question: {request.content}"""
     )
 
 
+# ===== Static File Serving for Frontend =====
+
+# Mount static files if frontend exists
+if FRONTEND_PATH and FRONTEND_PATH.exists():
+    # Serve static assets (JS, CSS, images)
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_PATH / "assets")), name="assets")
+    
+    # Serve index.html for the root and any non-API routes (SPA routing)
+    @app.get("/", response_class=HTMLResponse)
+    async def serve_frontend_root():
+        """Serve the frontend application."""
+        index_path = FRONTEND_PATH / "index.html"
+        if index_path.exists():
+            return FileResponse(str(index_path), media_type="text/html")
+        return HTMLResponse(content="<h1>LLM Council API</h1><p>Frontend not found. API is running at /api/</p>")
+    
+    # Catch-all for SPA routing - serve index.html for non-API routes
+    @app.get("/{full_path:path}")
+    async def serve_frontend_spa(full_path: str):
+        """Serve frontend for SPA routing."""
+        # Don't serve index.html for API routes
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not found")
+        
+        # Try to serve the exact file first
+        file_path = FRONTEND_PATH / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(str(file_path))
+        
+        # Otherwise serve index.html for SPA routing
+        index_path = FRONTEND_PATH / "index.html"
+        if index_path.exists():
+            return FileResponse(str(index_path), media_type="text/html")
+        
+        raise HTTPException(status_code=404, detail="Not found")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
