@@ -68,16 +68,16 @@ Source: "..\config\default_config.json"; DestDir: "{app}\config"; Flags: ignorev
 Source: "..\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\scripts\launch.bat"; WorkingDir: "{app}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
-Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startupicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\scripts\launch.bat"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\scripts\launch.bat"; WorkingDir: "{app}"; Tasks: startupicon
 
 [Run]
-; Post-installation: Install Python packages
-Filename: "{app}\scripts\setup.bat"; Parameters: ""; StatusMsg: "Installing Python dependencies..."; Flags: runhidden waituntilterminated
+; Post-installation: Install Python packages (already done if using embedded python with packages)
+; Filename: "{app}\scripts\setup.bat"; Parameters: ""; StatusMsg: "Installing Python dependencies..."; Flags: runhidden waituntilterminated
 ; Launch application after install
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\scripts\launch.bat"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent shellexec
 
 [UninstallRun]
 ; Stop services before uninstall
