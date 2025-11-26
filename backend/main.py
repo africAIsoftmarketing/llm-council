@@ -1,28 +1,49 @@
-"""FastAPI backend for LLM Council."""
+"""FastAPI backend for LLM Council with configuration and document management."""
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import uuid
 import json
 import asyncio
+import os
 
 from . import storage
-from .council import run_full_council, generate_conversation_title, stage1_collect_responses, stage2_collect_rankings, stage3_synthesize_final, calculate_aggregate_rankings
+from .council import (
+    run_full_council, generate_conversation_title, 
+    stage1_collect_responses, stage2_collect_rankings, 
+    stage3_synthesize_final, calculate_aggregate_rankings
+)
+from .config_manager import (
+    get_config, update_config, validate_api_key, get_available_models,
+    add_custom_model, load_config, get_api_key, apply_config_to_env
+)
+from .document_processor import (
+    process_uploaded_file, list_documents, get_document, 
+    delete_document, toggle_document_active, get_active_documents_context,
+    SUPPORTED_EXTENSIONS
+)
 
 app = FastAPI(title="LLM Council API")
 
 # Enable CORS for local development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Apply configuration on startup
+@app.on_event("startup")
+async def startup_event():
+    apply_config_to_env()
+
+
+# ===== Request/Response Models =====
 
 class CreateConversationRequest(BaseModel):
     """Request to create a new conversation."""
@@ -32,6 +53,8 @@ class CreateConversationRequest(BaseModel):
 class SendMessageRequest(BaseModel):
     """Request to send a message in a conversation."""
     content: str
+    include_documents: Optional[bool] = True
+    document_ids: Optional[List[str]] = None
 
 
 class ConversationMetadata(BaseModel):
@@ -50,11 +73,159 @@ class Conversation(BaseModel):
     messages: List[Dict[str, Any]]
 
 
+class ConfigUpdateRequest(BaseModel):
+    """Request to update configuration."""
+    openrouter_api_key: Optional[str] = None
+    council_models: Optional[List[str]] = None
+    chairman_model: Optional[str] = None
+    backend_port: Optional[int] = None
+    frontend_port: Optional[int] = None
+    auto_credit_reminder: Optional[bool] = None
+    credit_reminder_threshold: Optional[float] = None
+    document_settings: Optional[Dict[str, Any]] = None
+    storage_location: Optional[str] = None
+    theme: Optional[str] = None
+
+
+class ValidateKeyRequest(BaseModel):
+    """Request to validate an API key."""
+    api_key: str
+
+
+class CustomModelRequest(BaseModel):
+    """Request to add a custom model."""
+    model_id: str
+    model_name: str
+    provider: str
+
+
+class ToggleDocumentRequest(BaseModel):
+    """Request to toggle document active status."""
+    is_active: bool
+
+
+# ===== Health Check =====
+
 @app.get("/")
 async def root():
     """Health check endpoint."""
-    return {"status": "ok", "service": "LLM Council API"}
+    config = load_config()
+    has_key = bool(config.get("openrouter_api_key"))
+    return {
+        "status": "ok", 
+        "service": "LLM Council API",
+        "configured": has_key,
+        "version": "2.0.0"
+    }
 
+
+# ===== Configuration Endpoints =====
+
+@app.get("/api/config")
+async def get_configuration():
+    """Get current configuration (API key masked)."""
+    return get_config()
+
+
+@app.put("/api/config")
+async def update_configuration(request: ConfigUpdateRequest):
+    """Update configuration."""
+    updates = request.model_dump(exclude_none=True)
+    updated_config = update_config(updates)
+    apply_config_to_env()
+    return updated_config
+
+
+@app.post("/api/config/validate-key")
+async def validate_openrouter_key(request: ValidateKeyRequest):
+    """Validate an OpenRouter API key."""
+    result = await validate_api_key(request.api_key)
+    return result
+
+
+@app.get("/api/models/available")
+async def get_models():
+    """Get list of available models."""
+    return {"models": get_available_models()}
+
+
+@app.post("/api/models/custom")
+async def add_custom_model_endpoint(request: CustomModelRequest):
+    """Add a custom model."""
+    model = add_custom_model(request.model_id, request.model_name, request.provider)
+    return {"model": model}
+
+
+# ===== Document Endpoints =====
+
+@app.get("/api/documents")
+async def get_documents():
+    """List all uploaded documents."""
+    return {"documents": list_documents()}
+
+
+@app.post("/api/documents/upload")
+async def upload_document(file: UploadFile = File(...)):
+    """Upload a document for processing."""
+    try:
+        content = await file.read()
+        result = await process_uploaded_file(
+            content, 
+            file.filename or "unnamed",
+            file.content_type
+        )
+        return {"success": True, "document": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+
+
+@app.get("/api/documents/{doc_id}")
+async def get_document_details(doc_id: str):
+    """Get document details and content."""
+    doc = get_document(doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    return {
+        "id": doc["id"],
+        "filename": doc["filename"],
+        "extension": doc["extension"],
+        "size": doc["size"],
+        "uploaded_at": doc["uploaded_at"],
+        "chunk_count": doc.get("chunk_count", 1),
+        "text_length": doc.get("text_length", 0),
+        "is_active": doc.get("is_active", True),
+        "extracted_text": doc.get("extracted_text", "")
+    }
+
+
+@app.delete("/api/documents/{doc_id}")
+async def delete_document_endpoint(doc_id: str):
+    """Delete a document."""
+    success = delete_document(doc_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"success": True}
+
+
+@app.patch("/api/documents/{doc_id}/toggle")
+async def toggle_document(doc_id: str, request: ToggleDocumentRequest):
+    """Toggle document active status."""
+    success = toggle_document_active(doc_id, request.is_active)
+    if not success:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"success": True, "is_active": request.is_active}
+
+
+@app.get("/api/documents/supported-types")
+async def get_supported_types():
+    """Get list of supported file types."""
+    return {"supported_extensions": list(SUPPORTED_EXTENSIONS.keys())}
+
+
+# ===== Conversation Endpoints =====
 
 @app.get("/api/conversations", response_model=List[ConversationMetadata])
 async def list_conversations():
@@ -79,12 +250,29 @@ async def get_conversation(conversation_id: str):
     return conversation
 
 
+@app.delete("/api/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str):
+    """Delete a conversation."""
+    success = storage.delete_conversation(conversation_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"success": True}
+
+
 @app.post("/api/conversations/{conversation_id}/message")
 async def send_message(conversation_id: str, request: SendMessageRequest):
     """
     Send a message and run the 3-stage council process.
     Returns the complete response with all stages.
     """
+    # Check API key
+    api_key = get_api_key()
+    if not api_key:
+        raise HTTPException(
+            status_code=400, 
+            detail="OpenRouter API key not configured. Please go to Settings to add your API key."
+        )
+    
     # Check if conversation exists
     conversation = storage.get_conversation(conversation_id)
     if conversation is None:
@@ -92,6 +280,19 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
 
     # Check if this is the first message
     is_first_message = len(conversation["messages"]) == 0
+
+    # Build query with document context if requested
+    query_content = request.content
+    if request.include_documents:
+        doc_context = get_active_documents_context()
+        if doc_context:
+            query_content = f"""I have uploaded the following documents for reference:
+
+{doc_context}
+
+---
+
+My question: {request.content}"""
 
     # Add user message
     storage.add_user_message(conversation_id, request.content)
@@ -103,7 +304,7 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
 
     # Run the 3-stage council process
     stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
-        request.content
+        query_content
     )
 
     # Add assistant message with all stages
@@ -129,6 +330,14 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
     Send a message and stream the 3-stage council process.
     Returns Server-Sent Events as each stage completes.
     """
+    # Check API key
+    api_key = get_api_key()
+    if not api_key:
+        raise HTTPException(
+            status_code=400, 
+            detail="OpenRouter API key not configured. Please go to Settings to add your API key."
+        )
+    
     # Check if conversation exists
     conversation = storage.get_conversation(conversation_id)
     if conversation is None:
@@ -139,6 +348,19 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 
     async def event_generator():
         try:
+            # Build query with document context if requested
+            query_content = request.content
+            if request.include_documents:
+                doc_context = get_active_documents_context()
+                if doc_context:
+                    query_content = f"""I have uploaded the following documents for reference:
+
+{doc_context}
+
+---
+
+My question: {request.content}"""
+
             # Add user message
             storage.add_user_message(conversation_id, request.content)
 
@@ -149,18 +371,18 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 
             # Stage 1: Collect responses
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
-            stage1_results = await stage1_collect_responses(request.content)
+            stage1_results = await stage1_collect_responses(query_content)
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
 
             # Stage 2: Collect rankings
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
-            stage2_results, label_to_model = await stage2_collect_rankings(request.content, stage1_results)
+            stage2_results, label_to_model = await stage2_collect_rankings(query_content, stage1_results)
             aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
             yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
 
             # Stage 3: Synthesize final answer
             yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
-            stage3_result = await stage3_synthesize_final(request.content, stage1_results, stage2_results)
+            stage3_result = await stage3_synthesize_final(query_content, stage1_results, stage2_results)
             yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
 
             # Wait for title generation if it was started

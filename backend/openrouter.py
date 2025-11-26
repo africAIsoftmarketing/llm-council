@@ -1,8 +1,10 @@
-"""OpenRouter API client for making LLM requests."""
+"""OpenRouter API client for making LLM requests with dynamic configuration."""
 
 import httpx
 from typing import List, Dict, Any, Optional
-from .config import OPENROUTER_API_KEY, OPENROUTER_API_URL
+from .config_manager import get_api_key
+
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
 async def query_model(
@@ -21,8 +23,13 @@ async def query_model(
     Returns:
         Response dict with 'content' and optional 'reasoning_details', or None if failed
     """
+    api_key = get_api_key()
+    if not api_key:
+        print(f"Error querying model {model}: No API key configured")
+        return None
+    
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
 
