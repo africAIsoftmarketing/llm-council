@@ -1,10 +1,12 @@
 """FastAPI backend for LLM Council with configuration and document management."""
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
+from pathlib import Path
 import uuid
 import json
 import asyncio
@@ -51,16 +53,45 @@ app = FastAPI(title="LLM Council API")
 # Enable CORS for local development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://localhost:8001", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Determine frontend path
+def get_frontend_path():
+    """Get the path to frontend dist folder."""
+    # Check various possible locations
+    possible_paths = [
+        # When running from installer (frontend is sibling to backend)
+        Path(__file__).parent.parent / "frontend",
+        Path(__file__).parent.parent / "frontend" / "dist",
+        # When running in development
+        Path(__file__).parent.parent / "frontend" / "dist",
+        # Relative to current working directory
+        Path("frontend") / "dist",
+        Path("frontend"),
+    ]
+    
+    for p in possible_paths:
+        if p.exists() and (p / "index.html").exists():
+            return p
+        elif p.exists() and (p / "dist" / "index.html").exists():
+            return p / "dist"
+    
+    return None
+
+FRONTEND_PATH = get_frontend_path()
+
 # Apply configuration on startup
 @app.on_event("startup")
 async def startup_event():
     apply_config_to_env()
+    if FRONTEND_PATH:
+        print(f"Frontend path: {FRONTEND_PATH}")
+    else:
+        print("Frontend not found - API-only mode")
 
 
 # ===== Request/Response Models =====
