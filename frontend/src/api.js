@@ -302,7 +302,7 @@ export const api = {
    */
   async healthCheck() {
     try {
-      const response = await fetch(`${API_BASE}/`);
+      const response = await fetch(`${API_BASE}/api/health`);
       if (!response.ok) {
         return { status: 'error', configured: false };
       }
