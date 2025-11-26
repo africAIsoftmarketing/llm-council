@@ -107,7 +107,7 @@ AVAILABLE_MODELS = [
 
 def ensure_data_dir():
     """Ensure the data directory exists."""
-    Path("data").mkdir(parents=True, exist_ok=True)
+    Path(BASE_DATA_DIR).mkdir(parents=True, exist_ok=True)
 
 
 def load_config() -> Dict[str, Any]:
