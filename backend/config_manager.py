@@ -1,13 +1,34 @@
 """Configuration management for LLM Council."""
 
 import os
+import sys
 import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import httpx
 
+
+def get_base_data_dir():
+    """Get the base data directory path - uses AppData on Windows."""
+    # First check environment variable
+    env_data_dir = os.environ.get("DATA_DIR")
+    if env_data_dir:
+        return env_data_dir
+    
+    # On Windows, use AppData
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA", os.path.expanduser("~"))
+        return os.path.join(appdata, "LLM Council", "data")
+    
+    # On other platforms, use local data folder
+    return "data"
+
+
+# Base data directory
+BASE_DATA_DIR = get_base_data_dir()
+
 # Configuration file path
-CONFIG_FILE = "data/config.json"
+CONFIG_FILE = os.path.join(BASE_DATA_DIR, "config.json")
 
 # Default configuration
 DEFAULT_CONFIG = {
