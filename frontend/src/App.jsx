@@ -61,7 +61,7 @@ function App() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     checkConfiguration();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     loadDocuments();
   }, [checkConfiguration, loadDocuments]);
 
