@@ -473,8 +473,10 @@ My question: {request.content}"""
 
 # Mount static files if frontend exists
 if FRONTEND_PATH and FRONTEND_PATH.exists():
-    # Serve static assets (JS, CSS, images)
-    app.mount("/assets", StaticFiles(directory=str(FRONTEND_PATH / "assets")), name="assets")
+    # Serve static assets (JS, CSS, images) if the assets directory exists
+    assets_path = FRONTEND_PATH / "assets"
+    if assets_path.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_path)), name="assets")
     
     # Serve index.html for the root and any non-API routes (SPA routing)
     @app.get("/", response_class=HTMLResponse)
