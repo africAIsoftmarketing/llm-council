@@ -49,26 +49,23 @@ Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescrip
 Name: "startupicon"; Description: "Start LLM Council when Windows starts"; GroupDescription: "Startup Options:"; Flags: unchecked
 
 [Files]
-; Main Electron application
-Source: "..\electron-app\dist\win-unpacked\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-; Embedded Python (Python 3.11 embeddable package)
-Source: "..\embedded-python\*"; DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs createallsubdirs
-
 ; Backend Python code
 Source: "..\..\backend\*"; DestDir: "{app}\backend"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,*.pyc,*.pyo,.env"
 
-; Frontend built files
-Source: "..\..\frontend\dist\*"; DestDir: "{app}\frontend"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Frontend built files (run 'npm run build' in frontend folder first)
+Source: "..\..\frontend\dist\*"; DestDir: "{app}\frontend"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: DirExists(ExpandConstant('..\..\frontend\dist'))
 
-; Configuration and scripts
+; Embedded Python (run download_python.bat first)
+Source: "..\embedded-python\*"; DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; Scripts
 Source: "..\scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; Documentation
-Source: "..\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-; Default configuration
+; Configuration
 Source: "..\config\default_config.json"; DestDir: "{app}\config"; Flags: ignoreversion
+
+; Documentation  
+Source: "..\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
