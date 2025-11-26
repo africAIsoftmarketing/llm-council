@@ -361,7 +361,7 @@ export default function Settings({ onConfigUpdate, showToast }) {
             <h2>Chairman Model</h2>
             <p className="settings-description">
               The Chairman model synthesizes the final response from all council members.
-              Choose a model that's good at summarization and analysis.
+              Choose a model that&apos;s good at summarization and analysis.
             </p>
 
             {config?.chairman_model && (
