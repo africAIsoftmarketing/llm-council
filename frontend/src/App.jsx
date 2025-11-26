@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
 import Settings from './components/Settings';
@@ -15,25 +15,7 @@ function App() {
   const [documents, setDocuments] = useState([]);
   const [toast, setToast] = useState(null);
 
-  // Check configuration status on mount
-  useEffect(() => {
-    checkConfiguration();
-    loadDocuments();
-  }, []);
-
-  // Load conversations on mount
-  useEffect(() => {
-    loadConversations();
-  }, []);
-
-  // Load conversation details when selected
-  useEffect(() => {
-    if (currentConversationId) {
-      loadConversation(currentConversationId);
-    }
-  }, [currentConversationId]);
-
-  const checkConfiguration = async () => {
+  const checkConfiguration = useCallback(async () => {
     try {
       const health = await api.healthCheck();
       setIsConfigured(health.configured || false);
@@ -41,38 +23,57 @@ function App() {
       console.error('Failed to check configuration:', error);
       setIsConfigured(false);
     }
-  };
+  }, []);
 
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     try {
       const result = await api.getDocuments();
       setDocuments(result.documents || []);
     } catch (error) {
       console.error('Failed to load documents:', error);
     }
-  };
+  }, []);
 
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async () => {
     try {
       const convs = await api.listConversations();
       setConversations(convs);
     } catch (error) {
       console.error('Failed to load conversations:', error);
     }
-  };
+  }, []);
 
-  const loadConversation = async (id) => {
+  const loadConversation = useCallback(async (id) => {
     try {
       const conv = await api.getConversation(id);
       setCurrentConversation(conv);
     } catch (error) {
       console.error('Failed to load conversation:', error);
     }
-  };
+  }, []);
 
-  const showToast = (message, type = 'info') => {
+  const showToast = useCallback((message, type = 'info') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  // Check configuration status on mount
+  useEffect(() => {
+    checkConfiguration();
+    loadDocuments();
+  }, [checkConfiguration, loadDocuments]);
+
+  // Load conversations on mount
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations]);
+
+  // Load conversation details when selected
+  useEffect(() => {
+    if (currentConversationId) {
+      loadConversation(currentConversationId);
+    }
+  }, [currentConversationId, loadConversation]);
   };
 
   const handleNewConversation = async () => {
