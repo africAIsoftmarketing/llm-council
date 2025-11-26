@@ -9,22 +9,42 @@ import uuid
 import json
 import asyncio
 import os
+import sys
 
-from . import storage
-from .council import (
-    run_full_council, generate_conversation_title, 
-    stage1_collect_responses, stage2_collect_rankings, 
-    stage3_synthesize_final, calculate_aggregate_rankings
-)
-from .config_manager import (
-    get_config, update_config, validate_api_key, get_available_models,
-    add_custom_model, load_config, get_api_key, apply_config_to_env
-)
-from .document_processor import (
-    process_uploaded_file, list_documents, get_document, 
-    delete_document, toggle_document_active, get_active_documents_context,
-    SUPPORTED_EXTENSIONS
-)
+# Handle imports for both module and direct execution
+try:
+    from . import storage
+    from .council import (
+        run_full_council, generate_conversation_title, 
+        stage1_collect_responses, stage2_collect_rankings, 
+        stage3_synthesize_final, calculate_aggregate_rankings
+    )
+    from .config_manager import (
+        get_config, update_config, validate_api_key, get_available_models,
+        add_custom_model, load_config, get_api_key, apply_config_to_env
+    )
+    from .document_processor import (
+        process_uploaded_file, list_documents, get_document, 
+        delete_document, toggle_document_active, get_active_documents_context,
+        SUPPORTED_EXTENSIONS
+    )
+except ImportError:
+    import storage
+    from council import (
+        run_full_council, generate_conversation_title, 
+        stage1_collect_responses, stage2_collect_rankings, 
+        stage3_synthesize_final, calculate_aggregate_rankings
+    )
+    from config_manager import (
+        get_config, update_config, validate_api_key, get_available_models,
+        add_custom_model, load_config, get_api_key, apply_config_to_env
+    )
+    from document_processor import (
+        process_uploaded_file, list_documents, get_document, 
+        delete_document, toggle_document_active, get_active_documents_context,
+        SUPPORTED_EXTENSIONS
+    )
+
 
 app = FastAPI(title="LLM Council API")
 
