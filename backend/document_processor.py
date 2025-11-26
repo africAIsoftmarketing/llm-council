@@ -1,6 +1,7 @@
 """Document processing module for extracting text from various file formats."""
 
 import os
+import sys
 import uuid
 import json
 from datetime import datetime
@@ -15,9 +16,26 @@ from pptx import Presentation
 from PIL import Image
 import io
 
+
+def get_base_data_dir():
+    """Get the base data directory path - uses AppData on Windows."""
+    env_data_dir = os.environ.get("DATA_DIR")
+    if env_data_dir:
+        return env_data_dir
+    
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA", os.path.expanduser("~"))
+        return os.path.join(appdata, "LLM Council", "data")
+    
+    return "data"
+
+
+# Base data directory
+BASE_DATA_DIR = get_base_data_dir()
+
 # Storage directory for documents
-DOCUMENTS_DIR = "data/documents"
-DOCUMENT_REGISTRY_FILE = "data/document_registry.json"
+DOCUMENTS_DIR = os.path.join(BASE_DATA_DIR, "documents")
+DOCUMENT_REGISTRY_FILE = os.path.join(BASE_DATA_DIR, "document_registry.json")
 
 # Supported file types
 SUPPORTED_EXTENSIONS = {
