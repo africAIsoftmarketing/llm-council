@@ -1,8 +1,13 @@
 """3-stage LLM Council orchestration with dynamic configuration."""
 
 from typing import List, Dict, Any, Tuple
-from .openrouter import query_models_parallel, query_model
-from .config_manager import get_council_models, get_chairman_model
+
+try:
+    from .openrouter import query_models_parallel, query_model
+    from .config_manager import get_council_models, get_chairman_model
+except ImportError:
+    from openrouter import query_models_parallel, query_model
+    from config_manager import get_council_models, get_chairman_model
 
 
 async def stage1_collect_responses(user_query: str) -> List[Dict[str, Any]]:
