@@ -159,8 +159,8 @@ class ToggleDocumentRequest(BaseModel):
 
 # ===== Health Check =====
 
-@app.get("/")
-async def root():
+@app.get("/api/health")
+async def health_check():
     """Health check endpoint."""
     config = load_config()
     has_key = bool(config.get("openrouter_api_key"))
