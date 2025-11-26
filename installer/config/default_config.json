@@ -1,0 +1,31 @@
+{
+  "openrouter_api_key": "",
+  "council_models": [
+    "openai/gpt-4o",
+    "google/gemini-2.0-flash-exp",
+    "anthropic/claude-3.5-sonnet",
+    "x-ai/grok-2"
+  ],
+  "chairman_model": "google/gemini-2.0-flash-exp",
+  "backend_port": 8001,
+  "frontend_port": 3000,
+  "auto_credit_reminder": true,
+  "credit_reminder_threshold": 5.0,
+  "document_settings": {
+    "max_file_size_mb": 50,
+    "auto_delete_days": 30,
+    "supported_extensions": [
+      ".pdf",
+      ".docx",
+      ".txt",
+      ".rtf",
+      ".pptx",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".md"
+    ]
+  },
+  "storage_location": "data",
+  "theme": "light"
+}
