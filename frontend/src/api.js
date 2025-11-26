@@ -5,6 +5,167 @@
 const API_BASE = 'http://localhost:8001';
 
 export const api = {
+  // ===== Configuration APIs =====
+  
+  /**
+   * Get current configuration.
+   */
+  async getConfig() {
+    const response = await fetch(`${API_BASE}/api/config`);
+    if (!response.ok) {
+      throw new Error('Failed to get configuration');
+    }
+    return response.json();
+  },
+
+  /**
+   * Update configuration.
+   */
+  async updateConfig(config) {
+    const response = await fetch(`${API_BASE}/api/config`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(config),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to update configuration');
+    }
+    return response.json();
+  },
+
+  /**
+   * Validate OpenRouter API key.
+   */
+  async validateApiKey(apiKey) {
+    const response = await fetch(`${API_BASE}/api/config/validate-key`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ api_key: apiKey }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to validate API key');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get available models.
+   */
+  async getAvailableModels() {
+    const response = await fetch(`${API_BASE}/api/models/available`);
+    if (!response.ok) {
+      throw new Error('Failed to get available models');
+    }
+    return response.json();
+  },
+
+  /**
+   * Add a custom model.
+   */
+  async addCustomModel(modelId, modelName, provider) {
+    const response = await fetch(`${API_BASE}/api/models/custom`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ model_id: modelId, model_name: modelName, provider }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to add custom model');
+    }
+    return response.json();
+  },
+
+  // ===== Document APIs =====
+
+  /**
+   * Get all documents.
+   */
+  async getDocuments() {
+    const response = await fetch(`${API_BASE}/api/documents`);
+    if (!response.ok) {
+      throw new Error('Failed to get documents');
+    }
+    return response.json();
+  },
+
+  /**
+   * Upload a document.
+   */
+  async uploadDocument(file, onProgress) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE}/api/documents/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to upload document');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get document details.
+   */
+  async getDocument(docId) {
+    const response = await fetch(`${API_BASE}/api/documents/${docId}`);
+    if (!response.ok) {
+      throw new Error('Failed to get document');
+    }
+    return response.json();
+  },
+
+  /**
+   * Delete a document.
+   */
+  async deleteDocument(docId) {
+    const response = await fetch(`${API_BASE}/api/documents/${docId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to delete document');
+    }
+    return response.json();
+  },
+
+  /**
+   * Toggle document active status.
+   */
+  async toggleDocument(docId, isActive) {
+    const response = await fetch(`${API_BASE}/api/documents/${docId}/toggle`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ is_active: isActive }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to toggle document');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get supported file types.
+   */
+  async getSupportedTypes() {
+    const response = await fetch(`${API_BASE}/api/documents/supported-types`);
+    if (!response.ok) {
+      throw new Error('Failed to get supported types');
+    }
+    return response.json();
+  },
+
+  // ===== Conversation APIs =====
+
   /**
    * List all conversations.
    */
@@ -47,9 +208,23 @@ export const api = {
   },
 
   /**
+   * Delete a conversation.
+   */
+  async deleteConversation(conversationId) {
+    const response = await fetch(
+      `${API_BASE}/api/conversations/${conversationId}`,
+      { method: 'DELETE' }
+    );
+    if (!response.ok) {
+      throw new Error('Failed to delete conversation');
+    }
+    return response.json();
+  },
+
+  /**
    * Send a message in a conversation.
    */
-  async sendMessage(conversationId, content) {
+  async sendMessage(conversationId, content, includeDocuments = true) {
     const response = await fetch(
       `${API_BASE}/api/conversations/${conversationId}/message`,
       {
@@ -57,11 +232,12 @@ export const api = {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, include_documents: includeDocuments }),
       }
     );
     if (!response.ok) {
-      throw new Error('Failed to send message');
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to send message');
     }
     return response.json();
   },
@@ -71,9 +247,10 @@ export const api = {
    * @param {string} conversationId - The conversation ID
    * @param {string} content - The message content
    * @param {function} onEvent - Callback function for each event: (eventType, data) => void
+   * @param {boolean} includeDocuments - Whether to include document context
    * @returns {Promise<void>}
    */
-  async sendMessageStream(conversationId, content, onEvent) {
+  async sendMessageStream(conversationId, content, onEvent, includeDocuments = true) {
     const response = await fetch(
       `${API_BASE}/api/conversations/${conversationId}/message/stream`,
       {
@@ -81,12 +258,13 @@ export const api = {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, include_documents: includeDocuments }),
       }
     );
 
     if (!response.ok) {
-      throw new Error('Failed to send message');
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to send message');
     }
 
     const reader = response.body.getReader();
@@ -110,6 +288,23 @@ export const api = {
           }
         }
       }
+    }
+  },
+
+  // ===== Health Check =====
+
+  /**
+   * Check backend health and configuration status.
+   */
+  async healthCheck() {
+    try {
+      const response = await fetch(`${API_BASE}/`);
+      if (!response.ok) {
+        return { status: 'error', configured: false };
+      }
+      return response.json();
+    } catch (error) {
+      return { status: 'error', configured: false, error: error.message };
     }
   },
 };
