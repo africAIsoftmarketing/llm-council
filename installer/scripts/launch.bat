@@ -12,7 +12,7 @@ REM Data will be stored in AppData (handled by Python)
 REM %APPDATA%\LLM Council\data\
 
 REM Check if backend is already running
-curl -s http://localhost:8001/ >nul 2>&1
+curl -s http://localhost:8001/api/health >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
     echo LLM Council is already running!
     start http://localhost:8001
