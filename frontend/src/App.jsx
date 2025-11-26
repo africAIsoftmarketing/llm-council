@@ -74,7 +74,6 @@ function App() {
       loadConversation(currentConversationId);
     }
   }, [currentConversationId, loadConversation]);
-  };
 
   const handleNewConversation = async () => {
     if (!isConfigured) {
