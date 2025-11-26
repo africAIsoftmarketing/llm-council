@@ -62,24 +62,26 @@ app.add_middleware(
 # Determine frontend path
 def get_frontend_path():
     """Get the path to frontend dist folder."""
+    # Get the directory where this file is located
+    backend_dir = Path(__file__).parent.resolve()
+    
     # Check various possible locations
     possible_paths = [
-        # When running from installer (frontend is sibling to backend)
-        Path(__file__).parent.parent / "frontend",
-        Path(__file__).parent.parent / "frontend" / "dist",
-        # When running in development
-        Path(__file__).parent.parent / "frontend" / "dist",
-        # Relative to current working directory
-        Path("frontend") / "dist",
-        Path("frontend"),
+        # Production: frontend dist is sibling to backend
+        backend_dir.parent / "frontend" / "dist",
+        backend_dir.parent / "frontend",
+        # Development: frontend/dist relative to backend parent
+        Path(os.getcwd()) / "frontend" / "dist",
+        Path(os.getcwd()) / "frontend",
     ]
     
     for p in possible_paths:
-        if p.exists() and (p / "index.html").exists():
+        index_file = p / "index.html"
+        if index_file.exists():
+            print(f"Found frontend at: {p}")
             return p
-        elif p.exists() and (p / "dist" / "index.html").exists():
-            return p / "dist"
     
+    print("Frontend not found in any expected location")
     return None
 
 FRONTEND_PATH = get_frontend_path()
