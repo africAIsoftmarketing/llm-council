@@ -1,0 +1,168 @@
+{
+  "summary": {
+    "total_tests": 9,
+    "passed_tests": 9,
+    "failed_tests": 0,
+    "success_rate": 100.0
+  },
+  "test_results": [
+    {
+      "test_name": "Health Check",
+      "success": true,
+      "details": "Status: ok, Configured: False, Version: 2.0.0",
+      "response_data": {
+        "status": "ok",
+        "service": "LLM Council API",
+        "configured": false,
+        "version": "2.0.0"
+      },
+      "timestamp": "2025-11-26T17:59:41.663403"
+    },
+    {
+      "test_name": "GET Config",
+      "success": true,
+      "details": "Has API key: False, Council models: 4",
+      "response_data": {
+        "council_models": [
+          "openai/gpt-4o",
+          "google/gemini-2.0-flash-exp",
+          "anthropic/claude-3.5-sonnet",
+          "x-ai/grok-2"
+        ],
+        "chairman_model": "google/gemini-2.0-flash-exp",
+        "backend_port": 8001,
+        "frontend_port": 5173,
+        "auto_credit_reminder": true,
+        "credit_reminder_threshold": 5.0,
+        "document_settings": {
+          "max_file_size_mb": 50,
+          "auto_delete_days": 30,
+          "supported_extensions": [
+            ".pdf",
+            ".docx",
+            ".txt",
+            ".rtf",
+            ".pptx",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".md"
+          ]
+        },
+        "storage_location": "data",
+        "theme": "light",
+        "openrouter_api_key_masked": "",
+        "has_api_key": false
+      },
+      "timestamp": "2025-11-26T17:59:41.704445"
+    },
+    {
+      "test_name": "PUT Config",
+      "success": true,
+      "details": "Successfully updated theme to dark",
+      "response_data": {
+        "council_models": [
+          "openai/gpt-4o",
+          "google/gemini-2.0-flash-exp",
+          "anthropic/claude-3.5-sonnet",
+          "x-ai/grok-2"
+        ],
+        "chairman_model": "google/gemini-2.0-flash-exp",
+        "backend_port": 8001,
+        "frontend_port": 5173,
+        "auto_credit_reminder": true,
+        "credit_reminder_threshold": 5.0,
+        "document_settings": {
+          "max_file_size_mb": 50,
+          "auto_delete_days": 30,
+          "supported_extensions": [
+            ".pdf",
+            ".docx",
+            ".txt",
+            ".rtf",
+            ".pptx",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".md"
+          ]
+        },
+        "storage_location": "data",
+        "theme": "dark",
+        "openrouter_api_key_masked": "",
+        "has_api_key": false
+      },
+      "timestamp": "2025-11-26T17:59:41.746461"
+    },
+    {
+      "test_name": "Validate API Key",
+      "success": true,
+      "details": "Correctly rejected invalid key: Invalid API key format. OpenRouter keys start with 'sk-or-'",
+      "response_data": {
+        "valid": false,
+        "error": "Invalid API key format. OpenRouter keys start with 'sk-or-'"
+      },
+      "timestamp": "2025-11-26T17:59:41.788449"
+    },
+    {
+      "test_name": "GET Available Models",
+      "success": true,
+      "details": "Found 32 models with correct structure",
+      "response_data": {
+        "model_count": 32,
+        "sample_model": {
+          "id": "openai/gpt-4o",
+          "name": "GPT-4o",
+          "provider": "OpenAI"
+        }
+      },
+      "timestamp": "2025-11-26T17:59:41.830483"
+    },
+    {
+      "test_name": "GET Documents",
+      "success": true,
+      "details": "Found 1 documents",
+      "response_data": {
+        "document_count": 1
+      },
+      "timestamp": "2025-11-26T17:59:41.872440"
+    },
+    {
+      "test_name": "POST Upload Document",
+      "success": true,
+      "details": "Uploaded document: test_document.txt (ID: a3d7b349-2224-4e95-af30-3de3400b1882)",
+      "response_data": {
+        "id": "a3d7b349-2224-4e95-af30-3de3400b1882",
+        "filename": "test_document.txt",
+        "extension": ".txt",
+        "size": 118,
+        "uploaded_at": "2025-11-26T17:59:41.875107",
+        "chunk_count": 1,
+        "text_length": 118,
+        "is_active": true,
+        "preview": "This is a test document for the LLM Council system.\nIt contains sample text for testing document upload functionality."
+      },
+      "timestamp": "2025-11-26T17:59:41.916465"
+    },
+    {
+      "test_name": "DELETE Document",
+      "success": true,
+      "details": "Successfully deleted document a3d7b349-2224-4e95-af30-3de3400b1882",
+      "response_data": {
+        "success": true
+      },
+      "timestamp": "2025-11-26T17:59:41.958450"
+    },
+    {
+      "test_name": "POST Custom Model",
+      "success": true,
+      "details": "Successfully added custom model: Test Custom Model",
+      "response_data": {
+        "id": "test/custom-model-123",
+        "name": "Test Custom Model",
+        "provider": "TestProvider"
+      },
+      "timestamp": "2025-11-26T17:59:42.002044"
+    }
+  ]
+}
