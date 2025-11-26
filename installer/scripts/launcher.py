@@ -255,10 +255,11 @@ class LLMCouncilLauncher:
                 
                 self.root.after(0, lambda: self.start_stop_btn.config(state=tk.NORMAL))
                 
-            except Exception as e:
+            except Exception as ex:
+                error_msg = str(ex)
                 self.root.after(0, lambda: messagebox.showerror(
                     "Error",
-                    f"Failed to start server: {str(e)}"
+                    f"Failed to start server: {error_msg}"
                 ))
                 self.root.after(0, lambda: self.start_stop_btn.config(state=tk.NORMAL))
         
