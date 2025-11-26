@@ -2,7 +2,11 @@
 
 import httpx
 from typing import List, Dict, Any, Optional
-from .config_manager import get_api_key
+
+try:
+    from .config_manager import get_api_key
+except ImportError:
+    from config_manager import get_api_key
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
