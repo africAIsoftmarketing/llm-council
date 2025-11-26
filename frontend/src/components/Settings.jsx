@@ -288,7 +288,7 @@ export default function Settings({ onConfigUpdate, showToast }) {
             <h2>Council Models</h2>
             <p className="settings-description">
               Select the models that will participate in your LLM Council.
-              Each model will provide its own response, and they will rank each other's answers.
+              Each model will provide its own response, and they will rank each other&apos;s answers.
             </p>
 
             <div className="selected-count">
