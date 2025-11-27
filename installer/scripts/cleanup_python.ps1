@@ -118,10 +118,15 @@ $problematicPaths = @(
     "pip\tests",
     "pip\_vendor\tests",
     "torch\test",
+    "torch\testing",
+    "torch\_inductor\test",
     "torchvision\tests",
     "numpy\tests",
     "numpy\core\tests",
-    "numpy\lib\tests"
+    "numpy\lib\tests",
+    "scipy\tests",
+    "cv2\data",
+    "easyocr\scripts"
 )
 
 foreach ($relPath in $problematicPaths) {
