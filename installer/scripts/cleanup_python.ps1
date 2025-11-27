@@ -119,14 +119,19 @@ $problematicPaths = @(
     "pip\_vendor\tests",
     "torch\test",
     "torch\testing",
-    "torch\_inductor\test",
+    "torch\include",              # C++ headers - causes long path errors
+    "torch\_inductor",            # Inductor compiler - not needed
+    "torch\share",                # Share data
+    "torch\_C",                   # C extension build files
+    "torch\lib",                  # Compiled libraries we don't need all of
     "torchvision\tests",
     "numpy\tests",
     "numpy\core\tests",
     "numpy\lib\tests",
     "scipy\tests",
     "cv2\data",
-    "easyocr\scripts"
+    "easyocr\scripts",
+    "caffe2"                      # Caffe2 backend
 )
 
 foreach ($relPath in $problematicPaths) {
