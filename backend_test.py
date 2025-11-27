@@ -812,8 +812,11 @@ class LLMCouncilAPITester:
 
 def main():
     """Main test runner"""
-    # Use localhost for internal testing
-    tester = LLMCouncilAPITester("http://localhost:8001")
+    # Get backend URL from environment variable
+    backend_url = os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001')
+    print(f"Using backend URL: {backend_url}")
+    
+    tester = LLMCouncilAPITester(backend_url)
     exit_code = tester.run_all_tests()
     
     # Save detailed results
