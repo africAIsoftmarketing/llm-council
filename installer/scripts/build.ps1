@@ -103,13 +103,63 @@ if (-not $SkipPython) {
     $PythonExe = Join-Path $PythonDir "python.exe"
     
     & $PythonExe -m pip install --upgrade pip
-    & $PythonExe -m pip install fastapi uvicorn python-dotenv httpx pydantic PyPDF2 python-docx python-pptx Pillow python-multipart aiofiles
+    & $PythonExe -m pip install fastapi uvicorn python-dotenv httpx pydantic PyPDF2 python-docx python-pptx Pillow python-multipart aiofiles easyocr
     
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to install Python packages"
     }
     
-    Write-Host "Python packages installed!" -ForegroundColor Green
+    # Clean up unnecessary files to avoid long path issues during installer build
+    Write-Host "Cleaning up unnecessary files (tests, caches)..." -ForegroundColor Yellow
+    
+    $SitePackages = Join-Path $PythonDir "Lib\site-packages"
+    if (Test-Path $SitePackages) {
+        # Remove test directories (cause long path issues)
+        Get-ChildItem -Path $SitePackages -Directory -Recurse -ErrorAction SilentlyContinue | 
+            Where-Object { $_.Name -eq "tests" -or $_.Name -eq "test" -or $_.Name -eq "testing" } | 
+            ForEach-Object { 
+                Write-Host "  Removing: $($_.FullName)" -ForegroundColor Gray
+                Remove-Item -Path $_.FullName -Recurse -Force -ErrorAction SilentlyContinue 
+            }
+        
+        # Remove __pycache__ directories
+        Get-ChildItem -Path $SitePackages -Directory -Recurse -ErrorAction SilentlyContinue | 
+            Where-Object { $_.Name -eq "__pycache__" } | 
+            ForEach-Object { 
+                Remove-Item -Path $_.FullName -Recurse -Force -ErrorAction SilentlyContinue 
+            }
+        
+        # Remove .pyc and .pyo files
+        Get-ChildItem -Path $SitePackages -File -Recurse -ErrorAction SilentlyContinue | 
+            Where-Object { $_.Extension -eq ".pyc" -or $_.Extension -eq ".pyo" } | 
+            ForEach-Object { 
+                Remove-Item -Path $_.FullName -Force -ErrorAction SilentlyContinue 
+            }
+        
+        # Remove .egg files (problematic for long paths)
+        Get-ChildItem -Path $SitePackages -File -Recurse -ErrorAction SilentlyContinue | 
+            Where-Object { $_.Extension -eq ".egg" } | 
+            ForEach-Object { 
+                Write-Host "  Removing: $($_.FullName)" -ForegroundColor Gray
+                Remove-Item -Path $_.FullName -Force -ErrorAction SilentlyContinue 
+            }
+        
+        # Specifically remove pkg_resources test data (causes the error)
+        $PkgResourcesTests = Join-Path $SitePackages "pkg_resources\tests"
+        if (Test-Path $PkgResourcesTests) {
+            Write-Host "  Removing: $PkgResourcesTests" -ForegroundColor Gray
+            Remove-Item -Path $PkgResourcesTests -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        
+        # Remove setuptools test data
+        $SetuptoolsTests = Join-Path $SitePackages "setuptools\tests"
+        if (Test-Path $SetuptoolsTests) {
+            Write-Host "  Removing: $SetuptoolsTests" -ForegroundColor Gray
+            Remove-Item -Path $SetuptoolsTests -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+    
+    Write-Host "Python packages installed and cleaned!" -ForegroundColor Green
 }
 else {
     Write-Host "[3/5] Skipping Python packages" -ForegroundColor Gray
