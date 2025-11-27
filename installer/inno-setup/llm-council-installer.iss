@@ -57,8 +57,14 @@ Source: "..\..\backend\*"; DestDir: "{app}\backend"; Flags: ignoreversion recurs
 Source: "..\..\frontend\dist\*"; DestDir: "{app}\frontend"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; Embedded Python (run download_python.bat first)
-; Exclude test directories and unnecessary files to avoid long path issues
-Source: "..\embedded-python\*"; DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,*.pyc,*.pyo,*\tests\*,*\test\*,*\testing\*,*.dist-info\*,*-stubs\*,*.egg-info\SOURCES.txt,*\test_*.py,*_test.py,*.egg"
+; Exclude test directories, caches, and unnecessary files to avoid long path issues and reduce installer size
+Source: "..\embedded-python\python.exe"; DestDir: "{app}\python"; Flags: ignoreversion
+Source: "..\embedded-python\python*.dll"; DestDir: "{app}\python"; Flags: ignoreversion
+Source: "..\embedded-python\*.pyd"; DestDir: "{app}\python"; Flags: ignoreversion
+Source: "..\embedded-python\python*._pth"; DestDir: "{app}\python"; Flags: ignoreversion
+Source: "..\embedded-python\Lib\*"; DestDir: "{app}\python\Lib"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,*.pyc,*.pyo,tests,test,testing,*.egg,*-stubs"
+Source: "..\embedded-python\DLLs\*"; DestDir: "{app}\python\DLLs"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "..\embedded-python\Scripts\*"; DestDir: "{app}\python\Scripts"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist; Excludes: "__pycache__,*.pyc"
 
 ; Scripts
 Source: "..\scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion recursesubdirs createallsubdirs
