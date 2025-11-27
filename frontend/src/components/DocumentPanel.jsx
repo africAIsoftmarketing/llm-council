@@ -168,6 +168,17 @@ export default function DocumentPanel({
                     <span>{doc.text_length.toLocaleString()} chars</span>
                     <span>•</span>
                     <span>{doc.chunk_count} chunk{doc.chunk_count !== 1 ? 's' : ''}</span>
+                    {doc.ocr_used && (
+                      <>
+                        <span>•</span>
+                        <span className="ocr-badge" title={`Text extracted via ${doc.ocr_engine || 'OCR'}`}>
+                          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" style={{marginRight: '4px', verticalAlign: 'middle'}}>
+                            <path d="M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z" />
+                          </svg>
+                          OCR
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
 
