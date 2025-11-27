@@ -657,17 +657,17 @@ def get_active_document_ids() -> List[str]:
 def get_ocr_status() -> Dict[str, Any]:
     """Get the current OCR engine status."""
     tesseract = is_tesseract_available()
-    easyocr = False
+    easyocr_available = False
     
     try:
-        import easyocr
-        easyocr = True
+        import easyocr as _easyocr_check  # noqa: F401
+        easyocr_available = True
     except ImportError:
         pass
     
     return {
         "tesseract_available": tesseract,
-        "easyocr_available": easyocr,
-        "ocr_enabled": tesseract or easyocr,
-        "preferred_engine": "tesseract" if tesseract else ("easyocr" if easyocr else "none")
+        "easyocr_available": easyocr_available,
+        "ocr_enabled": tesseract or easyocr_available,
+        "preferred_engine": "tesseract" if tesseract else ("easyocr" if easyocr_available else "none")
     }
