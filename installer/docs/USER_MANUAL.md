@@ -50,7 +50,7 @@ You can upload documents to provide context for your questions:
    - Word documents (.docx)
    - Text files (.txt, .md)
    - PowerPoint presentations (.pptx)
-   - Images (.png, .jpg)
+   - Images (.png, .jpg, .jpeg, .gif, .webp, .bmp, .tiff)
 
 2. **How to Upload**
    - Drag and drop files onto the chat area
@@ -61,6 +61,34 @@ You can upload documents to provide context for your questions:
    - Toggle documents on/off to include/exclude from context
    - Preview document content
    - Delete documents you no longer need
+
+### OCR (Optical Character Recognition)
+
+LLM Council includes built-in OCR capabilities to extract text from images:
+
+1. **Automatic OCR**
+   - When you upload an image file, OCR runs automatically
+   - Text is extracted and made available for queries
+   - Works with screenshots, photos of documents, scanned pages
+
+2. **OCR Indicators**
+   - Documents processed with OCR show a purple "OCR" badge
+   - The preview shows "[OCR extracted from...]" header
+   - You can see which OCR engine was used (EasyOCR or Tesseract)
+
+3. **Best Practices for OCR**
+   - Use clear, high-resolution images
+   - Ensure text is readable and not blurry
+   - Straight/flat document photos work best
+   - Avoid heavy shadows or glare
+
+4. **Supported Image Formats for OCR**
+   - PNG (recommended)
+   - JPEG/JPG
+   - GIF
+   - WebP
+   - BMP
+   - TIFF
 
 ### Settings
 
