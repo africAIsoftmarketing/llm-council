@@ -37,28 +37,22 @@ llm-council/
 ├── backend/                    # Python backend source
 ├── frontend/                   # React frontend source
 └── installer/
-    ├── electron-app/          # Electron desktop wrapper
-    │   ├── package.json
-    │   ├── main.js
-    │   ├── preload.js
-    │   ├── splash.html
-    │   └── dist/               # Built Electron app
     ├── inno-setup/
     │   └── llm-council-installer.iss
     ├── scripts/
-    │   ├── setup.bat           # Post-install dependency setup
-    │   ├── start_services.bat  # Service launcher
-    │   ├── stop_services.bat   # Service stopper
-    │   ├── launch.bat          # Quick launcher
-    │   └── launcher.py         # Python/Tkinter GUI
-    ├── embedded-python/       # Python embeddable package
+    │   ├── build.ps1            # Main build script
+    │   ├── cleanup_python.ps1   # Cleanup script for long paths
+    │   ├── setup.bat            # Post-install dependency setup
+    │   ├── launch.bat           # Quick launcher
+    │   └── stop_services.bat    # Service stopper
+    ├── embedded-python/         # Python embeddable package
     ├── config/
     │   └── default_config.json
     ├── assets/
     │   └── icon.ico
     ├── docs/
     │   └── README_INSTALLER.txt
-    └── output/                 # Final installer output
+    └── output/                  # Final installer output
 ```
 
 ---
