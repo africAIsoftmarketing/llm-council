@@ -46,9 +46,9 @@ class LLMCouncilAPITester:
         print()
 
     def test_health_check(self):
-        """Test GET / - Health check endpoint"""
+        """Test GET /api/health - Health check endpoint"""
         try:
-            response = self.session.get(f"{self.base_url}/")
+            response = self.session.get(f"{self.base_url}/api/health")
             
             if response.status_code == 200:
                 data = response.json()
