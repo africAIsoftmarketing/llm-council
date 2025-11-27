@@ -158,18 +158,25 @@ if (-not $SkipPython) {
                 Remove-Item -Path $_.FullName -Force -ErrorAction SilentlyContinue 
             }
         
-        # Specifically remove pkg_resources test data (causes the error)
-        $PkgResourcesTests = Join-Path $SitePackages "pkg_resources\tests"
-        if (Test-Path $PkgResourcesTests) {
-            Write-Host "  Removing: $PkgResourcesTests" -ForegroundColor Gray
-            Remove-Item -Path $PkgResourcesTests -Recurse -Force -ErrorAction SilentlyContinue
-        }
+        # Specifically remove problematic test directories
+        $ProblematicDirs = @(
+            "pkg_resources\tests",
+            "setuptools\tests",
+            "pip\tests",
+            "torch\test",
+            "torch\testing",
+            "torchvision\tests",
+            "numpy\tests",
+            "numpy\core\tests",
+            "scipy\tests"
+        )
         
-        # Remove setuptools test data
-        $SetuptoolsTests = Join-Path $SitePackages "setuptools\tests"
-        if (Test-Path $SetuptoolsTests) {
-            Write-Host "  Removing: $SetuptoolsTests" -ForegroundColor Gray
-            Remove-Item -Path $SetuptoolsTests -Recurse -Force -ErrorAction SilentlyContinue
+        foreach ($dir in $ProblematicDirs) {
+            $fullPath = Join-Path $SitePackages $dir
+            if (Test-Path $fullPath) {
+                Write-Host "  Removing: $dir" -ForegroundColor Gray
+                Remove-Item -Path $fullPath -Recurse -Force -ErrorAction SilentlyContinue
+            }
         }
     }
     
