@@ -754,22 +754,38 @@ class LLMCouncilAPITester:
 
     def run_all_tests(self):
         """Run all backend API tests"""
-        print("🚀 Starting LLM Council Backend API Tests")
+        print("🚀 Starting LLM Council Backend API Tests with OCR")
         print(f"Testing endpoint: {self.base_url}")
         print("=" * 60)
         
-        # Core endpoints
-        self.test_health_check()
-        self.test_get_config()
-        self.test_update_config()
-        self.test_validate_api_key()
-        self.test_get_available_models()
-        
-        # Document endpoints
-        self.test_document_endpoints()
-        
-        # Custom model endpoint
-        self.test_custom_model_endpoint()
+        try:
+            # Core endpoints
+            self.test_health_check()
+            self.test_get_config()
+            self.test_update_config()
+            self.test_validate_api_key()
+            self.test_get_available_models()
+            
+            # Document endpoints
+            self.test_document_endpoints()
+            
+            # Custom model endpoint
+            self.test_custom_model_endpoint()
+            
+            # OCR-specific tests
+            print("\n🔍 OCR Feature Tests")
+            print("-" * 30)
+            self.test_ocr_status_endpoint()
+            self.test_image_upload_with_ocr()
+            self.test_document_status_endpoint()
+            self.test_documents_list_with_ocr_info()
+            self.test_pdf_upload_no_ocr()
+            
+        finally:
+            # Clean up uploaded test documents
+            if self.uploaded_doc_ids:
+                print("\n🧹 Cleaning up test documents...")
+                self.cleanup_uploaded_documents()
         
         # Print summary
         print("=" * 60)
