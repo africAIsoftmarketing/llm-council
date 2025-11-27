@@ -165,10 +165,14 @@ if (-not $SkipPython) {
             "pip\tests",
             "torch\test",
             "torch\testing",
+            "torch\include",          # C++ headers - not needed for Python runtime
+            "torch\_inductor",        # Inductor compiler - not needed for inference
+            "torch\share",            # Share data - not needed
             "torchvision\tests",
             "numpy\tests",
             "numpy\core\tests",
-            "scipy\tests"
+            "scipy\tests",
+            "caffe2"                  # Caffe2 backend - not needed
         )
         
         foreach ($dir in $ProblematicDirs) {
