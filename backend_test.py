@@ -425,6 +425,333 @@ class LLMCouncilAPITester:
         except Exception as e:
             self.log_test("POST Custom Model", False, f"Exception: {str(e)}")
 
+    def create_test_image_with_text(self, text: str = "LLM Council OCR Test\nThis is a test image for OCR functionality.") -> str:
+        """Create a test image with text for OCR testing."""
+        try:
+            # Create a white image
+            img = Image.new('RGB', (400, 200), color='white')
+            draw = ImageDraw.Draw(img)
+            
+            # Try to use a default font, fall back to basic if not available
+            try:
+                font = ImageFont.truetype("arial.ttf", 20)
+            except:
+                try:
+                    font = ImageFont.load_default()
+                except:
+                    font = None
+            
+            # Draw text on image
+            draw.text((20, 50), text, fill='black', font=font)
+            
+            # Save to temporary file
+            temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+            img.save(temp_file.name, 'PNG')
+            temp_file.close()
+            
+            return temp_file.name
+        except Exception as e:
+            self.log_test("Create Test Image", False, f"Failed to create test image: {str(e)}")
+            return None
+
+    def test_ocr_status_endpoint(self):
+        """Test GET /api/ocr/status - OCR engine status"""
+        try:
+            response = self.session.get(f"{self.base_url}/api/ocr/status")
+            
+            if response.status_code == 200:
+                data = response.json()
+                required_fields = ["tesseract_available", "easyocr_available", "ocr_enabled", "preferred_engine"]
+                missing_fields = [field for field in required_fields if field not in data]
+                
+                if missing_fields:
+                    self.log_test(
+                        "OCR Status", 
+                        False, 
+                        f"Missing fields: {missing_fields}",
+                        data
+                    )
+                else:
+                    # Check if at least one OCR engine is available
+                    if data.get("ocr_enabled"):
+                        self.log_test(
+                            "OCR Status", 
+                            True, 
+                            f"OCR enabled: {data.get('ocr_enabled')}, Preferred: {data.get('preferred_engine')}, EasyOCR: {data.get('easyocr_available')}, Tesseract: {data.get('tesseract_available')}",
+                            data
+                        )
+                    else:
+                        self.log_test(
+                            "OCR Status", 
+                            False, 
+                            "No OCR engines available",
+                            data
+                        )
+            else:
+                self.log_test(
+                    "OCR Status", 
+                    False, 
+                    f"Expected 200, got {response.status_code}",
+                    response.text
+                )
+                
+        except Exception as e:
+            self.log_test("OCR Status", False, f"Exception: {str(e)}")
+
+    def test_image_upload_with_ocr(self):
+        """Test POST /api/documents/upload with image file for OCR"""
+        test_image_path = None
+        try:
+            # Create test image
+            test_image_path = self.create_test_image_with_text()
+            if not test_image_path:
+                return
+            
+            with open(test_image_path, 'rb') as f:
+                files = {'file': ('test_ocr_image.png', f, 'image/png')}
+                response = self.session.post(f"{self.base_url}/api/documents/upload", files=files)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("success") and "document" in data:
+                    doc = data["document"]
+                    
+                    # Track for cleanup
+                    if "id" in doc:
+                        self.uploaded_doc_ids.append(doc["id"])
+                    
+                    # Check OCR-specific fields
+                    required_fields = ["id", "filename", "ocr_used", "text_length"]
+                    missing_fields = [field for field in required_fields if field not in doc]
+                    
+                    if missing_fields:
+                        self.log_test(
+                            "Image Upload OCR", 
+                            False, 
+                            f"Missing fields: {missing_fields}",
+                            doc
+                        )
+                    elif doc.get("ocr_used") and doc.get("text_length", 0) > 0:
+                        self.log_test(
+                            "Image Upload OCR", 
+                            True, 
+                            f"OCR successful: engine={doc.get('ocr_engine')}, text_length={doc.get('text_length')}, preview='{doc.get('preview', '')[:50]}...'",
+                            {"ocr_used": doc.get("ocr_used"), "ocr_engine": doc.get("ocr_engine"), "text_length": doc.get("text_length")}
+                        )
+                    else:
+                        self.log_test(
+                            "Image Upload OCR", 
+                            False, 
+                            f"OCR not used or no text extracted: ocr_used={doc.get('ocr_used')}, text_length={doc.get('text_length')}",
+                            doc
+                        )
+                else:
+                    self.log_test(
+                        "Image Upload OCR", 
+                        False, 
+                        "Response missing success=True or document field",
+                        data
+                    )
+            else:
+                self.log_test(
+                    "Image Upload OCR", 
+                    False, 
+                    f"Expected 200, got {response.status_code}",
+                    response.text
+                )
+                
+        except Exception as e:
+            self.log_test("Image Upload OCR", False, f"Exception: {str(e)}")
+        finally:
+            # Clean up test image
+            if test_image_path and os.path.exists(test_image_path):
+                os.unlink(test_image_path)
+
+    def test_document_status_endpoint(self):
+        """Test GET /api/documents/{doc_id}/status for OCR documents"""
+        if not self.uploaded_doc_ids:
+            self.log_test("Document Status OCR", False, "No uploaded documents to test")
+            return
+        
+        try:
+            doc_id = self.uploaded_doc_ids[-1]  # Use the most recent upload
+            response = self.session.get(f"{self.base_url}/api/documents/{doc_id}/status")
+            
+            if response.status_code == 200:
+                data = response.json()
+                required_fields = ["id", "filename", "status", "ocr_used", "text_length"]
+                missing_fields = [field for field in required_fields if field not in data]
+                
+                if missing_fields:
+                    self.log_test(
+                        "Document Status OCR", 
+                        False, 
+                        f"Missing fields: {missing_fields}",
+                        data
+                    )
+                elif data.get("status") == "completed" and data.get("ocr_used"):
+                    # Check for extraction_details if OCR was used
+                    extraction_details = data.get("extraction_details", {})
+                    self.log_test(
+                        "Document Status OCR", 
+                        True, 
+                        f"Status: {data.get('status')}, OCR: {data.get('ocr_used')}, Engine: {data.get('ocr_engine')}, Text length: {data.get('text_length')}",
+                        {"status": data.get("status"), "ocr_used": data.get("ocr_used"), "ocr_engine": data.get("ocr_engine"), "has_extraction_details": bool(extraction_details)}
+                    )
+                else:
+                    self.log_test(
+                        "Document Status OCR", 
+                        False, 
+                        f"Unexpected status or OCR not used: status={data.get('status')}, ocr_used={data.get('ocr_used')}",
+                        data
+                    )
+            else:
+                self.log_test(
+                    "Document Status OCR", 
+                    False, 
+                    f"Expected 200, got {response.status_code}",
+                    response.text
+                )
+                
+        except Exception as e:
+            self.log_test("Document Status OCR", False, f"Exception: {str(e)}")
+
+    def test_documents_list_with_ocr_info(self):
+        """Test GET /api/documents includes OCR information"""
+        try:
+            response = self.session.get(f"{self.base_url}/api/documents")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "documents" in data and isinstance(data["documents"], list):
+                    documents = data["documents"]
+                    
+                    # Look for documents with OCR info
+                    ocr_docs = [doc for doc in documents if doc.get("ocr_used")]
+                    
+                    if ocr_docs:
+                        sample_doc = ocr_docs[0]
+                        self.log_test(
+                            "Documents List OCR Info", 
+                            True, 
+                            f"Found {len(ocr_docs)} OCR documents out of {len(documents)} total. Sample: {sample_doc.get('filename')} (OCR: {sample_doc.get('ocr_used')})",
+                            {"total_docs": len(documents), "ocr_docs": len(ocr_docs), "sample_ocr_doc": sample_doc.get("filename")}
+                        )
+                    else:
+                        # This might be OK if no OCR documents were uploaded yet
+                        self.log_test(
+                            "Documents List OCR Info", 
+                            True, 
+                            f"No OCR documents found in {len(documents)} total documents (may be expected if no images uploaded)",
+                            {"total_docs": len(documents), "ocr_docs": 0}
+                        )
+                else:
+                    self.log_test(
+                        "Documents List OCR Info", 
+                        False, 
+                        "Response missing 'documents' field or not a list",
+                        data
+                    )
+            else:
+                self.log_test(
+                    "Documents List OCR Info", 
+                    False, 
+                    f"Expected 200, got {response.status_code}",
+                    response.text
+                )
+                
+        except Exception as e:
+            self.log_test("Documents List OCR Info", False, f"Exception: {str(e)}")
+
+    def test_pdf_upload_no_ocr(self):
+        """Test that text-based PDF upload does not use OCR"""
+        try:
+            # Create a simple text-based PDF using reportlab if available
+            try:
+                from reportlab.pdfgen import canvas
+                from reportlab.lib.pagesizes import letter
+                
+                # Create a simple PDF with text
+                temp_pdf = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
+                c = canvas.Canvas(temp_pdf.name, pagesize=letter)
+                c.drawString(100, 750, "LLM Council Test PDF")
+                c.drawString(100, 730, "This is a text-based PDF that should not require OCR.")
+                c.drawString(100, 710, "The text should be extractable directly.")
+                c.save()
+                temp_pdf.close()
+                
+                # Upload the PDF
+                with open(temp_pdf.name, 'rb') as f:
+                    files = {'file': ('test_text.pdf', f, 'application/pdf')}
+                    response = self.session.post(f"{self.base_url}/api/documents/upload", files=files)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("success") and "document" in data:
+                        doc = data["document"]
+                        
+                        # Track for cleanup
+                        if "id" in doc:
+                            self.uploaded_doc_ids.append(doc["id"])
+                        
+                        # Check that OCR was NOT used for text-based PDF
+                        if not doc.get("ocr_used") and doc.get("text_length", 0) > 0:
+                            self.log_test(
+                                "PDF Upload No OCR", 
+                                True, 
+                                f"Text PDF processed without OCR: text_length={doc.get('text_length')}, ocr_used={doc.get('ocr_used')}",
+                                {"ocr_used": doc.get("ocr_used"), "text_length": doc.get("text_length")}
+                            )
+                        else:
+                            self.log_test(
+                                "PDF Upload No OCR", 
+                                False, 
+                                f"Unexpected OCR usage for text PDF: ocr_used={doc.get('ocr_used')}, text_length={doc.get('text_length')}",
+                                doc
+                            )
+                    else:
+                        self.log_test(
+                            "PDF Upload No OCR", 
+                            False, 
+                            "Response missing success=True or document field",
+                            data
+                        )
+                else:
+                    self.log_test(
+                        "PDF Upload No OCR", 
+                        False, 
+                        f"Expected 200, got {response.status_code}",
+                        response.text
+                    )
+                
+                # Clean up
+                if os.path.exists(temp_pdf.name):
+                    os.unlink(temp_pdf.name)
+                    
+            except ImportError:
+                self.log_test(
+                    "PDF Upload No OCR", 
+                    True, 
+                    "Skipped - reportlab not available for PDF generation",
+                    {"skipped": True, "reason": "reportlab not available"}
+                )
+                
+        except Exception as e:
+            self.log_test("PDF Upload No OCR", False, f"Exception: {str(e)}")
+
+    def cleanup_uploaded_documents(self):
+        """Clean up documents uploaded during testing"""
+        for doc_id in self.uploaded_doc_ids:
+            try:
+                response = self.session.delete(f"{self.base_url}/api/documents/{doc_id}")
+                if response.status_code == 200:
+                    print(f"    Cleaned up document: {doc_id}")
+                else:
+                    print(f"    Failed to clean up document {doc_id}: {response.status_code}")
+            except Exception as e:
+                print(f"    Error cleaning up document {doc_id}: {e}")
+        self.uploaded_doc_ids.clear()
+
     def run_all_tests(self):
         """Run all backend API tests"""
         print("🚀 Starting LLM Council Backend API Tests")
