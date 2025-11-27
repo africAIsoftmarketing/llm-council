@@ -168,6 +168,28 @@ export const api = {
     return response.json();
   },
 
+  /**
+   * Get document processing status (useful for OCR tracking).
+   */
+  async getDocumentStatus(docId) {
+    const response = await fetch(`${API_BASE}/api/documents/${docId}/status`);
+    if (!response.ok) {
+      throw new Error('Failed to get document status');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get OCR engine status.
+   */
+  async getOcrStatus() {
+    const response = await fetch(`${API_BASE}/api/ocr/status`);
+    if (!response.ok) {
+      throw new Error('Failed to get OCR status');
+    }
+    return response.json();
+  },
+
   // ===== Conversation APIs =====
 
   /**
