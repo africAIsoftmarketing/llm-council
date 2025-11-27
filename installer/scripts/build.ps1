@@ -103,10 +103,24 @@ if (-not $SkipPython) {
     $PythonExe = Join-Path $PythonDir "python.exe"
     
     & $PythonExe -m pip install --upgrade pip
-    & $PythonExe -m pip install fastapi uvicorn python-dotenv httpx pydantic PyPDF2 python-docx python-pptx Pillow python-multipart aiofiles easyocr
+    
+    # Install core packages
+    Write-Host "Installing core packages..." -ForegroundColor Gray
+    & $PythonExe -m pip install fastapi uvicorn python-dotenv httpx pydantic PyPDF2 python-docx python-pptx Pillow python-multipart aiofiles
     
     if ($LASTEXITCODE -ne 0) {
-        throw "Failed to install Python packages"
+        throw "Failed to install core Python packages"
+    }
+    
+    # Install OCR packages (easyocr + dependencies including torch)
+    Write-Host "Installing OCR packages (easyocr, torch)... This may take a while..." -ForegroundColor Gray
+    & $PythonExe -m pip install easyocr
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "WARNING: Failed to install OCR packages. OCR features may not work." -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "OCR packages installed successfully!" -ForegroundColor Green
     }
     
     # Clean up unnecessary files to avoid long path issues during installer build
