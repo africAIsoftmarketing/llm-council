@@ -57,7 +57,8 @@ Source: "..\..\backend\*"; DestDir: "{app}\backend"; Flags: ignoreversion recurs
 Source: "..\..\frontend\dist\*"; DestDir: "{app}\frontend"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; Embedded Python (run download_python.bat first)
-Source: "..\embedded-python\*"; DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Exclude test directories and unnecessary files to avoid long path issues
+Source: "..\embedded-python\*"; DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,*.pyc,*.pyo,*\tests\*,*\test\*,*\testing\*,*.dist-info\*,*-stubs\*,*.egg-info\SOURCES.txt,*\test_*.py,*_test.py,*.egg"
 
 ; Scripts
 Source: "..\scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion recursesubdirs createallsubdirs
