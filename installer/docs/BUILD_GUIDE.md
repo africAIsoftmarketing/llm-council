@@ -257,6 +257,28 @@ The installer already includes an optional startup task. Users can enable it dur
 
 ### Common Issues
 
+**Issue: "Path not found" or long path errors during Inno Setup compilation**
+```
+Error: Le chemin d'accès spécifié est introuvable (Path not found)
+During: Compressing pkg_resources\tests\...
+```
+
+**Solution:** Run the cleanup script to remove test directories with very long paths:
+```powershell
+cd installer\scripts
+.\cleanup_python.ps1
+```
+
+Or manually delete these directories:
+```powershell
+cd installer\embedded-python\Lib\site-packages
+Remove-Item -Recurse -Force pkg_resources\tests
+Remove-Item -Recurse -Force setuptools\tests
+Remove-Item -Recurse -Force pip\tests
+Get-ChildItem -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force
+Get-ChildItem -Recurse -Directory -Filter tests | Remove-Item -Recurse -Force
+```
+
 **Issue: "Python not found"**
 ```
 Solution: Ensure python311._pth is edited to enable site-packages
@@ -275,9 +297,16 @@ netstat -an | findstr 8001
 
 **Issue: "Installer too large"**
 ```
-Solution: Clean __pycache__ folders:
-Get-ChildItem -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse
+Solution: Clean __pycache__ folders and test directories:
+.\cleanup_python.ps1
 ```
+
+**Issue: "Missing OCR packages"**
+```
+Solution: Install easyocr and its dependencies:
+.\python.exe -m pip install easyocr torch torchvision
+```
+Note: EasyOCR and PyTorch add ~2GB to the installer size.
 
 ### Debug Mode
 
