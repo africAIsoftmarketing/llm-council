@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Backend API Testing for LLM Council Configuration Dashboard
-Tests all configuration, model, and document management endpoints.
+Tests all configuration, model, document management, and OCR endpoints.
 """
 
 import requests
@@ -11,6 +11,7 @@ import tempfile
 import os
 from datetime import datetime
 from typing import Dict, Any, List
+from PIL import Image, ImageDraw, ImageFont
 
 class LLMCouncilAPITester:
     def __init__(self, base_url="http://localhost:8001"):
@@ -19,6 +20,7 @@ class LLMCouncilAPITester:
         self.tests_passed = 0
         self.test_results = []
         self.session = requests.Session()
+        self.uploaded_doc_ids = []  # Track uploaded documents for cleanup
         
     def log_test(self, name: str, success: bool, details: str = "", response_data: Any = None):
         """Log test result"""
