@@ -1,17 +1,22 @@
 {
   "summary": {
     "total_tests": 14,
-    "passed_tests": 13,
-    "failed_tests": 1,
-    "success_rate": 92.85714285714286
+    "passed_tests": 14,
+    "failed_tests": 0,
+    "success_rate": 100.0
   },
   "test_results": [
     {
       "test_name": "Health Check",
-      "success": false,
-      "details": "Expected 200, got 403",
-      "response_data": "Blocked request. This host (\"chat-installer.preview.emergentagent.com\") is not allowed.\nTo allow this host, add \"chat-installer.preview.emergentagent.com\" to `server.allowedHosts` in vite.config.js.",
-      "timestamp": "2025-11-27T21:47:28.355632"
+      "success": true,
+      "details": "Status: ok, Configured: False, Version: 2.0.0",
+      "response_data": {
+        "status": "ok",
+        "service": "LLM Council API",
+        "configured": false,
+        "version": "2.0.0"
+      },
+      "timestamp": "2025-11-27T21:47:55.420763"
     },
     {
       "test_name": "GET Config",
@@ -49,7 +54,7 @@
         "openrouter_api_key_masked": "",
         "has_api_key": false
       },
-      "timestamp": "2025-11-27T21:47:28.367417"
+      "timestamp": "2025-11-27T21:47:55.434509"
     },
     {
       "test_name": "PUT Config",
@@ -87,7 +92,7 @@
         "openrouter_api_key_masked": "",
         "has_api_key": false
       },
-      "timestamp": "2025-11-27T21:47:28.380779"
+      "timestamp": "2025-11-27T21:47:55.485139"
     },
     {
       "test_name": "Validate API Key",
@@ -97,21 +102,21 @@
         "valid": false,
         "error": "Invalid API key format. OpenRouter keys start with 'sk-or-'"
       },
-      "timestamp": "2025-11-27T21:47:28.430394"
+      "timestamp": "2025-11-27T21:47:55.534336"
     },
     {
       "test_name": "GET Available Models",
       "success": true,
-      "details": "Found 32 models with correct structure",
+      "details": "Found 33 models with correct structure",
       "response_data": {
-        "model_count": 32,
+        "model_count": 33,
         "sample_model": {
           "id": "openai/gpt-4o",
           "name": "GPT-4o",
           "provider": "OpenAI"
         }
       },
-      "timestamp": "2025-11-27T21:47:28.438873"
+      "timestamp": "2025-11-27T21:47:55.547461"
     },
     {
       "test_name": "GET Documents",
@@ -120,18 +125,18 @@
       "response_data": {
         "document_count": 2
       },
-      "timestamp": "2025-11-27T21:47:28.487453"
+      "timestamp": "2025-11-27T21:47:55.598401"
     },
     {
       "test_name": "POST Upload Document",
       "success": true,
-      "details": "Uploaded document: test_document.txt (ID: 457e60cf-878d-4300-9cb8-f9a7a6dd7bd3)",
+      "details": "Uploaded document: test_document.txt (ID: 2b7c0f24-3066-4781-9a7d-e2722dbf7ff0)",
       "response_data": {
-        "id": "457e60cf-878d-4300-9cb8-f9a7a6dd7bd3",
+        "id": "2b7c0f24-3066-4781-9a7d-e2722dbf7ff0",
         "filename": "test_document.txt",
         "extension": ".txt",
         "size": 118,
-        "uploaded_at": "2025-11-27T21:47:28.495089",
+        "uploaded_at": "2025-11-27T21:47:55.604962",
         "chunk_count": 1,
         "text_length": 118,
         "is_active": true,
@@ -139,16 +144,16 @@
         "ocr_engine": null,
         "preview": "This is a test document for the LLM Council system.\nIt contains sample text for testing document upload functionality."
       },
-      "timestamp": "2025-11-27T21:47:28.540284"
+      "timestamp": "2025-11-27T21:47:55.649179"
     },
     {
       "test_name": "DELETE Document",
       "success": true,
-      "details": "Successfully deleted document 457e60cf-878d-4300-9cb8-f9a7a6dd7bd3",
+      "details": "Successfully deleted document 2b7c0f24-3066-4781-9a7d-e2722dbf7ff0",
       "response_data": {
         "success": true
       },
-      "timestamp": "2025-11-27T21:47:28.549124"
+      "timestamp": "2025-11-27T21:47:55.658357"
     },
     {
       "test_name": "POST Custom Model",
@@ -159,7 +164,7 @@
         "name": "Test Custom Model",
         "provider": "TestProvider"
       },
-      "timestamp": "2025-11-27T21:47:28.597173"
+      "timestamp": "2025-11-27T21:47:55.666652"
     },
     {
       "test_name": "OCR Status",
@@ -171,7 +176,7 @@
         "ocr_enabled": true,
         "preferred_engine": "easyocr"
       },
-      "timestamp": "2025-11-27T21:47:30.586142"
+      "timestamp": "2025-11-27T21:47:55.714912"
     },
     {
       "test_name": "Image Upload OCR",
@@ -182,7 +187,7 @@
         "ocr_engine": "easyocr",
         "text_length": 119
       },
-      "timestamp": "2025-11-27T21:47:35.060031"
+      "timestamp": "2025-11-27T21:47:57.685770"
     },
     {
       "test_name": "Document Status OCR",
@@ -194,7 +199,7 @@
         "ocr_engine": "easyocr",
         "has_extraction_details": true
       },
-      "timestamp": "2025-11-27T21:47:35.109976"
+      "timestamp": "2025-11-27T21:47:57.694893"
     },
     {
       "test_name": "Documents List OCR Info",
@@ -205,7 +210,7 @@
         "ocr_docs": 2,
         "sample_ocr_doc": "test_ocr_image.png"
       },
-      "timestamp": "2025-11-27T21:47:35.159975"
+      "timestamp": "2025-11-27T21:47:57.702603"
     },
     {
       "test_name": "PDF Upload No OCR",
@@ -215,7 +220,7 @@
         "skipped": true,
         "reason": "reportlab not available"
       },
-      "timestamp": "2025-11-27T21:47:35.160128"
+      "timestamp": "2025-11-27T21:47:57.702739"
     }
   ]
 }
