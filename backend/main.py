@@ -280,7 +280,7 @@ async def get_supported_types():
 
 @app.get("/api/documents/{doc_id}/status")
 async def get_document_status(doc_id: str):
-    """Get the processing status of a document (useful for OCR progress tracking)."""
+    """Get the processing status of a document."""
     doc = get_document(doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -290,35 +290,23 @@ async def get_document_status(doc_id: str):
         "id": doc["id"],
         "filename": doc["filename"],
         "status": "completed",  # Once document is in registry, processing is done
-        "ocr_used": doc.get("ocr_used", False),
-        "ocr_engine": doc.get("extraction_metadata", {}).get("ocr_engine"),
+        "is_vision_image": doc.get("is_vision_image", False),
         "text_length": doc.get("text_length", 0),
         "chunk_count": doc.get("chunk_count", 1),
         "is_active": doc.get("is_active", True),
     }
     
-    # Add OCR-specific metadata if available
+    # Add image metadata if available
     extraction_meta = doc.get("extraction_metadata", {})
     if extraction_meta:
         status_info["extraction_details"] = {
-            "ocr_pages": extraction_meta.get("ocr_pages", []),
             "width": extraction_meta.get("width"),
             "height": extraction_meta.get("height"),
             "format": extraction_meta.get("format"),
+            "type": extraction_meta.get("type"),
         }
     
     return status_info
-
-
-@app.get("/api/ocr/status")
-async def get_ocr_engine_status():
-    """Get the status of available OCR engines."""
-    try:
-        from document_processor import get_ocr_status
-        return get_ocr_status()
-    except ImportError:
-        from .document_processor import get_ocr_status
-        return get_ocr_status()
 
 
 # ===== Conversation Endpoints =====
