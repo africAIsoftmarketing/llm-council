@@ -28,7 +28,7 @@ try:
     from .document_processor import (
         process_uploaded_file, list_documents, get_document, 
         delete_document, toggle_document_active, get_active_documents_context,
-        SUPPORTED_EXTENSIONS
+        get_active_vision_images, SUPPORTED_EXTENSIONS
     )
 except ImportError:
     import storage
@@ -44,7 +44,7 @@ except ImportError:
     from document_processor import (
         process_uploaded_file, list_documents, get_document, 
         delete_document, toggle_document_active, get_active_documents_context,
-        SUPPORTED_EXTENSIONS
+        get_active_vision_images, SUPPORTED_EXTENSIONS
     )
 
 
