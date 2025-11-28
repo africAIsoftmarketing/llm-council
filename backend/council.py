@@ -318,18 +318,19 @@ Title:"""
     return title
 
 
-async def run_full_council(user_query: str) -> Tuple[List, List, Dict, Dict]:
+async def run_full_council(user_query: str, vision_images: list = None) -> Tuple[List, List, Dict, Dict]:
     """
     Run the complete 3-stage council process.
 
     Args:
         user_query: The user's question
+        vision_images: Optional list of vision images with base64 data
 
     Returns:
         Tuple of (stage1_results, stage2_results, stage3_result, metadata)
     """
-    # Stage 1: Collect individual responses
-    stage1_results = await stage1_collect_responses(user_query)
+    # Stage 1: Collect individual responses (with vision images if available)
+    stage1_results = await stage1_collect_responses(user_query, vision_images=vision_images)
 
     # If no models responded successfully, return error
     if not stage1_results:
@@ -338,7 +339,7 @@ async def run_full_council(user_query: str) -> Tuple[List, List, Dict, Dict]:
             "response": "All models failed to respond. Please check your API key and try again."
         }, {}
 
-    # Stage 2: Collect rankings
+    # Stage 2: Collect rankings (text-only, rankings don't need images)
     stage2_results, label_to_model = await stage2_collect_rankings(user_query, stage1_results)
 
     # Calculate aggregate rankings
