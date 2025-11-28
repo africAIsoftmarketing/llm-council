@@ -1,9 +1,11 @@
-"""Document processing module for extracting text from various file formats with OCR support."""
+"""Document processing module for extracting text from various file formats.
+Images are stored for vision model analysis (no OCR)."""
 
 import os
 import sys
 import uuid
 import json
+import base64
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
@@ -20,10 +22,6 @@ import io
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# OCR libraries - loaded lazily to avoid startup delay
-_easyocr_reader = None
-_tesseract_available = None
 
 
 def get_base_data_dir():
@@ -66,126 +64,11 @@ SUPPORTED_EXTENSIONS = {
     '.md': 'text/markdown',
 }
 
-# Image extensions that support OCR
+# Image extensions - will be sent to vision models
 IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff', '.tif'}
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 MAX_CHUNK_SIZE = 4000  # Characters per chunk for context window
-
-
-# ===== OCR Functions =====
-
-def is_tesseract_available() -> bool:
-    """Check if Tesseract OCR is installed and available."""
-    global _tesseract_available
-    
-    if _tesseract_available is not None:
-        return _tesseract_available
-    
-    try:
-        import pytesseract
-        # Try to get tesseract version to verify it's installed
-        pytesseract.get_tesseract_version()
-        _tesseract_available = True
-        logger.info("Tesseract OCR is available")
-    except Exception:
-        _tesseract_available = False
-        logger.info("Tesseract OCR not available, will use EasyOCR")
-    
-    return _tesseract_available
-
-
-def get_easyocr_reader():
-    """Get or initialize the EasyOCR reader (lazy loading)."""
-    global _easyocr_reader
-    
-    if _easyocr_reader is None:
-        try:
-            import easyocr
-            logger.info("Initializing EasyOCR reader (this may take a moment on first run)...")
-            # Support English by default, can be extended
-            _easyocr_reader = easyocr.Reader(['en'], gpu=False, verbose=False)
-            logger.info("EasyOCR reader initialized successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize EasyOCR: {e}")
-            return None
-    
-    return _easyocr_reader
-
-
-def perform_ocr_tesseract(image: Image.Image) -> str:
-    """Perform OCR using Tesseract."""
-    try:
-        import pytesseract
-        
-        # Convert to RGB if necessary
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-        
-        # Perform OCR
-        text = pytesseract.image_to_string(image, lang='eng')
-        return text.strip()
-    except Exception as e:
-        logger.error(f"Tesseract OCR failed: {e}")
-        return ""
-
-
-def perform_ocr_easyocr(image: Image.Image) -> str:
-    """Perform OCR using EasyOCR."""
-    try:
-        reader = get_easyocr_reader()
-        if reader is None:
-            return ""
-        
-        # Convert PIL Image to numpy array
-        import numpy as np
-        
-        # Convert to RGB if necessary
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-        
-        img_array = np.array(image)
-        
-        # Perform OCR
-        results = reader.readtext(img_array, detail=0, paragraph=True)
-        
-        # Join all detected text
-        text = "\n".join(results)
-        return text.strip()
-    except Exception as e:
-        logger.error(f"EasyOCR failed: {e}")
-        return ""
-
-
-def perform_ocr(image: Image.Image, prefer_tesseract: bool = True) -> Tuple[str, str]:
-    """
-    Perform OCR on an image using available OCR engine.
-    
-    Args:
-        image: PIL Image object
-        prefer_tesseract: If True, use Tesseract if available (faster)
-    
-    Returns:
-        Tuple of (extracted_text, ocr_engine_used)
-    """
-    # Try Tesseract first if preferred and available
-    if prefer_tesseract and is_tesseract_available():
-        text = perform_ocr_tesseract(image)
-        if text:
-            return text, "tesseract"
-    
-    # Fall back to EasyOCR
-    text = perform_ocr_easyocr(image)
-    if text:
-        return text, "easyocr"
-    
-    # If Tesseract wasn't tried and EasyOCR failed, try Tesseract as last resort
-    if not prefer_tesseract and is_tesseract_available():
-        text = perform_ocr_tesseract(image)
-        if text:
-            return text, "tesseract"
-    
-    return "", "none"
 
 
 # ===== Directory Management =====
@@ -214,19 +97,16 @@ def save_document_registry(registry: Dict[str, Any]):
 
 # ===== Text Extraction Functions =====
 
-def extract_text_from_pdf(file_path: str, use_ocr: bool = True) -> Tuple[str, Dict[str, Any]]:
+def extract_text_from_pdf(file_path: str) -> Tuple[str, Dict[str, Any]]:
     """
     Extract text from a PDF file.
-    Uses OCR for scanned PDFs when text extraction yields little/no content.
     
     Returns:
         Tuple of (extracted_text, metadata_dict)
     """
     metadata = {
         "pages": 0,
-        "ocr_used": False,
-        "ocr_engine": None,
-        "ocr_pages": []
+        "type": "pdf"
     }
     
     try:
@@ -234,57 +114,11 @@ def extract_text_from_pdf(file_path: str, use_ocr: bool = True) -> Tuple[str, Di
         metadata["pages"] = len(reader.pages)
         
         text_parts = []
-        ocr_pages = []
         
         for page_num, page in enumerate(reader.pages, 1):
             page_text = page.extract_text() or ""
-            
-            # Check if page has minimal text (might be scanned)
-            if use_ocr and len(page_text.strip()) < 50:
-                # Try to extract images from PDF page for OCR
-                try:
-                    # Check if page has images
-                    if '/XObject' in page['/Resources']:
-                        xobjects = page['/Resources']['/XObject'].get_object()
-                        for obj_name in xobjects:
-                            obj = xobjects[obj_name]
-                            if obj['/Subtype'] == '/Image':
-                                # Extract image data
-                                try:
-                                    size = (obj['/Width'], obj['/Height'])
-                                    data = obj.get_data()
-                                    
-                                    # Try to create image from data
-                                    if '/Filter' in obj:
-                                        filter_type = obj['/Filter']
-                                        if filter_type == '/DCTDecode':  # JPEG
-                                            img = Image.open(io.BytesIO(data))
-                                        elif filter_type == '/FlateDecode':  # PNG-like
-                                            if '/ColorSpace' in obj:
-                                                mode = 'RGB' if obj['/ColorSpace'] == '/DeviceRGB' else 'L'
-                                            else:
-                                                mode = 'RGB'
-                                            img = Image.frombytes(mode, size, data)
-                                        else:
-                                            continue
-                                        
-                                        # Perform OCR on extracted image
-                                        ocr_text, engine = perform_ocr(img)
-                                        if ocr_text:
-                                            page_text = ocr_text
-                                            ocr_pages.append(page_num)
-                                            metadata["ocr_engine"] = engine
-                                            break
-                                except Exception as img_err:
-                                    logger.debug(f"Could not process image from PDF: {img_err}")
-                except Exception as ocr_err:
-                    logger.debug(f"PDF OCR extraction failed for page {page_num}: {ocr_err}")
-            
             if page_text.strip():
                 text_parts.append(f"--- Page {page_num} ---\n{page_text}")
-        
-        metadata["ocr_used"] = len(ocr_pages) > 0
-        metadata["ocr_pages"] = ocr_pages
         
         return "\n\n".join(text_parts), metadata
     except Exception as e:
@@ -293,7 +127,7 @@ def extract_text_from_pdf(file_path: str, use_ocr: bool = True) -> Tuple[str, Di
 
 def extract_text_from_docx(file_path: str) -> Tuple[str, Dict[str, Any]]:
     """Extract text from a DOCX file."""
-    metadata = {"paragraphs": 0, "tables": 0}
+    metadata = {"paragraphs": 0, "tables": 0, "type": "docx"}
     
     try:
         doc = DocxDocument(file_path)
@@ -319,7 +153,7 @@ def extract_text_from_docx(file_path: str) -> Tuple[str, Dict[str, Any]]:
 
 def extract_text_from_pptx(file_path: str) -> Tuple[str, Dict[str, Any]]:
     """Extract text from a PowerPoint file."""
-    metadata = {"slides": 0}
+    metadata = {"slides": 0, "type": "pptx"}
     
     try:
         prs = Presentation(file_path)
@@ -343,7 +177,7 @@ def extract_text_from_pptx(file_path: str) -> Tuple[str, Dict[str, Any]]:
 
 def extract_text_from_txt(file_path: str) -> Tuple[str, Dict[str, Any]]:
     """Extract text from a plain text file."""
-    metadata = {"encoding": "utf-8"}
+    metadata = {"encoding": "utf-8", "type": "text"}
     
     try:
         # Try UTF-8 first, then fall back to other encodings
@@ -365,20 +199,22 @@ def extract_text_from_txt(file_path: str) -> Tuple[str, Dict[str, Any]]:
         return f"[Error reading text file: {str(e)}]", metadata
 
 
-def extract_text_from_image(file_path: str, use_ocr: bool = True) -> Tuple[str, Dict[str, Any]]:
+def process_image_for_vision(file_path: str) -> Tuple[str, Dict[str, Any]]:
     """
-    Extract text from an image file using OCR.
+    Process an image file for vision model analysis.
+    Returns base64-encoded image data and metadata.
     
     Returns:
-        Tuple of (extracted_text, metadata_dict)
+        Tuple of (description_text, metadata_dict)
     """
     metadata = {
         "width": 0,
         "height": 0,
         "format": "Unknown",
         "mode": "Unknown",
-        "ocr_used": False,
-        "ocr_engine": None
+        "type": "image",
+        "is_vision_image": True,
+        "base64_data": None
     }
     
     try:
@@ -388,35 +224,40 @@ def extract_text_from_image(file_path: str, use_ocr: bool = True) -> Tuple[str, 
         metadata["format"] = img.format or "Unknown"
         metadata["mode"] = img.mode
         
-        if not use_ocr:
-            return f"[Image: {metadata['format']} format, {metadata['width']}x{metadata['height']} pixels. OCR disabled.]", metadata
+        # Convert to RGB if necessary for consistent processing
+        if img.mode in ('RGBA', 'LA', 'P'):
+            img = img.convert('RGB')
         
-        # Perform OCR
-        logger.info(f"Performing OCR on image: {file_path}")
-        ocr_text, engine = perform_ocr(img)
+        # Resize if too large (max 2048px on longest side for API limits)
+        max_size = 2048
+        if max(img.size) > max_size:
+            ratio = max_size / max(img.size)
+            new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+            img = img.resize(new_size, Image.LANCZOS)
+            metadata["resized_to"] = new_size
         
-        if ocr_text:
-            metadata["ocr_used"] = True
-            metadata["ocr_engine"] = engine
-            
-            # Format the result
-            header = f"[OCR extracted from {metadata['format']} image ({metadata['width']}x{metadata['height']} px) using {engine}]\n\n"
-            return header + ocr_text, metadata
-        else:
-            return f"[Image: {metadata['format']} format, {metadata['width']}x{metadata['height']} pixels. OCR found no text.]", metadata
-            
+        # Encode to base64
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        base64_data = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        metadata["base64_data"] = base64_data
+        
+        # Return a placeholder text - the actual image will be sent to vision model
+        description = f"[Image for Vision Analysis: {metadata['format']} format, {metadata['width']}x{metadata['height']} pixels]"
+        return description, metadata
+        
     except Exception as e:
         return f"[Error processing image: {str(e)}]", metadata
 
 
-def extract_text_from_file(file_path: str, extension: str, use_ocr: bool = True) -> Tuple[str, Dict[str, Any]]:
+def extract_text_from_file(file_path: str, extension: str) -> Tuple[str, Dict[str, Any]]:
     """
     Extract text from a file based on its extension.
+    Images are processed for vision model analysis.
     
     Args:
         file_path: Path to the file
         extension: File extension (e.g., '.pdf')
-        use_ocr: Whether to use OCR for images and scanned documents
     
     Returns:
         Tuple of (extracted_text, metadata_dict)
@@ -424,7 +265,7 @@ def extract_text_from_file(file_path: str, extension: str, use_ocr: bool = True)
     ext = extension.lower()
     
     if ext == '.pdf':
-        return extract_text_from_pdf(file_path, use_ocr)
+        return extract_text_from_pdf(file_path)
     elif ext in ['.docx', '.doc']:
         return extract_text_from_docx(file_path)
     elif ext in ['.pptx', '.ppt']:
@@ -432,7 +273,7 @@ def extract_text_from_file(file_path: str, extension: str, use_ocr: bool = True)
     elif ext in ['.txt', '.rtf', '.md']:
         return extract_text_from_txt(file_path)
     elif ext in IMAGE_EXTENSIONS:
-        return extract_text_from_image(file_path, use_ocr)
+        return process_image_for_vision(file_path)
     else:
         return f"[Unsupported file format: {ext}]", {}
 
@@ -484,8 +325,7 @@ def chunk_text(text: str, max_chunk_size: int = MAX_CHUNK_SIZE) -> List[str]:
 async def process_uploaded_file(
     file_content: bytes,
     filename: str,
-    content_type: Optional[str] = None,
-    use_ocr: bool = True
+    content_type: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Process an uploaded file and store it.
@@ -494,7 +334,6 @@ async def process_uploaded_file(
         file_content: Raw file bytes
         filename: Original filename
         content_type: MIME type
-        use_ocr: Whether to use OCR for images and scanned documents
     
     Returns:
         Document metadata dictionary
@@ -518,11 +357,14 @@ async def process_uploaded_file(
     with open(file_path, 'wb') as f:
         f.write(file_content)
     
-    # Extract text (with OCR if enabled)
-    extracted_text, extraction_metadata = extract_text_from_file(file_path, ext, use_ocr)
+    # Extract text or process image
+    extracted_text, extraction_metadata = extract_text_from_file(file_path, ext)
     
-    # Create chunks
-    chunks = chunk_text(extracted_text)
+    # Check if this is an image for vision
+    is_vision_image = extraction_metadata.get("is_vision_image", False)
+    
+    # Create chunks (only for text documents)
+    chunks = chunk_text(extracted_text) if not is_vision_image else [extracted_text]
     
     # Create document metadata
     document = {
@@ -538,13 +380,17 @@ async def process_uploaded_file(
         "chunk_count": len(chunks),
         "text_length": len(extracted_text),
         "is_active": True,
-        "extraction_metadata": extraction_metadata,
-        "ocr_used": extraction_metadata.get("ocr_used", False)
+        "is_vision_image": is_vision_image,
+        "extraction_metadata": extraction_metadata
     }
     
-    # Save to registry
+    # Save to registry (don't save base64 in registry to keep it small)
+    registry_doc = document.copy()
+    if "base64_data" in registry_doc.get("extraction_metadata", {}):
+        registry_doc["extraction_metadata"] = {k: v for k, v in registry_doc["extraction_metadata"].items() if k != "base64_data"}
+    
     registry = load_document_registry()
-    registry["documents"][doc_id] = document
+    registry["documents"][doc_id] = registry_doc
     save_document_registry(registry)
     
     # Return metadata (without full text for response)
@@ -557,8 +403,7 @@ async def process_uploaded_file(
         "chunk_count": len(chunks),
         "text_length": len(extracted_text),
         "is_active": True,
-        "ocr_used": document["ocr_used"],
-        "ocr_engine": extraction_metadata.get("ocr_engine"),
+        "is_vision_image": is_vision_image,
         "preview": extracted_text[:500] + "..." if len(extracted_text) > 500 else extracted_text
     }
 
@@ -577,6 +422,33 @@ def get_document_text(doc_id: str) -> Optional[str]:
     return None
 
 
+def get_document_image_base64(doc_id: str) -> Optional[str]:
+    """Get the base64-encoded image data for a vision document."""
+    doc = get_document(doc_id)
+    if doc and doc.get("is_vision_image"):
+        # Re-read and encode the image file
+        file_path = doc.get("file_path")
+        if file_path and os.path.exists(file_path):
+            try:
+                img = Image.open(file_path)
+                if img.mode in ('RGBA', 'LA', 'P'):
+                    img = img.convert('RGB')
+                
+                # Resize if needed
+                max_size = 2048
+                if max(img.size) > max_size:
+                    ratio = max_size / max(img.size)
+                    new_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+                    img = img.resize(new_size, Image.LANCZOS)
+                
+                buffer = io.BytesIO()
+                img.save(buffer, format='PNG')
+                return base64.b64encode(buffer.getvalue()).decode('utf-8')
+            except Exception as e:
+                logger.error(f"Error reading image for vision: {e}")
+    return None
+
+
 def list_documents() -> List[Dict[str, Any]]:
     """List all documents (metadata only)."""
     registry = load_document_registry()
@@ -591,7 +463,7 @@ def list_documents() -> List[Dict[str, Any]]:
             "chunk_count": doc.get("chunk_count", 1),
             "text_length": doc.get("text_length", 0),
             "is_active": doc.get("is_active", True),
-            "ocr_used": doc.get("ocr_used", False),
+            "is_vision_image": doc.get("is_vision_image", False),
             "preview": doc.get("extracted_text", "")[:200] + "..." if len(doc.get("extracted_text", "")) > 200 else doc.get("extracted_text", "")
         })
     # Sort by upload time, newest first
@@ -631,43 +503,43 @@ def toggle_document_active(doc_id: str, is_active: bool) -> bool:
 
 
 def get_active_documents_context() -> str:
-    """Get combined context from all active documents."""
+    """Get combined context from all active text documents."""
     registry = load_document_registry()
     context_parts = []
     
     for doc_id, doc in registry["documents"].items():
-        if doc.get("is_active", True):
+        if doc.get("is_active", True) and not doc.get("is_vision_image", False):
             filename = doc.get("filename", "Unknown")
             text = doc.get("extracted_text", "")
-            ocr_note = " (OCR extracted)" if doc.get("ocr_used", False) else ""
             if text:
-                context_parts.append(f"=== Document: {filename}{ocr_note} ===\n{text}")
+                context_parts.append(f"=== Document: {filename} ===\n{text}")
     
     if context_parts:
         return "\n\n".join(context_parts)
     return ""
 
 
+def get_active_vision_images() -> List[Dict[str, Any]]:
+    """Get all active vision images with their base64 data."""
+    registry = load_document_registry()
+    images = []
+    
+    for doc_id, doc in registry["documents"].items():
+        if doc.get("is_active", True) and doc.get("is_vision_image", False):
+            base64_data = get_document_image_base64(doc_id)
+            if base64_data:
+                images.append({
+                    "id": doc_id,
+                    "filename": doc.get("filename", "Unknown"),
+                    "base64_data": base64_data,
+                    "width": doc.get("extraction_metadata", {}).get("width", 0),
+                    "height": doc.get("extraction_metadata", {}).get("height", 0)
+                })
+    
+    return images
+
+
 def get_active_document_ids() -> List[str]:
     """Get IDs of all active documents."""
     registry = load_document_registry()
     return [doc_id for doc_id, doc in registry["documents"].items() if doc.get("is_active", True)]
-
-
-def get_ocr_status() -> Dict[str, Any]:
-    """Get the current OCR engine status."""
-    tesseract = is_tesseract_available()
-    easyocr_available = False
-    
-    try:
-        import easyocr as _easyocr_check  # noqa: F401
-        easyocr_available = True
-    except ImportError:
-        pass
-    
-    return {
-        "tesseract_available": tesseract,
-        "easyocr_available": easyocr_available,
-        "ocr_enabled": tesseract or easyocr_available,
-        "preferred_engine": "tesseract" if tesseract else ("easyocr" if easyocr_available else "none")
-    }
