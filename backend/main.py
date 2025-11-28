@@ -379,7 +379,10 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
 
     # Build query with document context if requested
     query_content = request.content
+    vision_images = []
+    
     if request.include_documents:
+        # Get text document context
         doc_context = get_active_documents_context()
         if doc_context:
             query_content = f"""I have uploaded the following documents for reference:
@@ -389,6 +392,12 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
 ---
 
 My question: {request.content}"""
+        
+        # Get vision images for analysis
+        vision_images = get_active_vision_images()
+        if vision_images:
+            image_note = f"\n\n[Note: {len(vision_images)} image(s) attached for visual analysis]"
+            query_content += image_note
 
     # Add user message
     storage.add_user_message(conversation_id, request.content)
@@ -398,9 +407,10 @@ My question: {request.content}"""
         title = await generate_conversation_title(request.content)
         storage.update_conversation_title(conversation_id, title)
 
-    # Run the 3-stage council process
+    # Run the 3-stage council process (pass vision images if available)
     stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
-        query_content
+        query_content,
+        vision_images=vision_images if vision_images else None
     )
 
     # Add assistant message with all stages
