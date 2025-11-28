@@ -192,24 +192,23 @@ Add context to your questions by uploading documents:
 2. Click the **📎 upload button** next to the text input
 
 **Supported formats:**
-- 📄 PDF documents (text-based and scanned with OCR)
+- 📄 PDF documents
 - 📝 Word documents (.docx)
 - 📊 PowerPoint presentations (.pptx)
 - 📃 Text files (.txt, .md)
-- 🖼️ Images (.png, .jpg, .jpeg, .gif, .webp, .bmp, .tiff) - with automatic OCR text extraction
+- 🖼️ Images (.png, .jpg, .jpeg, .gif, .webp, .bmp, .tiff) - analyzed by vision AI
 
-**OCR (Text from Images):**
-When you upload an image, LLM Council automatically:
-1. Detects if it contains text
-2. Extracts the text using OCR
-3. Makes the text available for your queries
-4. Shows an "OCR" badge on the document
+**Vision AI for Images:**
+When you upload an image (like a trading chart), it will be:
+1. Sent directly to vision-capable AI models (GPT-4V, Claude Vision, Gemini Vision)
+2. Analyzed visually - no text extraction needed
+3. The AI can understand patterns, trends, indicators, and visual elements
 
-**Tips for best OCR results:**
-- Use clear, high-resolution images
-- Ensure text is readable and not blurry
-- Straighten photos of documents if possible
-- Avoid heavy shadows or glare
+**Tips for best results with charts:**
+- Use clear, high-resolution screenshots
+- Ensure important elements are visible
+- Include relevant time frames in the image
+- Add context in your question about what you want analyzed
 
 **Managing documents:**
 - Click the **document icon** (top right) to open the document panel
