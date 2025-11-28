@@ -10,18 +10,33 @@ except ImportError:
     from config_manager import get_council_models, get_chairman_model
 
 
-async def stage1_collect_responses(user_query: str) -> List[Dict[str, Any]]:
+async def stage1_collect_responses(user_query: str, vision_images: list = None) -> List[Dict[str, Any]]:
     """
     Stage 1: Collect individual responses from all council models.
 
     Args:
         user_query: The user's question
+        vision_images: Optional list of vision images with base64 data
 
     Returns:
         List of dicts with 'model' and 'response' keys
     """
     council_models = get_council_models()
-    messages = [{"role": "user", "content": user_query}]
+    
+    # Build messages with optional vision content
+    if vision_images:
+        # Create multimodal message content
+        content = [{"type": "text", "text": user_query}]
+        for img in vision_images:
+            content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/png;base64,{img['base64_data']}"
+                }
+            })
+        messages = [{"role": "user", "content": content}]
+    else:
+        messages = [{"role": "user", "content": user_query}]
 
     # Query all models in parallel
     responses = await query_models_parallel(council_models, messages)
