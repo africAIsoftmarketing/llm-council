@@ -74,15 +74,15 @@ Instead of relying on a single AI's perspective, you get the combined intelligen
 ### 📄 Document Upload & Context
 - Upload **PDF, Word, PowerPoint, Text files, and Images**
 - Automatic text extraction from documents
-- **OCR support** for images and scanned documents
+- **Vision AI support** for images (charts, screenshots, diagrams)
 - Include document context in your questions
 - Manage multiple documents per conversation
 
-### 🔍 OCR (Optical Character Recognition)
-- Automatic text extraction from uploaded images
-- Works with screenshots, photos, and scanned pages
-- Powered by EasyOCR engine
-- Visual OCR badge indicator in document panel
+### 🔍 Vision AI for Images
+- Upload trading charts, screenshots, or any images
+- Images are sent directly to vision-capable AI models
+- No OCR needed - AI understands visual content directly
+- Works with GPT-4V, Claude 3, Gemini Vision models
 
 ### ⚙️ Easy Configuration
 - **No Python installation required** - everything is bundled
