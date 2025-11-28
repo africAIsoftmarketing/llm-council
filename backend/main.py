@@ -456,7 +456,10 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
         try:
             # Build query with document context if requested
             query_content = request.content
+            vision_images = []
+            
             if request.include_documents:
+                # Get text document context
                 doc_context = get_active_documents_context()
                 if doc_context:
                     query_content = f"""I have uploaded the following documents for reference:
@@ -466,6 +469,12 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
 ---
 
 My question: {request.content}"""
+                
+                # Get vision images for analysis
+                vision_images = get_active_vision_images()
+                if vision_images:
+                    image_note = f"\n\n[Note: {len(vision_images)} image(s) attached for visual analysis]"
+                    query_content += image_note
 
             # Add user message
             storage.add_user_message(conversation_id, request.content)
@@ -475,9 +484,9 @@ My question: {request.content}"""
             if is_first_message:
                 title_task = asyncio.create_task(generate_conversation_title(request.content))
 
-            # Stage 1: Collect responses
+            # Stage 1: Collect responses (with vision images if available)
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
-            stage1_results = await stage1_collect_responses(query_content)
+            stage1_results = await stage1_collect_responses(query_content, vision_images=vision_images if vision_images else None)
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
 
             # Stage 2: Collect rankings
