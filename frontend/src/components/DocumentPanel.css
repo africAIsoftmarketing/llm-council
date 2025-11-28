@@ -181,8 +181,8 @@
   flex-wrap: wrap;
 }
 
-/* OCR Badge */
-.ocr-badge {
+/* Vision Badge */
+.vision-badge {
   display: inline-flex;
   align-items: center;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -195,7 +195,7 @@
   letter-spacing: 0.5px;
 }
 
-.ocr-badge svg {
+.vision-badge svg {
   fill: white;
 }
 
