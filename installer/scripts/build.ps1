@@ -112,16 +112,7 @@ if (-not $SkipPython) {
         throw "Failed to install core Python packages"
     }
     
-    # Install OCR packages (easyocr + dependencies including torch)
-    Write-Host "Installing OCR packages (easyocr, torch)... This may take a while..." -ForegroundColor Gray
-    & $PythonExe -m pip install easyocr
-    
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "WARNING: Failed to install OCR packages. OCR features may not work." -ForegroundColor Yellow
-    }
-    else {
-        Write-Host "OCR packages installed successfully!" -ForegroundColor Green
-    }
+    Write-Host "Python packages installed!" -ForegroundColor Green
     
     # Clean up unnecessary files to avoid long path issues during installer build
     Write-Host "Cleaning up unnecessary files (tests, caches)..." -ForegroundColor Yellow
