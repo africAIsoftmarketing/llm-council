@@ -4,6 +4,8 @@
 
 The idea of this repo is that instead of asking a question to your favorite LLM provider (e.g. OpenAI GPT 5.1, Google Gemini 3.0 Pro, Anthropic Claude Sonnet 4.5, xAI Grok 4, eg.c), you can group them into your "LLM Council". This repo is a simple, local web app that essentially looks like ChatGPT except it uses OpenRouter to send your query to multiple LLMs, it then asks them to review and rank each other's work, and finally a Chairman LLM produces the final response.
 
+**Version 2.1.0** now supports **LM Studio integration** for running local models alongside cloud-based ones!
+
 In a bit more detail, here is what happens when you submit a query:
 
 1. **Stage 1: First opinions**. The user query is given to all LLMs individually, and the responses are collected. The individual responses are shown in a "tab view", so that the user can inspect them all one by one.
@@ -85,3 +87,20 @@ Then open http://localhost:5173 in your browser.
 - **Frontend:** React + Vite, react-markdown for rendering
 - **Storage:** JSON files in `data/conversations/`
 - **Package Management:** uv for Python, npm for JavaScript
+- **Local Models:** LM Studio integration (OpenAI-compatible API)
+
+## LM Studio Integration (New in v2.1.0)
+
+You can now use local models through LM Studio instead of or alongside OpenRouter:
+
+1. **Download LM Studio** from [lmstudio.ai](https://lmstudio.ai)
+2. **Load a model** and start the local server (usually http://localhost:1234/v1)
+3. **Enable CORS** in LM Studio settings
+4. **Configure in LLM Council**: Go to Settings > LM Studio and enter the URL for each model you want to run locally
+5. **Test connection** to verify it's working
+
+Benefits of local models:
+- **Privacy**: Queries stay on your machine
+- **Cost**: No API fees for local inference
+- **Offline**: Works without internet connection
+- **Mixed mode**: Use local for some models, cloud for others

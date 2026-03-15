@@ -69,7 +69,8 @@ class LLMCouncilLauncher:
             "frontend_port": 3000,
             "auto_start": False,
             "minimize_to_tray": True,
-            "openrouter_api_key": ""
+            "openrouter_api_key": "",
+            "lm_studio_urls": {}
         }
         
         if CONFIG_FILE.exists():
@@ -168,10 +169,14 @@ class LLMCouncilLauncher:
         link2.pack(anchor=tk.W, padx=(10, 0))
         link2.bind("<Button-1>", lambda e: webbrowser.open("https://github.com/karpathy/llm-council"))
         
+        link3 = ttk.Label(links_frame, text="• LM Studio (Local Models)", foreground="blue", cursor="hand2")
+        link3.pack(anchor=tk.W, padx=(10, 0))
+        link3.bind("<Button-1>", lambda e: webbrowser.open("https://lmstudio.ai"))
+        
         # Version info
         version_label = ttk.Label(
             main_frame,
-            text="Version 2.0.0",
+            text="Version 2.1.0",
             font=("Segoe UI", 8),
             foreground="gray"
         )

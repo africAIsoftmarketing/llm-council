@@ -2,6 +2,8 @@
 
 This directory contains all the source code and scripts needed to build a Windows installer for LLM Council.
 
+**Version 2.1.0** - Now with LM Studio support for local models!
+
 ## Quick Start
 
 On Windows, run:
@@ -63,7 +65,7 @@ installer/
 
 1. Install [Inno Setup 6](https://jrsoftware.org/isdl.php)
 2. Run `scripts\build.bat`
-3. Find installer at `output\LLMCouncil-Setup-2.0.0.exe`
+3. Find installer at `output\LLMCouncil-Setup-2.1.0.exe`
 
 ### Option 2: NSIS
 
@@ -95,8 +97,15 @@ After installation, users:
 1. Launch "LLM Council" from Start Menu
 2. Backend starts automatically
 3. Browser opens to http://localhost:3000
-4. Configure API key in Settings
+4. Configure API key in Settings OR set up LM Studio for local models
 5. Start chatting with the AI Council!
+
+## New in Version 2.1.0
+
+- **LM Studio Integration**: Configure local LM Studio server URLs per model
+- **Mixed Mode**: Use OpenRouter for some models and local LM Studio for others
+- **Connection Testing**: Test LM Studio connections before use
+- **Privacy Option**: Run models locally without sending data to external APIs
 
 ## Requirements for Building
 

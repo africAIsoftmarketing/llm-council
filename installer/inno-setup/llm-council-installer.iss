@@ -3,7 +3,7 @@
 ; This script creates a complete Windows installer with embedded Python
 
 #define MyAppName "LLM Council"
-#define MyAppVersion "2.0.0"
+#define MyAppVersion "2.1.0"
 #define MyAppPublisher "LLM Council"
 #define MyAppURL "https://github.com/karpathy/llm-council"
 #define MyAppExeName "LLM Council.exe"

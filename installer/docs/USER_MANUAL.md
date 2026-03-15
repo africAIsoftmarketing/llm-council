@@ -96,6 +96,12 @@ LLM Council includes built-in OCR capabilities to extract text from images:
 - Enter and validate your OpenRouter API key
 - View masked key when configured
 
+**LM Studio (Local Models)**
+- Configure local LM Studio servers for each council model
+- Enter the LM Studio server URL (e.g., http://localhost:1234/v1)
+- Test connection to verify LM Studio is running
+- When configured, model queries go to local server instead of OpenRouter
+
 **Council Models**
 - Select which AI models participate in the council
 - Choose from 30+ available models
@@ -108,6 +114,44 @@ LLM Council includes built-in OCR capabilities to extract text from images:
 **Advanced Settings**
 - Theme selection (light/dark)
 - View storage location
+
+---
+
+## Using LM Studio (Local Models)
+
+LLM Council supports running models locally through LM Studio, providing:
+- **Privacy**: Your queries stay on your machine
+- **Cost savings**: No API fees for local models
+- **Offline capability**: Works without internet
+
+### Setting Up LM Studio
+
+1. **Download LM Studio**
+   - Get it from [lmstudio.ai](https://lmstudio.ai)
+   - Install and launch
+
+2. **Load a Model**
+   - Browse and download a model in LM Studio
+   - Click "Load" to load it into memory
+
+3. **Start the Server**
+   - Go to "Local Server" tab in LM Studio
+   - Click "Start Server"
+   - Default URL: `http://localhost:1234/v1`
+   - **Important**: Enable CORS in settings
+
+4. **Configure in LLM Council**
+   - Go to Settings > LM Studio
+   - Enter the server URL for the model you want to use locally
+   - Click "Test" to verify connection
+   - Click "Save LM Studio Configuration"
+
+### Tips for LM Studio
+
+- **CORS**: Make sure CORS is enabled in LM Studio settings
+- **Memory**: Larger models need more RAM/VRAM
+- **Multiple Models**: You can run different LM Studio instances on different ports
+- **Mixed Setup**: Use LM Studio for some models and OpenRouter for others
 
 ---
 
@@ -183,4 +227,4 @@ LLM Council includes built-in OCR capabilities to extract text from images:
 
 ---
 
-*Version 2.0.0*
+*Version 2.1.0 - Now with LM Studio support for local models*

@@ -21,6 +21,7 @@ Add the capability to query the LM Studio CORS server URL for each LLM to run th
 ### Installer (Inno Setup)
 - Windows installer with embedded Python
 - default_config.json with lm_studio_urls field
+- Version bumped to 2.1.0
 
 ## Core Requirements (Static)
 
@@ -63,6 +64,12 @@ Add the capability to query the LM Studio CORS server URL for each LLM to run th
 
 ### Installer Changes
 - Updated default_config.json with lm_studio_urls field
+- Version bumped to 2.1.0 in llm-council-installer.iss
+- Updated launcher.py with lm_studio_urls in default config
+- Added LM Studio quick link in launcher GUI
+- Updated USER_MANUAL.md with LM Studio documentation
+- Updated README_INSTALLER.txt with LM Studio info
+- Updated installer/README.md with v2.1.0 features
 
 ## Prioritized Backlog
 
