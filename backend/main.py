@@ -23,7 +23,8 @@ try:
     )
     from .config_manager import (
         get_config, update_config, validate_api_key, get_available_models,
-        add_custom_model, load_config, get_api_key, apply_config_to_env
+        add_custom_model, load_config, get_api_key, apply_config_to_env,
+        test_lm_studio_connection, get_lm_studio_urls
     )
     from .document_processor import (
         process_uploaded_file, list_documents, get_document, 
@@ -39,7 +40,8 @@ except ImportError:
     )
     from config_manager import (
         get_config, update_config, validate_api_key, get_available_models,
-        add_custom_model, load_config, get_api_key, apply_config_to_env
+        add_custom_model, load_config, get_api_key, apply_config_to_env,
+        test_lm_studio_connection, get_lm_studio_urls
     )
     from document_processor import (
         process_uploaded_file, list_documents, get_document, 
@@ -131,6 +133,7 @@ class ConfigUpdateRequest(BaseModel):
     openrouter_api_key: Optional[str] = None
     council_models: Optional[List[str]] = None
     chairman_model: Optional[str] = None
+    lm_studio_urls: Optional[Dict[str, str]] = None
     backend_port: Optional[int] = None
     frontend_port: Optional[int] = None
     auto_credit_reminder: Optional[bool] = None
@@ -150,6 +153,12 @@ class CustomModelRequest(BaseModel):
     model_id: str
     model_name: str
     provider: str
+
+
+class TestLmStudioRequest(BaseModel):
+    """Request to test LM Studio connection."""
+    url: str
+    model_name: Optional[str] = None
 
 
 class ToggleDocumentRequest(BaseModel):
@@ -207,6 +216,19 @@ async def add_custom_model_endpoint(request: CustomModelRequest):
     """Add a custom model."""
     model = add_custom_model(request.model_id, request.model_name, request.provider)
     return {"model": model}
+
+
+@app.post("/api/lm-studio/test")
+async def test_lm_studio_endpoint(request: TestLmStudioRequest):
+    """Test connection to an LM Studio server."""
+    result = await test_lm_studio_connection(request.url, request.model_name)
+    return result
+
+
+@app.get("/api/lm-studio/urls")
+async def get_lm_studio_urls_endpoint():
+    """Get all configured LM Studio URLs."""
+    return {"urls": get_lm_studio_urls()}
 
 
 # ===== Document Endpoints =====

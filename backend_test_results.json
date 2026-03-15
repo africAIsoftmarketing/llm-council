@@ -1,9 +1,9 @@
 {
   "summary": {
-    "total_tests": 14,
-    "passed_tests": 14,
-    "failed_tests": 0,
-    "success_rate": 100.0
+    "total_tests": 18,
+    "passed_tests": 15,
+    "failed_tests": 3,
+    "success_rate": 83.33333333333334
   },
   "test_results": [
     {
@@ -16,12 +16,12 @@
         "configured": false,
         "version": "2.0.0"
       },
-      "timestamp": "2025-11-27T21:47:55.420763"
+      "timestamp": "2026-03-15T02:14:00.776418"
     },
     {
       "test_name": "GET Config",
       "success": true,
-      "details": "Has API key: False, Council models: 4",
+      "details": "Has API key: False, Council models: 4, LM Studio URLs: 0",
       "response_data": {
         "council_models": [
           "openai/gpt-4o",
@@ -30,6 +30,7 @@
           "x-ai/grok-2"
         ],
         "chairman_model": "google/gemini-2.0-flash-exp",
+        "lm_studio_urls": {},
         "backend_port": 8001,
         "frontend_port": 5173,
         "auto_credit_reminder": true,
@@ -54,12 +55,12 @@
         "openrouter_api_key_masked": "",
         "has_api_key": false
       },
-      "timestamp": "2025-11-27T21:47:55.434509"
+      "timestamp": "2026-03-15T02:14:00.834432"
     },
     {
       "test_name": "PUT Config",
       "success": true,
-      "details": "Successfully updated theme to dark",
+      "details": "Successfully updated theme to dark and lm_studio_urls with 1 entries",
       "response_data": {
         "council_models": [
           "openai/gpt-4o",
@@ -68,6 +69,9 @@
           "x-ai/grok-2"
         ],
         "chairman_model": "google/gemini-2.0-flash-exp",
+        "lm_studio_urls": {
+          "openai/gpt-4o": "http://localhost:1234/v1"
+        },
         "backend_port": 8001,
         "frontend_port": 5173,
         "auto_credit_reminder": true,
@@ -92,7 +96,7 @@
         "openrouter_api_key_masked": "",
         "has_api_key": false
       },
-      "timestamp": "2025-11-27T21:47:55.485139"
+      "timestamp": "2026-03-15T02:14:00.892179"
     },
     {
       "test_name": "Validate API Key",
@@ -102,7 +106,7 @@
         "valid": false,
         "error": "Invalid API key format. OpenRouter keys start with 'sk-or-'"
       },
-      "timestamp": "2025-11-27T21:47:55.534336"
+      "timestamp": "2026-03-15T02:14:00.976778"
     },
     {
       "test_name": "GET Available Models",
@@ -116,44 +120,43 @@
           "provider": "OpenAI"
         }
       },
-      "timestamp": "2025-11-27T21:47:55.547461"
+      "timestamp": "2026-03-15T02:14:01.051886"
     },
     {
       "test_name": "GET Documents",
       "success": true,
-      "details": "Found 2 documents",
+      "details": "Found 0 documents",
       "response_data": {
-        "document_count": 2
+        "document_count": 0
       },
-      "timestamp": "2025-11-27T21:47:55.598401"
+      "timestamp": "2026-03-15T02:14:01.109410"
     },
     {
       "test_name": "POST Upload Document",
       "success": true,
-      "details": "Uploaded document: test_document.txt (ID: 2b7c0f24-3066-4781-9a7d-e2722dbf7ff0)",
+      "details": "Uploaded document: test_document.txt (ID: d3b9db97-f266-4154-8325-c1fe212343d9)",
       "response_data": {
-        "id": "2b7c0f24-3066-4781-9a7d-e2722dbf7ff0",
+        "id": "d3b9db97-f266-4154-8325-c1fe212343d9",
         "filename": "test_document.txt",
         "extension": ".txt",
         "size": 118,
-        "uploaded_at": "2025-11-27T21:47:55.604962",
+        "uploaded_at": "2026-03-15T02:14:01.148171",
         "chunk_count": 1,
         "text_length": 118,
         "is_active": true,
-        "ocr_used": false,
-        "ocr_engine": null,
+        "is_vision_image": false,
         "preview": "This is a test document for the LLM Council system.\nIt contains sample text for testing document upload functionality."
       },
-      "timestamp": "2025-11-27T21:47:55.649179"
+      "timestamp": "2026-03-15T02:14:01.164200"
     },
     {
       "test_name": "DELETE Document",
       "success": true,
-      "details": "Successfully deleted document 2b7c0f24-3066-4781-9a7d-e2722dbf7ff0",
+      "details": "Successfully deleted document d3b9db97-f266-4154-8325-c1fe212343d9",
       "response_data": {
         "success": true
       },
-      "timestamp": "2025-11-27T21:47:55.658357"
+      "timestamp": "2026-03-15T02:14:01.247381"
     },
     {
       "test_name": "POST Custom Model",
@@ -164,53 +167,137 @@
         "name": "Test Custom Model",
         "provider": "TestProvider"
       },
-      "timestamp": "2025-11-27T21:47:55.666652"
+      "timestamp": "2026-03-15T02:14:01.305327"
+    },
+    {
+      "test_name": "POST LM Studio Test",
+      "success": true,
+      "details": "Correctly handled connection failure: Could not connect to server. Is LM Studio running?",
+      "response_data": {
+        "success": false,
+        "error": "Could not connect to server. Is LM Studio running?",
+        "url": "http://non-existent-server:1234/v1"
+      },
+      "timestamp": "2026-03-15T02:14:01.395839"
+    },
+    {
+      "test_name": "GET LM Studio URLs",
+      "success": true,
+      "details": "Retrieved 1 configured LM Studio URLs",
+      "response_data": {
+        "url_count": 1,
+        "configured_models": [
+          "openai/gpt-4o"
+        ]
+      },
+      "timestamp": "2026-03-15T02:14:01.446878"
+    },
+    {
+      "test_name": "LM Studio Config Update",
+      "success": true,
+      "details": "Successfully updated LM Studio URLs: ['openai/gpt-4o', 'google/gemini-2.0-flash-exp']",
+      "response_data": {
+        "updated_urls": {
+          "openai/gpt-4o": "http://localhost:1234/v1",
+          "google/gemini-2.0-flash-exp": "http://localhost:1235/v1"
+        }
+      },
+      "timestamp": "2026-03-15T02:14:01.549346"
+    },
+    {
+      "test_name": "LM Studio Config Clear",
+      "success": true,
+      "details": "Successfully cleared LM Studio URLs",
+      "response_data": {
+        "council_models": [
+          "openai/gpt-4o",
+          "google/gemini-2.0-flash-exp",
+          "anthropic/claude-3.5-sonnet",
+          "x-ai/grok-2"
+        ],
+        "chairman_model": "google/gemini-2.0-flash-exp",
+        "lm_studio_urls": {},
+        "backend_port": 8001,
+        "frontend_port": 5173,
+        "auto_credit_reminder": true,
+        "credit_reminder_threshold": 5.0,
+        "document_settings": {
+          "max_file_size_mb": 50,
+          "auto_delete_days": 30,
+          "supported_extensions": [
+            ".pdf",
+            ".docx",
+            ".txt",
+            ".rtf",
+            ".pptx",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".md"
+          ]
+        },
+        "storage_location": "data",
+        "theme": "dark",
+        "openrouter_api_key_masked": "",
+        "has_api_key": false
+      },
+      "timestamp": "2026-03-15T02:14:01.619098"
     },
     {
       "test_name": "OCR Status",
-      "success": true,
-      "details": "OCR enabled: True, Preferred: easyocr, EasyOCR: True, Tesseract: False",
-      "response_data": {
-        "tesseract_available": false,
-        "easyocr_available": true,
-        "ocr_enabled": true,
-        "preferred_engine": "easyocr"
-      },
-      "timestamp": "2025-11-27T21:47:55.714912"
+      "success": false,
+      "details": "Expected 200, got 404",
+      "response_data": "{\"detail\":\"Not found\"}",
+      "timestamp": "2026-03-15T02:14:01.683762"
     },
     {
       "test_name": "Image Upload OCR",
-      "success": true,
-      "details": "OCR successful: engine=easyocr, text_length=119, preview='[OCR extracted from PNG image (400x200 px) using e...'",
+      "success": false,
+      "details": "Missing fields: ['ocr_used']",
       "response_data": {
-        "ocr_used": true,
-        "ocr_engine": "easyocr",
-        "text_length": 119
+        "id": "afea8ac2-5567-495b-8282-064eab794780",
+        "filename": "test_ocr_image.png",
+        "extension": ".png",
+        "size": 3122,
+        "uploaded_at": "2026-03-15T02:14:01.734257",
+        "chunk_count": 1,
+        "text_length": 55,
+        "is_active": true,
+        "is_vision_image": true,
+        "preview": "[Image for Vision Analysis: PNG format, 400x200 pixels]"
       },
-      "timestamp": "2025-11-27T21:47:57.685770"
+      "timestamp": "2026-03-15T02:14:01.750627"
     },
     {
       "test_name": "Document Status OCR",
-      "success": true,
-      "details": "Status: completed, OCR: True, Engine: easyocr, Text length: 119",
+      "success": false,
+      "details": "Missing fields: ['ocr_used']",
       "response_data": {
+        "id": "afea8ac2-5567-495b-8282-064eab794780",
+        "filename": "test_ocr_image.png",
         "status": "completed",
-        "ocr_used": true,
-        "ocr_engine": "easyocr",
-        "has_extraction_details": true
+        "is_vision_image": true,
+        "text_length": 55,
+        "chunk_count": 1,
+        "is_active": true,
+        "extraction_details": {
+          "width": 400,
+          "height": 200,
+          "format": "PNG",
+          "type": "image"
+        }
       },
-      "timestamp": "2025-11-27T21:47:57.694893"
+      "timestamp": "2026-03-15T02:14:01.805035"
     },
     {
       "test_name": "Documents List OCR Info",
       "success": true,
-      "details": "Found 2 OCR documents out of 3 total. Sample: test_ocr_image.png (OCR: True)",
+      "details": "No OCR documents found in 1 total documents (may be expected if no images uploaded)",
       "response_data": {
-        "total_docs": 3,
-        "ocr_docs": 2,
-        "sample_ocr_doc": "test_ocr_image.png"
+        "total_docs": 1,
+        "ocr_docs": 0
       },
-      "timestamp": "2025-11-27T21:47:57.702603"
+      "timestamp": "2026-03-15T02:14:01.869545"
     },
     {
       "test_name": "PDF Upload No OCR",
@@ -220,7 +307,7 @@
         "skipped": true,
         "reason": "reportlab not available"
       },
-      "timestamp": "2025-11-27T21:47:57.702739"
+      "timestamp": "2026-03-15T02:14:01.869695"
     }
   ]
 }

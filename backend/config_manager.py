@@ -40,6 +40,10 @@ DEFAULT_CONFIG = {
         "x-ai/grok-2"
     ],
     "chairman_model": "google/gemini-2.0-flash-exp",
+    # LM Studio URLs for each model (model_id -> base_url mapping)
+    # When a model has an LM Studio URL configured, it will be queried directly
+    # instead of going through OpenRouter
+    "lm_studio_urls": {},
     "backend_port": 8001,
     "frontend_port": 5173,
     "auto_credit_reminder": True,
@@ -161,7 +165,7 @@ def update_config(updates: Dict[str, Any]) -> Dict[str, Any]:
     # Apply updates (only for allowed keys)
     allowed_keys = [
         "openrouter_api_key", "council_models", "chairman_model",
-        "backend_port", "frontend_port", "auto_credit_reminder",
+        "lm_studio_urls", "backend_port", "frontend_port", "auto_credit_reminder",
         "credit_reminder_threshold", "document_settings",
         "storage_location", "theme"
     ]
@@ -190,6 +194,69 @@ def get_chairman_model() -> str:
     """Get the chairman model ID."""
     config = load_config()
     return config.get("chairman_model", DEFAULT_CONFIG["chairman_model"])
+
+
+def get_lm_studio_urls() -> Dict[str, str]:
+    """Get the LM Studio URLs mapping (model_id -> base_url)."""
+    config = load_config()
+    return config.get("lm_studio_urls", {})
+
+
+def get_lm_studio_url_for_model(model_id: str) -> Optional[str]:
+    """Get the LM Studio URL for a specific model, if configured."""
+    urls = get_lm_studio_urls()
+    return urls.get(model_id)
+
+
+async def test_lm_studio_connection(base_url: str, model_name: str = None) -> Dict[str, Any]:
+    """
+    Test connection to an LM Studio server.
+    
+    Args:
+        base_url: The base URL of the LM Studio server (e.g., http://localhost:1234/v1)
+        model_name: Optional model name to test with
+    
+    Returns:
+        Dict with test results
+    """
+    if not base_url:
+        return {"success": False, "error": "URL is empty"}
+    
+    # Normalize URL - ensure it ends with /v1 if not present
+    base_url = base_url.rstrip('/')
+    if not base_url.endswith('/v1'):
+        base_url = base_url + '/v1'
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # First try to get models list
+            models_url = f"{base_url}/models"
+            response = await client.get(models_url)
+            
+            if response.status_code == 200:
+                data = response.json()
+                models = data.get("data", [])
+                model_ids = [m.get("id", "unknown") for m in models]
+                
+                return {
+                    "success": True,
+                    "url": base_url,
+                    "models_available": model_ids,
+                    "message": f"Connected successfully. Found {len(model_ids)} model(s)."
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": f"Server returned status {response.status_code}",
+                    "url": base_url
+                }
+                
+    except httpx.ConnectError:
+        return {"success": False, "error": "Could not connect to server. Is LM Studio running?", "url": base_url}
+    except httpx.TimeoutException:
+        return {"success": False, "error": "Connection timed out", "url": base_url}
+    except Exception as e:
+        return {"success": False, "error": str(e), "url": base_url}
 
 
 async def validate_api_key(api_key: str) -> Dict[str, Any]:

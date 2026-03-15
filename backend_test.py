@@ -87,7 +87,7 @@ class LLMCouncilAPITester:
             
             if response.status_code == 200:
                 data = response.json()
-                expected_fields = ["council_models", "chairman_model", "has_api_key"]
+                expected_fields = ["council_models", "chairman_model", "has_api_key", "lm_studio_urls"]
                 missing_fields = [field for field in expected_fields if field not in data]
                 
                 if missing_fields:
@@ -101,7 +101,7 @@ class LLMCouncilAPITester:
                     self.log_test(
                         "GET Config", 
                         True, 
-                        f"Has API key: {data.get('has_api_key')}, Council models: {len(data.get('council_models', []))}",
+                        f"Has API key: {data.get('has_api_key')}, Council models: {len(data.get('council_models', []))}, LM Studio URLs: {len(data.get('lm_studio_urls', {}))}",
                         data
                     )
             else:
@@ -118,8 +118,13 @@ class LLMCouncilAPITester:
     def test_update_config(self):
         """Test PUT /api/config - Update configuration"""
         try:
-            # Test updating theme (safe update)
-            update_data = {"theme": "dark"}
+            # Test updating theme and lm_studio_urls (safe updates)
+            update_data = {
+                "theme": "dark",
+                "lm_studio_urls": {
+                    "openai/gpt-4o": "http://localhost:1234/v1"
+                }
+            }
             response = self.session.put(
                 f"{self.base_url}/api/config",
                 json=update_data,
@@ -128,18 +133,18 @@ class LLMCouncilAPITester:
             
             if response.status_code == 200:
                 data = response.json()
-                if data.get("theme") == "dark":
+                if data.get("theme") == "dark" and isinstance(data.get("lm_studio_urls"), dict):
                     self.log_test(
                         "PUT Config", 
                         True, 
-                        "Successfully updated theme to dark",
+                        f"Successfully updated theme to dark and lm_studio_urls with {len(data.get('lm_studio_urls', {}))} entries",
                         data
                     )
                 else:
                     self.log_test(
                         "PUT Config", 
                         False, 
-                        "Theme not updated correctly",
+                        "Theme or lm_studio_urls not updated correctly",
                         data
                     )
             else:
@@ -739,6 +744,162 @@ class LLMCouncilAPITester:
         except Exception as e:
             self.log_test("PDF Upload No OCR", False, f"Exception: {str(e)}")
 
+    def test_lm_studio_test_endpoint(self):
+        """Test POST /api/lm-studio/test - Test LM Studio connection"""
+        try:
+            # Test with invalid URL (should fail gracefully)
+            test_data = {"url": "http://non-existent-server:1234/v1", "model_name": "test-model"}
+            response = self.session.post(
+                f"{self.base_url}/api/lm-studio/test",
+                json=test_data,
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                required_fields = ["success", "error", "url"]
+                missing_fields = [field for field in required_fields if field not in data]
+                
+                if missing_fields:
+                    self.log_test(
+                        "POST LM Studio Test", 
+                        False, 
+                        f"Missing fields: {missing_fields}",
+                        data
+                    )
+                else:
+                    # Should fail for non-existent server but return proper error structure
+                    if not data.get("success") and data.get("error"):
+                        self.log_test(
+                            "POST LM Studio Test", 
+                            True, 
+                            f"Correctly handled connection failure: {data.get('error')}",
+                            data
+                        )
+                    else:
+                        self.log_test(
+                            "POST LM Studio Test", 
+                            False, 
+                            "Unexpected success for invalid server or missing error message",
+                            data
+                        )
+            else:
+                self.log_test(
+                    "POST LM Studio Test", 
+                    False, 
+                    f"Expected 200, got {response.status_code}",
+                    response.text
+                )
+                
+        except Exception as e:
+            self.log_test("POST LM Studio Test", False, f"Exception: {str(e)}")
+
+    def test_lm_studio_get_urls_endpoint(self):
+        """Test GET /api/lm-studio/urls - Get configured LM Studio URLs"""
+        try:
+            response = self.session.get(f"{self.base_url}/api/lm-studio/urls")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "urls" in data and isinstance(data["urls"], dict):
+                    self.log_test(
+                        "GET LM Studio URLs", 
+                        True, 
+                        f"Retrieved {len(data['urls'])} configured LM Studio URLs",
+                        {"url_count": len(data["urls"]), "configured_models": list(data["urls"].keys())}
+                    )
+                else:
+                    self.log_test(
+                        "GET LM Studio URLs", 
+                        False, 
+                        "Response missing 'urls' field or not a dict",
+                        data
+                    )
+            else:
+                self.log_test(
+                    "GET LM Studio URLs", 
+                    False, 
+                    f"Expected 200, got {response.status_code}",
+                    response.text
+                )
+                
+        except Exception as e:
+            self.log_test("GET LM Studio URLs", False, f"Exception: {str(e)}")
+
+    def test_lm_studio_config_update(self):
+        """Test updating lm_studio_urls through config endpoint"""
+        try:
+            # First, get current config to preserve other settings
+            get_response = self.session.get(f"{self.base_url}/api/config")
+            if get_response.status_code != 200:
+                self.log_test("LM Studio Config Update", False, "Failed to get current config")
+                return
+            
+            # Test updating LM Studio URLs
+            lm_studio_test_urls = {
+                "openai/gpt-4o": "http://localhost:1234/v1",
+                "google/gemini-2.0-flash-exp": "http://localhost:1235/v1"
+            }
+            
+            update_data = {"lm_studio_urls": lm_studio_test_urls}
+            response = self.session.put(
+                f"{self.base_url}/api/config",
+                json=update_data,
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("lm_studio_urls") == lm_studio_test_urls:
+                    self.log_test(
+                        "LM Studio Config Update", 
+                        True, 
+                        f"Successfully updated LM Studio URLs: {list(lm_studio_test_urls.keys())}",
+                        {"updated_urls": lm_studio_test_urls}
+                    )
+                    
+                    # Test clearing URLs
+                    clear_response = self.session.put(
+                        f"{self.base_url}/api/config",
+                        json={"lm_studio_urls": {}},
+                        headers={"Content-Type": "application/json"}
+                    )
+                    
+                    if clear_response.status_code == 200:
+                        clear_data = clear_response.json()
+                        if clear_data.get("lm_studio_urls") == {}:
+                            self.log_test(
+                                "LM Studio Config Clear", 
+                                True, 
+                                "Successfully cleared LM Studio URLs",
+                                clear_data
+                            )
+                        else:
+                            self.log_test(
+                                "LM Studio Config Clear", 
+                                False, 
+                                "Failed to clear LM Studio URLs",
+                                clear_data
+                            )
+                    
+                else:
+                    self.log_test(
+                        "LM Studio Config Update", 
+                        False, 
+                        "LM Studio URLs not updated correctly",
+                        {"expected": lm_studio_test_urls, "actual": data.get("lm_studio_urls")}
+                    )
+            else:
+                self.log_test(
+                    "LM Studio Config Update", 
+                    False, 
+                    f"Expected 200, got {response.status_code}",
+                    response.text
+                )
+                
+        except Exception as e:
+            self.log_test("LM Studio Config Update", False, f"Exception: {str(e)}")
+
     def cleanup_uploaded_documents(self):
         """Clean up documents uploaded during testing"""
         for doc_id in self.uploaded_doc_ids:
@@ -771,6 +932,13 @@ class LLMCouncilAPITester:
             
             # Custom model endpoint
             self.test_custom_model_endpoint()
+            
+            # LM Studio specific tests
+            print("\n🔗 LM Studio Feature Tests")
+            print("-" * 30)
+            self.test_lm_studio_test_endpoint()
+            self.test_lm_studio_get_urls_endpoint()
+            self.test_lm_studio_config_update()
             
             # OCR-specific tests
             print("\n🔍 OCR Feature Tests")

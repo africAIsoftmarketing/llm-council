@@ -7,6 +7,7 @@
     "x-ai/grok-2"
   ],
   "chairman_model": "google/gemini-2.0-flash-exp",
+  "lm_studio_urls": {},
   "backend_port": 8001,
   "frontend_port": 3000,
   "auto_credit_reminder": true,

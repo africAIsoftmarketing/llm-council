@@ -84,6 +84,36 @@ export const api = {
     return response.json();
   },
 
+  // ===== LM Studio APIs =====
+
+  /**
+   * Test LM Studio connection.
+   */
+  async testLmStudioConnection(url, modelName = null) {
+    const response = await fetch(`${API_BASE}/api/lm-studio/test`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url, model_name: modelName }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to test LM Studio connection');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get all configured LM Studio URLs.
+   */
+  async getLmStudioUrls() {
+    const response = await fetch(`${API_BASE}/api/lm-studio/urls`);
+    if (!response.ok) {
+      throw new Error('Failed to get LM Studio URLs');
+    }
+    return response.json();
+  },
+
   // ===== Document APIs =====
 
   /**
