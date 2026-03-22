@@ -16,11 +16,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── 2. Installer Python 3.10 ──────────────────────────────────────────
+      # ── 2. Installer Python 3.11 ──────────────────────────────────────────
+      # Plusieurs dépendances (networkx==3.6, torch==2.9.1, scipy==1.16.3)
+      # requièrent Python >=3.11
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.11"
 
       # ── 3. Installer toutes les dépendances backend ───────────────────────
       - name: Install backend dependencies
@@ -47,22 +49,21 @@ jobs:
         run: npm run build
 
       # ── 5. Créer le fichier d'entrée run.py ───────────────────────────────
-      # Nécessaire car backend/main.py utilise des imports relatifs (from . import ...)
+      # backend/main.py utilise des imports relatifs (from . import ...)
       # PyInstaller ne peut pas compiler un package directement
       - name: Create PyInstaller entry point (run.py)
         shell: python
         run: |
-          content = '''import sys
+          content = """import sys
           import os
 
-          # Permet à Python de trouver le package 'backend'
           sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
           import uvicorn
 
           if __name__ == "__main__":
               uvicorn.run("backend.main:app", host="0.0.0.0", port=8001)
-          '''
+          """
           with open("run.py", "w") as f:
               f.write(content)
 
