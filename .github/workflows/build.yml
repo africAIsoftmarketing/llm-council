@@ -162,7 +162,8 @@ jobs:
               0,0,0,0,0,0,0,0,16,0,0,0,0,0,0,0,
               255,255,255,0,240,0,0,0,0,0,0,0
             )
-            [System.IO.File]::WriteAllBytes((Resolve-Path "installer\assets") + "\icon.ico", $ico)
+            $assetsDir = (Resolve-Path "installer\assets").Path
+            [System.IO.File]::WriteAllBytes((Join-Path $assetsDir "icon.ico"), $ico)
           }
 
       # ── 6. Install Inno Setup ──────────────────────────────────────────────
