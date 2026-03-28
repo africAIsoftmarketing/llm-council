@@ -1,0 +1,222 @@
+name: Build LLM Council Executable
+
+on:
+  push:
+    branches: [master_innosetup_ocr]
+    tags:
+      - "v*"
+  pull_request:
+    branches: [master_innosetup_ocr]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Windows Installer
+    runs-on: windows-latest
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Node.js (frontend) ──────────────────────────────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      # ── 3. Build React frontend ────────────────────────────────────────────
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend (Vite)
+        working-directory: frontend
+        run: npm run build
+
+      # ── 4. Embedded Python setup ───────────────────────────────────────────
+      - name: Download Python 3.11 embeddable
+        shell: pwsh
+        run: |
+          $PythonDir = "installer\embedded-python"
+          New-Item -ItemType Directory -Path $PythonDir -Force | Out-Null
+
+          $PythonUrl  = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip"
+          $ZipPath    = "$PythonDir\python-embed.zip"
+          $GetPipUrl  = "https://bootstrap.pypa.io/get-pip.py"
+          $GetPipPath = "$PythonDir\get-pip.py"
+          $PythonExe  = "$PythonDir\python.exe"
+
+          Write-Host "Downloading Python embeddable..."
+          Invoke-WebRequest -Uri $PythonUrl -OutFile $ZipPath
+          Expand-Archive -Path $ZipPath -DestinationPath $PythonDir -Force
+          Remove-Item $ZipPath
+
+          # Enable site-packages so pip-installed packages are importable
+          $PthFile = Get-ChildItem $PythonDir -Filter "python3*._pth" | Select-Object -First 1
+          if ($PthFile) {
+            (Get-Content $PthFile.FullName) -replace '#import site','import site' |
+              Set-Content $PthFile.FullName
+          }
+
+          Write-Host "Installing pip..."
+          Invoke-WebRequest -Uri $GetPipUrl -OutFile $GetPipPath
+          & $PythonExe $GetPipPath --no-warn-script-location
+          Remove-Item $GetPipPath
+
+      - name: Install Python runtime dependencies
+        shell: pwsh
+        run: |
+          $PythonExe = "installer\embedded-python\python.exe"
+
+          & $PythonExe -m pip install --upgrade pip --no-warn-script-location
+
+          # Core runtime packages (matches build.ps1 + backend/requirements.txt subset)
+          $packages = @(
+            "fastapi",
+            "uvicorn[standard]",
+            "python-dotenv",
+            "httpx",
+            "pydantic",
+            "PyPDF2",
+            "python-docx",
+            "python-pptx",
+            "Pillow",
+            "python-multipart",
+            "aiofiles",
+            "easyocr",
+            "opencv-python-headless",
+            "pytesseract",
+            "pdf2image"
+          )
+
+          foreach ($pkg in $packages) {
+            Write-Host "Installing $pkg ..."
+            & $PythonExe -m pip install $pkg --no-warn-script-location
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to install package: $pkg"
+            }
+          }
+
+      - name: Prune unnecessary files from embedded Python
+        shell: pwsh
+        run: |
+          $SitePackages = "installer\embedded-python\Lib\site-packages"
+          if (-not (Test-Path $SitePackages)) { exit 0 }
+
+          # Remove test dirs that balloon size and cause long-path issues
+          $testDirs = @("tests","test","testing","__pycache__")
+          foreach ($name in $testDirs) {
+            Get-ChildItem -Path $SitePackages -Directory -Recurse -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -eq $name } |
+              ForEach-Object { Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+          }
+
+          # Remove compiled bytecode
+          Get-ChildItem -Path $SitePackages -Recurse -Include "*.pyc","*.pyo" -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+
+          # Remove known heavy / unnecessary subtrees
+          $removals = @(
+            "torch\include",
+            "torch\_inductor",
+            "torch\share",
+            "caffe2"
+          )
+          foreach ($rel in $removals) {
+            $full = Join-Path $SitePackages $rel
+            if (Test-Path $full) {
+              Remove-Item $full -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+          Write-Host "Prune complete."
+
+      # ── 5. Prepare assets & docs ───────────────────────────────────────────
+      - name: Prepare installer assets and docs
+        shell: pwsh
+        run: |
+          # Ensure required directories exist so Inno Setup doesn't fail
+          New-Item -ItemType Directory -Force -Path "installer\assets"  | Out-Null
+          New-Item -ItemType Directory -Force -Path "installer\docs"    | Out-Null
+          New-Item -ItemType Directory -Force -Path "installer\output"  | Out-Null
+
+          # Create a placeholder README_INSTALLER.txt if missing
+          $readmePath = "installer\docs\README_INSTALLER.txt"
+          if (-not (Test-Path $readmePath)) {
+            "LLM Council - Windows Installer`nSee https://github.com/africAIsoftmarketing/llm-council" |
+              Set-Content $readmePath
+          }
+
+          # Create a placeholder icon.ico if missing (a 1×1 pixel ICO so ISCC doesn't error)
+          $iconPath = "installer\assets\icon.ico"
+          if (-not (Test-Path $iconPath)) {
+            Write-Host "icon.ico not found – generating placeholder"
+            # Minimal valid ICO file (1×1 white pixel)
+            [byte[]]$ico = (
+              0,0,1,0,1,0,1,1,0,0,1,0,4,0,
+              40,0,0,0,22,0,0,0,40,0,0,0,1,0,0,0,
+              2,0,0,0,1,0,4,0,0,0,0,0,8,0,0,0,
+              0,0,0,0,0,0,0,0,16,0,0,0,0,0,0,0,
+              255,255,255,0,240,0,0,0,0,0,0,0
+            )
+            [System.IO.File]::WriteAllBytes((Resolve-Path "installer\assets") + "\icon.ico", $ico)
+          }
+
+      # ── 6. Install Inno Setup ──────────────────────────────────────────────
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: |
+          $url      = "https://files.jrsoftware.org/is/6/innosetup-6.3.3.exe"
+          $installer = "$env:TEMP\innosetup.exe"
+          Write-Host "Downloading Inno Setup..."
+          Invoke-WebRequest -Uri $url -OutFile $installer
+          Write-Host "Installing Inno Setup (silent)..."
+          Start-Process -FilePath $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
+          Write-Host "Inno Setup installed."
+
+      # ── 7. Compile installer ───────────────────────────────────────────────
+      - name: Compile installer with Inno Setup
+        shell: pwsh
+        run: |
+          $ISCC   = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          $IssFile = "installer\inno-setup\llm-council-installer.iss"
+
+          Write-Host "Running ISCC..."
+          & $ISCC $IssFile
+          if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup compilation failed (exit code $LASTEXITCODE)"
+          }
+          Write-Host "Compilation succeeded."
+
+      # ── 8. Verify output ───────────────────────────────────────────────────
+      - name: Verify installer output
+        shell: pwsh
+        run: |
+          $output = Get-ChildItem "installer\output" -Filter "*.exe" -ErrorAction SilentlyContinue
+          if ($output.Count -eq 0) {
+            throw "No .exe found in installer\output – build may have failed silently."
+          }
+          foreach ($f in $output) {
+            $sizeMB = [math]::Round($f.Length / 1MB, 1)
+            Write-Host "Found installer: $($f.Name)  ($sizeMB MB)"
+          }
+
+      # ── 9. Upload artifact ─────────────────────────────────────────────────
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LLMCouncil-Windows-Installer
+          path: installer/output/*.exe
+          retention-days: 30
+          if-no-files-found: error
+
+      # ── 10. Attach to GitHub Release (tag builds only) ────────────────────
+      - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/output/*.exe
+          generate_release_notes: true
