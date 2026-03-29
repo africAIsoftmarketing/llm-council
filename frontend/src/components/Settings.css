@@ -627,3 +627,436 @@
   color: #666;
   font-family: monospace;
 }
+
+/* ═══════════════════════════════════════════════════
+   COUNCIL MODELS PICKER — new two-column UI
+═══════════════════════════════════════════════════ */
+
+/* Section override — wider for the two-column layout */
+.models-section {
+  max-width: 1100px;
+}
+
+/* Header row with title + save button inline */
+.models-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+/* Two-column picker layout */
+.picker-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 20px;
+  align-items: start;
+  margin-bottom: 28px;
+}
+
+/* ── Left: model browser ── */
+.picker-left {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+
+/* Search bar */
+.picker-search-row {
+  padding: 12px 12px 0;
+  background: #fafafa;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.picker-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.picker-search-icon {
+  position: absolute;
+  left: 12px;
+  font-size: 18px;
+  color: #aaa;
+  pointer-events: none;
+  line-height: 1;
+}
+
+.picker-search {
+  width: 100%;
+  padding: 9px 36px 9px 36px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+
+.picker-search:focus {
+  outline: none;
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+.picker-search-clear {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #aaa;
+  font-size: 13px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.picker-search-clear:hover {
+  background: #f0f0f0;
+  color: #666;
+}
+
+/* Provider filter tabs */
+.picker-provider-tabs {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: #fafafa;
+  border-bottom: 1px solid #e8e8e8;
+  padding: 0 8px;
+}
+
+.picker-provider-tabs::-webkit-scrollbar { display: none; }
+
+.picker-provider-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 14px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+
+.picker-provider-tab:hover { color: #444; }
+
+.picker-provider-tab.active {
+  color: #4a90e2;
+  border-bottom-color: #4a90e2;
+}
+
+.ptab-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* Scrollable model list */
+.picker-model-list {
+  max-height: 440px;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #ddd transparent;
+}
+
+.picker-empty {
+  padding: 32px;
+  text-align: center;
+  color: #aaa;
+  font-size: 14px;
+}
+
+/* Individual model card in browser */
+.picker-model-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1.5px solid #ebebeb;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+  user-select: none;
+}
+
+.picker-model-card:hover {
+  border-color: #c5d8f5;
+  background: #f8faff;
+  transform: translateX(2px);
+}
+
+.picker-model-card.selected {
+  /* border & bg set via inline style per provider colour */
+}
+
+.pmc-icon {
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.pmc-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pmc-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #222;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pmc-id {
+  font-size: 11px;
+  color: #aaa;
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pmc-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid #ddd;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #fff;
+  font-weight: 700;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.pmc-check.checked {
+  border-color: transparent;
+}
+
+/* ── Right: your council ── */
+.picker-right {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+  min-height: 300px;
+}
+
+.council-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.council-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #333;
+  letter-spacing: 0.03em;
+}
+
+.council-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a90e2;
+  background: #eef4ff;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+/* Empty state */
+.council-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+  color: #bbb;
+  text-align: center;
+}
+
+.council-empty-icon {
+  font-size: 36px;
+  opacity: 0.4;
+}
+
+.council-empty p {
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 200px;
+}
+
+/* Drag list */
+.council-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px 6px;
+  min-height: 60px;
+}
+
+/* Individual council item */
+.council-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 10px 6px;
+  border: 1.5px solid #e8e8e8;
+  border-radius: 8px;
+  background: #fff;
+  cursor: grab;
+  transition: box-shadow 0.15s, opacity 0.15s, border-color 0.15s;
+  user-select: none;
+}
+
+.council-item:hover {
+  border-color: #c5d8f5;
+  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.12);
+}
+
+.council-item.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+.council-item.drag-over {
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.25);
+}
+
+.ci-drag {
+  color: #ccc;
+  font-size: 16px;
+  cursor: grab;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.ci-rank {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ci-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.ci-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #222;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ci-provider {
+  font-size: 11px;
+  color: #aaa;
+}
+
+.ci-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #ccc;
+  font-size: 12px;
+  padding: 3px 5px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+
+.ci-remove:hover {
+  color: #e74c3c;
+  background: #fff5f5;
+}
+
+/* Chairman quick-set inside council panel */
+.council-chairman-pick {
+  padding: 12px 12px 14px;
+  border-top: 1px solid #f0f0f0;
+  margin-top: 4px;
+}
+
+.cc-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+.cc-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 7px;
+  font-size: 13px;
+  background: #fafafa;
+  color: #333;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.cc-select:focus {
+  outline: none;
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .picker-layout {
+    grid-template-columns: 1fr;
+  }
+  .picker-right {
+    min-height: 200px;
+  }
+}
