@@ -292,7 +292,7 @@ class LLMCouncilLauncher:
     def open_dashboard(self):
         """Open the web dashboard in the default browser."""
         port = self.config.get("backend_port", 8001)
-        webbrowser.open(f"http://localhost:3000")
+        webbrowser.open(f"http://localhost:{port}")
     
     def open_settings(self):
         """Open settings dialog."""
