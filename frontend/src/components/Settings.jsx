@@ -117,12 +117,16 @@ export default function Settings({ onConfigUpdate, showToast }) {
     
     setIsSaving(true);
     try {
-      await api.updateConfig({
+      const chairman = chairmanModel || selectedModels[0];
+      const updated = await api.updateConfig({
         council_models: selectedModels,
-        chairman_model: chairmanModel || selectedModels[0]
+        chairman_model: chairman
       });
+      // Sync state directly from the response — don't rely on a reload race
+      setSelectedModels(updated.council_models || selectedModels);
+      setChairmanModel(updated.chairman_model || chairman);
+      setConfig(updated);
       showToast('Model configuration saved!', 'success');
-      await loadConfiguration();
       onConfigUpdate();
     } catch (error) {
       showToast('Failed to save model configuration', 'error');
@@ -217,9 +221,11 @@ export default function Settings({ onConfigUpdate, showToast }) {
       const cleanUrls = Object.fromEntries(
         Object.entries(lmStudioUrls).filter(([, url]) => url && url.trim())
       );
-      await api.updateConfig({ lm_studio_urls: cleanUrls });
+      const updated = await api.updateConfig({ lm_studio_urls: cleanUrls });
+      // Sync state directly from the response
+      setLmStudioUrls(updated.lm_studio_urls || cleanUrls);
+      setConfig(updated);
       showToast('LM Studio URLs saved!', 'success');
-      await loadConfiguration();
       onConfigUpdate();
     } catch (error) {
       showToast('Failed to save LM Studio URLs', 'error');
