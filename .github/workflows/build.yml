@@ -178,7 +178,25 @@ jobs:
           Start-Process -FilePath $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
           Write-Host "Inno Setup installed."
 
-      # ── 7. Compile installer ───────────────────────────────────────────────
+      # ── 7. Patch ISS: disable disk spanning (produces a single self-contained .exe) ──
+      - name: Patch ISS – disable disk spanning
+        shell: pwsh
+        run: |
+          $IssFile = "installer\inno-setup\llm-council-installer.iss"
+          $content = Get-Content $IssFile -Raw
+
+          # Remove the three disk-spanning directives
+          $content = $content -replace '(?m)^\s*DiskSpanning\s*=.*(\r?\n)', ''
+          $content = $content -replace '(?m)^\s*SlicesPerDisk\s*=.*(\r?\n)', ''
+          $content = $content -replace '(?m)^\s*DiskSliceSize\s*=.*(\r?\n)', ''
+
+          # Also remove the comment line above them if still present
+          $content = $content -replace '(?m)^\s*;\s*Disk spanning.*(\r?\n)', ''
+
+          Set-Content $IssFile $content -NoNewline
+          Write-Host "Disk spanning directives removed from ISS."
+
+      # ── 8. Compile installer ───────────────────────────────────────────────
       - name: Compile installer with Inno Setup
         shell: pwsh
         run: |
@@ -198,7 +216,7 @@ jobs:
           }
           Write-Host "Compilation succeeded."
 
-      # ── 8. Verify output ───────────────────────────────────────────────────
+      # ── 9. Verify output ───────────────────────────────────────────────────
       - name: Verify installer output
         shell: pwsh
         run: |
@@ -211,7 +229,7 @@ jobs:
             Write-Host "Found installer: $($f.Name)  ($sizeMB MB)"
           }
 
-      # ── 9. Upload artifact ─────────────────────────────────────────────────
+      # ── 10. Upload artifact ─────────────────────────────────────────────────
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
@@ -220,7 +238,7 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      # ── 10. Attach to GitHub Release (tag builds only) ────────────────────
+      # ── 11. Attach to GitHub Release (tag builds only) ────────────────────
       - name: Upload to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
