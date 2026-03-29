@@ -31,12 +31,11 @@ timeout /t 3 /nobreak > nul
 
 REM Open browser
 echo Opening LLM Council in your browser...
-start http://localhost:3000
+start http://localhost:8001
 
 echo.
 echo LLM Council is running!
-echo Backend: http://localhost:8001
-echo Frontend: http://localhost:3000
+echo Dashboard: http://localhost:8001
 echo.
 echo Press any key to stop the server...
 pause > nul
