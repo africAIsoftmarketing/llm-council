@@ -170,7 +170,7 @@ jobs:
       - name: Install Inno Setup 6
         shell: pwsh
         run: |
-          $url      = "https://files.jrsoftware.org/is/6/innosetup-6.3.3.exe"
+          $url      = "https://github.com/jrsoftware/issrc/releases/download/is-6_7_1/innosetup-6.7.1.exe"
           $installer = "$env:TEMP\innosetup.exe"
           Write-Host "Downloading Inno Setup..."
           Invoke-WebRequest -Uri $url -OutFile $installer
@@ -183,6 +183,12 @@ jobs:
         shell: pwsh
         run: |
           $ISCC   = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          # Fallback: search if the path differs across minor versions
+          if (-not (Test-Path $ISCC)) {
+            $ISCC = Get-ChildItem "C:\Program Files (x86)\Inno Setup*" -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue |
+                    Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $ISCC) { throw "ISCC.exe not found – Inno Setup may not have installed correctly." }
           $IssFile = "installer\inno-setup\llm-council-installer.iss"
 
           Write-Host "Running ISCC..."
