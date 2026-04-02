@@ -18,18 +18,26 @@ def get_model_source(model: str, advanced_config: Optional[Dict] = None) -> tupl
     Determine which source to use for a model based on advanced config.
     
     Returns:
-        Tuple of (source_type, config_data) where source_type is 'openrouter' or 'lmstudio'
+        Tuple of (source_type, config_data, lmstudio_model_name) 
+        where source_type is 'openrouter' or 'lmstudio'
+        and lmstudio_model_name is the specific model to use in LM Studio (or None)
     """
     if not advanced_config:
-        return ('openrouter', None)
+        return ('openrouter', None, None)
     
     mode = advanced_config.get('mode', 'openrouter')
     
     if mode == 'openrouter':
-        return ('openrouter', advanced_config.get('openrouter', {}))
+        return ('openrouter', advanced_config.get('openrouter', {}), None)
     
     elif mode == 'lmstudio':
-        return ('lmstudio', advanced_config.get('lmstudio', {}))
+        lmstudio_config = advanced_config.get('lmstudio', {})
+        # Check if there's a specific model mapping for this council model
+        model_mapping = lmstudio_config.get('modelMapping', {})
+        specific_model = model_mapping.get(model, '')
+        if not specific_model:
+            specific_model = lmstudio_config.get('defaultModel', 'default')
+        return ('lmstudio', lmstudio_config, specific_model)
     
     elif mode == 'hybrid':
         hybrid_config = advanced_config.get('hybrid', {})
@@ -37,11 +45,17 @@ def get_model_source(model: str, advanced_config: Optional[Dict] = None) -> tupl
         model_source = council_sources.get(model, 'openrouter')
         
         if model_source == 'lmstudio':
-            return ('lmstudio', advanced_config.get('lmstudio', {}))
+            lmstudio_config = advanced_config.get('lmstudio', {})
+            # Get specific LM Studio model name for this council model in hybrid mode
+            lmstudio_names = hybrid_config.get('councilModelLmStudioNames', {})
+            specific_model = lmstudio_names.get(model, '')
+            if not specific_model:
+                specific_model = lmstudio_config.get('defaultModel', 'default')
+            return ('lmstudio', lmstudio_config, specific_model)
         else:
-            return ('openrouter', advanced_config.get('openrouter', {}))
+            return ('openrouter', advanced_config.get('openrouter', {}), None)
     
-    return ('openrouter', None)
+    return ('openrouter', None, None)
 
 
 def get_chairman_source(advanced_config: Optional[Dict] = None) -> tuple:
@@ -49,29 +63,41 @@ def get_chairman_source(advanced_config: Optional[Dict] = None) -> tuple:
     Determine which source to use for the Chairman model based on advanced config.
     
     Returns:
-        Tuple of (source_type, config_data) where source_type is 'openrouter' or 'lmstudio'
+        Tuple of (source_type, config_data, lmstudio_model_name)
+        where source_type is 'openrouter' or 'lmstudio'
+        and lmstudio_model_name is the specific model to use in LM Studio (or None)
     """
     if not advanced_config:
-        return ('openrouter', None)
+        return ('openrouter', None, None)
     
     mode = advanced_config.get('mode', 'openrouter')
     
     if mode == 'openrouter':
-        return ('openrouter', advanced_config.get('openrouter', {}))
+        return ('openrouter', advanced_config.get('openrouter', {}), None)
     
     elif mode == 'lmstudio':
-        return ('lmstudio', advanced_config.get('lmstudio', {}))
+        lmstudio_config = advanced_config.get('lmstudio', {})
+        # Check if there's a specific chairman model
+        chairman_model = lmstudio_config.get('chairmanModel', '')
+        if not chairman_model:
+            chairman_model = lmstudio_config.get('defaultModel', 'default')
+        return ('lmstudio', lmstudio_config, chairman_model)
     
     elif mode == 'hybrid':
         hybrid_config = advanced_config.get('hybrid', {})
         chairman_source = hybrid_config.get('chairmanSource', 'openrouter')
         
         if chairman_source == 'lmstudio':
-            return ('lmstudio', advanced_config.get('lmstudio', {}))
+            lmstudio_config = advanced_config.get('lmstudio', {})
+            # Get specific LM Studio model name for chairman in hybrid mode
+            chairman_lmstudio_model = hybrid_config.get('chairmanLmStudioModel', '')
+            if not chairman_lmstudio_model:
+                chairman_lmstudio_model = lmstudio_config.get('defaultModel', 'default')
+            return ('lmstudio', lmstudio_config, chairman_lmstudio_model)
         else:
-            return ('openrouter', advanced_config.get('openrouter', {}))
+            return ('openrouter', advanced_config.get('openrouter', {}), None)
     
-    return ('openrouter', None)
+    return ('openrouter', None, None)
 
 
 async def query_lm_studio(
@@ -158,17 +184,18 @@ async def query_model(
     """
     # Determine which source to use based on advanced config
     if is_chairman:
-        source_type, source_config = get_chairman_source(advanced_config)
+        source_type, source_config, lmstudio_model_name = get_chairman_source(advanced_config)
     else:
-        source_type, source_config = get_model_source(model, advanced_config)
+        source_type, source_config, lmstudio_model_name = get_model_source(model, advanced_config)
     
     # Use LM Studio if configured
     if source_type == 'lmstudio':
         lmstudio_config = source_config or {}
         base_url = lmstudio_config.get('baseUrl', LMSTUDIO_BASE_URL)
-        lmstudio_model = lmstudio_config.get('model', 'default')
-        print(f"Using LM Studio at {base_url} for model {model} (LM Studio model: {lmstudio_model})")
-        return await query_lm_studio(base_url, lmstudio_model, messages, timeout)
+        # Use the specific model name if provided, otherwise fall back to default
+        actual_model = lmstudio_model_name or lmstudio_config.get('defaultModel', 'default')
+        print(f"Using LM Studio at {base_url} for council model '{model}' -> LM Studio model: '{actual_model}'")
+        return await query_lm_studio(base_url, actual_model, messages, timeout)
     
     # Check if this model has an LM Studio URL configured in settings (legacy support)
     if not advanced_config:

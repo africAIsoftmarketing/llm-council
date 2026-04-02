@@ -11,11 +11,16 @@ const DEFAULT_SETTINGS = {
   },
   lmstudio: {
     baseUrl: 'http://localhost:1234/v1',
-    model: 'mistral-7b-instruct',
+    defaultModel: 'default',
+    multiModel: true, // LM Studio developer mode supports multiple models
+    modelMapping: {}, // Maps council model IDs to LM Studio model names
+    chairmanModel: '', // Specific model for chairman (empty = use default)
   },
   hybrid: {
     councilModelSources: {},
+    councilModelLmStudioNames: {}, // LM Studio model name for each council model in hybrid mode
     chairmanSource: 'openrouter',
+    chairmanLmStudioModel: '', // LM Studio model name for chairman in hybrid mode
   },
 };
 
@@ -48,25 +53,43 @@ export default function AdvancedPanel({
     onSettingsChange?.(settings);
   }, [settings, onSettingsChange]);
 
-  // Initialize hybrid council sources when council models change
+  // Initialize hybrid council sources and lmstudio model mappings when council models change
   useEffect(() => {
     if (councilModels.length > 0) {
       setSettings(prev => {
         const newSources = { ...prev.hybrid.councilModelSources };
+        const newLmStudioNames = { ...prev.hybrid.councilModelLmStudioNames };
+        const newModelMapping = { ...prev.lmstudio.modelMapping };
+        
         councilModels.forEach(modelId => {
           if (!newSources[modelId]) {
             newSources[modelId] = 'openrouter';
           }
+          if (!newLmStudioNames[modelId]) {
+            newLmStudioNames[modelId] = '';
+          }
+          if (!newModelMapping[modelId]) {
+            newModelMapping[modelId] = '';
+          }
         });
+        
         // Remove models no longer in council
         Object.keys(newSources).forEach(modelId => {
           if (!councilModels.includes(modelId)) {
             delete newSources[modelId];
+            delete newLmStudioNames[modelId];
+            delete newModelMapping[modelId];
           }
         });
+        
         return {
           ...prev,
-          hybrid: { ...prev.hybrid, councilModelSources: newSources },
+          lmstudio: { ...prev.lmstudio, modelMapping: newModelMapping },
+          hybrid: { 
+            ...prev.hybrid, 
+            councilModelSources: newSources,
+            councilModelLmStudioNames: newLmStudioNames,
+          },
         };
       });
     }
@@ -92,6 +115,26 @@ export default function AdvancedPanel({
     setConnectionStatus(null);
   };
 
+  const handleLmStudioModelMapping = (councilModelId, lmStudioModelName) => {
+    setSettings(prev => ({
+      ...prev,
+      lmstudio: {
+        ...prev.lmstudio,
+        modelMapping: {
+          ...prev.lmstudio.modelMapping,
+          [councilModelId]: lmStudioModelName,
+        },
+      },
+    }));
+  };
+
+  const handleLmStudioChairmanModel = (modelName) => {
+    setSettings(prev => ({
+      ...prev,
+      lmstudio: { ...prev.lmstudio, chairmanModel: modelName },
+    }));
+  };
+
   const handleHybridModelSourceChange = (modelId, source) => {
     setSettings(prev => ({
       ...prev,
@@ -105,10 +148,30 @@ export default function AdvancedPanel({
     }));
   };
 
+  const handleHybridModelLmStudioName = (modelId, lmStudioName) => {
+    setSettings(prev => ({
+      ...prev,
+      hybrid: {
+        ...prev.hybrid,
+        councilModelLmStudioNames: {
+          ...prev.hybrid.councilModelLmStudioNames,
+          [modelId]: lmStudioName,
+        },
+      },
+    }));
+  };
+
   const handleHybridChairmanSourceChange = (source) => {
     setSettings(prev => ({
       ...prev,
       hybrid: { ...prev.hybrid, chairmanSource: source },
+    }));
+  };
+
+  const handleHybridChairmanLmStudioModel = (modelName) => {
+    setSettings(prev => ({
+      ...prev,
+      hybrid: { ...prev.hybrid, chairmanLmStudioModel: modelName },
     }));
   };
 
@@ -243,17 +306,17 @@ export default function AdvancedPanel({
               </div>
 
               <div className="form-group">
-                <label htmlFor="lmstudio-model">Model Name</label>
+                <label htmlFor="lmstudio-default-model">Default Model</label>
                 <input
                   type="text"
-                  id="lmstudio-model"
-                  value={settings.lmstudio.model}
-                  onChange={e => handleLmStudioChange('model', e.target.value)}
-                  placeholder="mistral-7b-instruct"
-                  data-testid="input-lmstudio-model"
+                  id="lmstudio-default-model"
+                  value={settings.lmstudio.defaultModel}
+                  onChange={e => handleLmStudioChange('defaultModel', e.target.value)}
+                  placeholder="default"
+                  data-testid="input-lmstudio-default-model"
                 />
                 <span className="form-hint">
-                  The model name loaded in LM Studio.
+                  Default model when no specific model is assigned. Use "default" for auto-selection.
                 </span>
               </div>
 
@@ -270,16 +333,65 @@ export default function AdvancedPanel({
               )}
 
               {settings.mode === 'lmstudio' && (
-                <div className="info-box">
+                <div className="info-box info-box-highlight">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="16" x2="12" y2="12"></line>
-                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                   </svg>
                   <p>
-                    In LM Studio mode, all council members and the Chairman will use the same local model.
-                    LM Studio can only load one model at a time.
+                    <strong>Multi-model mode:</strong> LM Studio developer mode can load multiple models simultaneously.
+                    Assign different models to each council member below.
                   </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* LM Studio Multi-Model Assignments (only in lmstudio mode) */}
+          {settings.mode === 'lmstudio' && councilModels.length > 0 && (
+            <div className="config-section">
+              <h3>Council Model Assignments</h3>
+              <p className="config-description">
+                Assign a specific LM Studio model to each council member. Leave empty to use the default model.
+              </p>
+              <div className="lmstudio-model-assignments">
+                {councilModels.map(modelId => (
+                  <div key={modelId} className="lmstudio-model-row">
+                    <div className="model-info">
+                      <span className="model-name" title={modelId}>
+                        {getModelDisplayName(modelId)}
+                      </span>
+                      <span className="model-id-hint">{modelId}</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={settings.lmstudio.modelMapping[modelId] || ''}
+                      onChange={e => handleLmStudioModelMapping(modelId, e.target.value)}
+                      placeholder="LM Studio model name"
+                      className="lmstudio-model-input"
+                      data-testid={`lmstudio-model-${modelId}`}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {chairmanModel && (
+                <div className="chairman-lmstudio-assignment">
+                  <h4>Chairman Model</h4>
+                  <div className="lmstudio-model-row">
+                    <div className="model-info">
+                      <span className="model-name" title={chairmanModel}>
+                        {getModelDisplayName(chairmanModel)} (Chairman)
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      value={settings.lmstudio.chairmanModel || ''}
+                      onChange={e => handleLmStudioChairmanModel(e.target.value)}
+                      placeholder="LM Studio model name"
+                      className="lmstudio-model-input"
+                      data-testid="lmstudio-chairman-model"
+                    />
+                  </div>
                 </div>
               )}
             </div>
@@ -290,30 +402,43 @@ export default function AdvancedPanel({
             <div className="config-section">
               <h3>Hybrid Model Assignments</h3>
               <p className="config-description">
-                Assign each council model to OpenRouter or LM Studio.
+                Assign each council model to OpenRouter or LM Studio. For LM Studio models, specify the model name.
               </p>
               <div className="hybrid-assignments">
                 {councilModels.map(modelId => (
-                  <div key={modelId} className="hybrid-model-row">
-                    <span className="model-name" title={modelId}>
-                      {getModelDisplayName(modelId)}
-                    </span>
-                    <div className="source-toggle">
-                      <button
-                        className={`toggle-btn ${settings.hybrid.councilModelSources[modelId] === 'openrouter' ? 'active' : ''}`}
-                        onClick={() => handleHybridModelSourceChange(modelId, 'openrouter')}
-                        data-testid={`hybrid-${modelId}-openrouter`}
-                      >
-                        OpenRouter
-                      </button>
-                      <button
-                        className={`toggle-btn ${settings.hybrid.councilModelSources[modelId] === 'lmstudio' ? 'active' : ''}`}
-                        onClick={() => handleHybridModelSourceChange(modelId, 'lmstudio')}
-                        data-testid={`hybrid-${modelId}-lmstudio`}
-                      >
-                        LM Studio
-                      </button>
+                  <div key={modelId} className="hybrid-model-row-extended">
+                    <div className="hybrid-model-header">
+                      <span className="model-name" title={modelId}>
+                        {getModelDisplayName(modelId)}
+                      </span>
+                      <div className="source-toggle">
+                        <button
+                          className={`toggle-btn ${settings.hybrid.councilModelSources[modelId] === 'openrouter' ? 'active' : ''}`}
+                          onClick={() => handleHybridModelSourceChange(modelId, 'openrouter')}
+                          data-testid={`hybrid-${modelId}-openrouter`}
+                        >
+                          OpenRouter
+                        </button>
+                        <button
+                          className={`toggle-btn ${settings.hybrid.councilModelSources[modelId] === 'lmstudio' ? 'active' : ''}`}
+                          onClick={() => handleHybridModelSourceChange(modelId, 'lmstudio')}
+                          data-testid={`hybrid-${modelId}-lmstudio`}
+                        >
+                          LM Studio
+                        </button>
+                      </div>
                     </div>
+                    {settings.hybrid.councilModelSources[modelId] === 'lmstudio' && (
+                      <div className="hybrid-lmstudio-model-input">
+                        <input
+                          type="text"
+                          value={settings.hybrid.councilModelLmStudioNames[modelId] || ''}
+                          onChange={e => handleHybridModelLmStudioName(modelId, e.target.value)}
+                          placeholder="LM Studio model name (e.g., mistral-7b)"
+                          data-testid={`hybrid-lmstudio-name-${modelId}`}
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -321,26 +446,39 @@ export default function AdvancedPanel({
               {chairmanModel && (
                 <div className="chairman-assignment">
                   <h4>Chairman Source</h4>
-                  <div className="hybrid-model-row">
-                    <span className="model-name" title={chairmanModel}>
-                      {getModelDisplayName(chairmanModel)} (Chairman)
-                    </span>
-                    <div className="source-toggle">
-                      <button
-                        className={`toggle-btn ${settings.hybrid.chairmanSource === 'openrouter' ? 'active' : ''}`}
-                        onClick={() => handleHybridChairmanSourceChange('openrouter')}
-                        data-testid="hybrid-chairman-openrouter"
-                      >
-                        OpenRouter
-                      </button>
-                      <button
-                        className={`toggle-btn ${settings.hybrid.chairmanSource === 'lmstudio' ? 'active' : ''}`}
-                        onClick={() => handleHybridChairmanSourceChange('lmstudio')}
-                        data-testid="hybrid-chairman-lmstudio"
-                      >
-                        LM Studio
-                      </button>
+                  <div className="hybrid-model-row-extended">
+                    <div className="hybrid-model-header">
+                      <span className="model-name" title={chairmanModel}>
+                        {getModelDisplayName(chairmanModel)} (Chairman)
+                      </span>
+                      <div className="source-toggle">
+                        <button
+                          className={`toggle-btn ${settings.hybrid.chairmanSource === 'openrouter' ? 'active' : ''}`}
+                          onClick={() => handleHybridChairmanSourceChange('openrouter')}
+                          data-testid="hybrid-chairman-openrouter"
+                        >
+                          OpenRouter
+                        </button>
+                        <button
+                          className={`toggle-btn ${settings.hybrid.chairmanSource === 'lmstudio' ? 'active' : ''}`}
+                          onClick={() => handleHybridChairmanSourceChange('lmstudio')}
+                          data-testid="hybrid-chairman-lmstudio"
+                        >
+                          LM Studio
+                        </button>
+                      </div>
                     </div>
+                    {settings.hybrid.chairmanSource === 'lmstudio' && (
+                      <div className="hybrid-lmstudio-model-input">
+                        <input
+                          type="text"
+                          value={settings.hybrid.chairmanLmStudioModel || ''}
+                          onChange={e => handleHybridChairmanLmStudioModel(e.target.value)}
+                          placeholder="LM Studio model name for Chairman"
+                          data-testid="hybrid-chairman-lmstudio-name"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

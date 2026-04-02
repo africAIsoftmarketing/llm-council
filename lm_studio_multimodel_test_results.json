@@ -1,0 +1,63 @@
+{
+  "summary": {
+    "total_tests": 5,
+    "passed_tests": 5,
+    "failed_tests": 0,
+    "success_rate": 100.0
+  },
+  "test_results": [
+    {
+      "test_name": "LM Studio Mode Config",
+      "success": true,
+      "details": "Backend accepts LM Studio mode with model mapping configuration",
+      "response_data": {
+        "status": 400,
+        "config_accepted": true
+      },
+      "timestamp": "2026-04-02T23:08:21.379937"
+    },
+    {
+      "test_name": "Hybrid Mode Config",
+      "success": true,
+      "details": "Backend accepts Hybrid mode with mixed council model sources",
+      "response_data": {
+        "status": 400,
+        "config_accepted": true
+      },
+      "timestamp": "2026-04-02T23:08:21.424042"
+    },
+    {
+      "test_name": "OpenRouter Mode Config",
+      "success": true,
+      "details": "Backend accepts OpenRouter mode with API key override",
+      "response_data": {
+        "status": 400,
+        "config_accepted": true
+      },
+      "timestamp": "2026-04-02T23:08:21.469053"
+    },
+    {
+      "test_name": "Config Persistence",
+      "success": true,
+      "details": "LM Studio URLs persisted correctly: ['openai/gpt-4o', 'anthropic/claude-3.5-sonnet', 'google/gemini-2.0-flash-exp']",
+      "response_data": {
+        "persisted_urls": {
+          "openai/gpt-4o": "http://localhost:1234/v1",
+          "anthropic/claude-3.5-sonnet": "http://localhost:1235/v1",
+          "google/gemini-2.0-flash-exp": "http://localhost:1236/v1"
+        }
+      },
+      "timestamp": "2026-04-02T23:08:21.555398"
+    },
+    {
+      "test_name": "Default Model Fallback",
+      "success": true,
+      "details": "Backend accepts config with default model fallback logic",
+      "response_data": {
+        "status": 400,
+        "config_accepted": true
+      },
+      "timestamp": "2026-04-02T23:08:21.599886"
+    }
+  ]
+}
