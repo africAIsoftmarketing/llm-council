@@ -1,106 +1,74 @@
 # LLM Council - Product Requirements Document
 
-## Overview
-LLM Council is a 3-stage deliberation system where multiple LLMs collaboratively answer questions through individual responses, peer review, and chairman synthesis.
-
 ## Original Problem Statement
-Add the capability to query the LM Studio CORS server URL for each LLM to run the LLM council. Each model should have its own configurable LM Studio server URL (OpenAI API compatible).
+Ajouter un onglet "Advanced" dans l'interface frontend de LLM Council pour permettre à l'utilisateur de configurer la source des appels LLM avec trois options : OpenRouter (cloud), LM Studio (local), et Hybrid (mix cloud & local).
 
 ## Architecture
 
-### Backend (FastAPI)
-- **config_manager.py**: Configuration management with LM Studio URL support
-- **openrouter.py**: LLM client supporting both OpenRouter and LM Studio queries
-- **council.py**: 3-stage council orchestration
-- **main.py**: API endpoints including LM Studio test/config endpoints
+### Frontend (React/Vite) - port 5173
+- `App.jsx` : État global, gestion des conversations, advancedSettings
+- `api.js` : Client HTTP avec support des paramètres advanced
+- `ChatInterface.jsx` : Interface principale avec les 3 stages
+- `AdvancedPanel.jsx` : Panneau de configuration Advanced
+- `Sidebar.jsx` : Navigation avec badge du mode actif
 
-### Frontend (React + Vite)
-- **Settings.jsx**: Settings page with LM Studio configuration tab
-- **api.js**: API client with LM Studio endpoints
+### Backend (Python/FastAPI) - port 8001
+- `main.py` : Routes FastAPI avec SSE streaming, accepte advanced config
+- `openrouter.py` : Client intelligent avec routing OpenRouter/LM Studio
+- `council.py` : Orchestration des 3 stages avec propagation advanced config
+- `config.py` : Configuration COUNCIL_MODELS, CHAIRMAN_MODEL, LMSTUDIO_BASE_URL
 
-### Installer (Inno Setup)
-- Windows installer with embedded Python
-- default_config.json with lm_studio_urls field
-- Version bumped to 2.1.0
+## User Personas
+- Développeur AI cherchant à comparer plusieurs LLMs
+- Utilisateur souhaitant utiliser des modèles locaux (LM Studio) pour la confidentialité
+- Utilisateur avancé voulant un mix cloud/local pour optimiser coûts et latence
 
 ## Core Requirements (Static)
+1. Interface 3-stages : Réponses parallèles → Ranking par pairs → Synthèse Chairman
+2. Support OpenRouter API pour les modèles cloud
+3. Support LM Studio pour les modèles locaux
+4. Mode Hybrid pour mixer cloud et local
+5. Persistance des paramètres dans localStorage
 
-### LM Studio Integration
-1. Each council model can have an optional LM Studio server URL
-2. When configured, queries go to local LM Studio instead of OpenRouter
-3. OpenAI-compatible API format for LM Studio communication
-4. Connection testing endpoint to verify LM Studio server accessibility
+## What's Been Implemented
 
-### Configuration
-- lm_studio_urls: Dict[model_id, base_url] mapping
-- URLs stored in config.json
-- API endpoints: POST /api/lm-studio/test, GET /api/lm-studio/urls
+### 2026-04-02 - Onglet Advanced
+- **AdvancedPanel.jsx** : Nouveau composant modal avec 3 modes (OpenRouter/LM Studio/Hybrid)
+- **AdvancedPanel.css** : Styles cohérents avec le design existant
+- **Sidebar.jsx** : Badge du mode actif, bouton Advanced dans la navigation
+- **App.jsx** : Gestion état advancedSettings, persistance localStorage
+- **api.js** : Transmission paramètres advanced dans sendMessageStream
+- **main.py** : SendMessageRequest accepte advanced config optionnel
+- **openrouter.py** : Routing intelligent get_model_source/get_chairman_source
+- **council.py** : Propagation advanced_config à toutes les fonctions
+- **config.py** : Ajout LMSTUDIO_BASE_URL par défaut
 
-### UI Requirements
-- LM Studio tab in Settings page
-- URL input for each selected council model
-- Test connection button with status feedback
-- Clear button to remove configured URLs
-- Visual indicator (badge) when model has LM Studio URL
-
-## What's Been Implemented (2026-03-15)
-
-### Backend Changes
-- Added `lm_studio_urls` field to DEFAULT_CONFIG
-- Added `get_lm_studio_urls()` and `get_lm_studio_url_for_model()` functions
-- Added `test_lm_studio_connection()` async function
-- Added `query_lm_studio()` function in openrouter.py
-- Modified `query_model()` to check for LM Studio URL first
-- Added API endpoints: POST /api/lm-studio/test, GET /api/lm-studio/urls
-- Updated ConfigUpdateRequest to include lm_studio_urls
-
-### Frontend Changes
-- Added LM Studio tab to Settings page
-- Added URL input fields for each selected model
-- Added Test and Clear buttons
-- Added LM Studio badge indicator
-- Added API methods: testLmStudioConnection(), getLmStudioUrls()
-- Fixed API_BASE to use empty string for relative URLs
-
-### Installer Changes
-- Updated default_config.json with lm_studio_urls field
-- Version bumped to 2.1.0 in llm-council-installer.iss
-- Updated launcher.py with lm_studio_urls in default config
-- Added LM Studio quick link in launcher GUI
-- Updated USER_MANUAL.md with LM Studio documentation
-- Updated README_INSTALLER.txt with LM Studio info
-- Updated installer/README.md with v2.1.0 features
+### Features Implemented
+- [x] Panneau Advanced accessible depuis la sidebar (icône ⚙️)
+- [x] Sélection de mode : OpenRouter / LM Studio / Hybrid
+- [x] Badge visuel du mode actif dans le header
+- [x] Configuration OpenRouter : Override clé API optionnel
+- [x] Configuration LM Studio : URL serveur + nom du modèle
+- [x] Bouton "Test Connection" pour LM Studio
+- [x] Mode Hybrid : Assignation source par modèle + Chairman
+- [x] Persistance localStorage (llm_council_advanced_settings)
+- [x] Compatibilité ascendante (fonctionne sans paramètre advanced)
 
 ## Prioritized Backlog
 
-### P0 (Critical)
-- [x] LM Studio URL configuration per model
-- [x] Test connection functionality
-- [x] Backend integration with LM Studio servers
+### P0 (Bloquant)
+- Aucun
 
-### P1 (High)
-- [ ] Connection status monitoring
-- [ ] Model auto-detection from LM Studio /models endpoint
+### P1 (Important)
+- Sauvegarder paramètres advanced par conversation
+- Afficher source utilisée dans les résultats de chaque stage
 
-### P2 (Medium)
-- [ ] Multiple LM Studio servers support
-- [ ] Fallback from LM Studio to OpenRouter on failure
-- [ ] Request timeout configuration per model
-
-## User Personas
-
-### Primary: Local LLM Enthusiast
-- Runs LM Studio on local machine
-- Wants to use local models in council
-- Values privacy and offline capability
-
-### Secondary: Hybrid User
-- Uses both OpenRouter and local models
-- Wants flexibility in model selection
-- Cost-conscious (local = free)
+### P2 (Nice to have)
+- Support plusieurs serveurs LM Studio en mode hybrid
+- Estimation coûts/latence par source
+- Import/export configuration
 
 ## Next Tasks
-1. Add connection health monitoring
-2. Implement automatic fallback to OpenRouter when LM Studio fails
-3. Add model name detection from LM Studio /models endpoint
-4. Consider adding batch URL configuration
+- Tester avec un vrai serveur LM Studio local
+- Documenter l'utilisation dans le README
+- Ajouter validation API key OpenRouter inline
