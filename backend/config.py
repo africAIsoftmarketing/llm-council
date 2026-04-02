@@ -40,6 +40,9 @@ CHAIRMAN_MODEL = "google/gemini-3-pro-preview"
 # OpenRouter API endpoint
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+# LM Studio default URL
+LMSTUDIO_BASE_URL = "http://localhost:1234/v1"
+
 # Data directory for conversation storage
 DATA_DIR = os.path.join(get_data_dir(), "conversations")
 

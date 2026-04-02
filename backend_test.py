@@ -900,6 +900,108 @@ class LLMCouncilAPITester:
         except Exception as e:
             self.log_test("LM Studio Config Update", False, f"Exception: {str(e)}")
 
+    def test_advanced_config_streaming_endpoint(self):
+        """Test that streaming endpoint accepts advanced configuration parameter"""
+        try:
+            # First create a conversation
+            create_response = self.session.post(
+                f"{self.base_url}/api/conversations",
+                json={},
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if create_response.status_code != 200:
+                self.log_test("Advanced Config Streaming", False, "Failed to create test conversation")
+                return
+            
+            conversation = create_response.json()
+            conversation_id = conversation.get("id")
+            
+            if not conversation_id:
+                self.log_test("Advanced Config Streaming", False, "No conversation ID returned")
+                return
+            
+            # Test streaming endpoint with advanced config
+            advanced_config = {
+                "mode": "openrouter",
+                "openrouter": {
+                    "apiKey": ""
+                },
+                "lmstudio": {
+                    "baseUrl": "http://localhost:1234/v1",
+                    "model": "test-model"
+                },
+                "hybrid": {
+                    "councilModelSources": {},
+                    "chairmanSource": "openrouter"
+                }
+            }
+            
+            message_data = {
+                "content": "Test message for advanced config",
+                "include_documents": False,
+                "advanced": advanced_config
+            }
+            
+            # Test the streaming endpoint (we'll just check if it accepts the request)
+            response = self.session.post(
+                f"{self.base_url}/api/conversations/{conversation_id}/message/stream",
+                json=message_data,
+                headers={"Content-Type": "application/json"},
+                stream=True,
+                timeout=10
+            )
+            
+            # We expect this to fail due to no API key, but it should accept the advanced parameter
+            # and return a proper error structure, not a 400 for malformed request
+            if response.status_code in [200, 400]:
+                if response.status_code == 400:
+                    # Check if it's an API key error (expected) rather than malformed request
+                    try:
+                        error_data = response.json()
+                        if "api key" in error_data.get("detail", "").lower():
+                            self.log_test(
+                                "Advanced Config Streaming", 
+                                True, 
+                                "Streaming endpoint accepts advanced config parameter (API key error expected)",
+                                {"status": response.status_code, "error": error_data.get("detail")}
+                            )
+                        else:
+                            self.log_test(
+                                "Advanced Config Streaming", 
+                                False, 
+                                f"Unexpected 400 error: {error_data.get('detail')}",
+                                error_data
+                            )
+                    except:
+                        self.log_test(
+                            "Advanced Config Streaming", 
+                            False, 
+                            "400 error but couldn't parse response",
+                            response.text[:200]
+                        )
+                else:
+                    # 200 response - endpoint accepted the request
+                    self.log_test(
+                        "Advanced Config Streaming", 
+                        True, 
+                        "Streaming endpoint accepts advanced config parameter",
+                        {"status": response.status_code}
+                    )
+            else:
+                self.log_test(
+                    "Advanced Config Streaming", 
+                    False, 
+                    f"Unexpected status code: {response.status_code}",
+                    response.text[:200]
+                )
+            
+            # Clean up conversation
+            self.session.delete(f"{self.base_url}/api/conversations/{conversation_id}")
+                
+        except Exception as e:
+            self.log_test("Advanced Config Streaming", False, f"Exception: {str(e)}")
+
     def cleanup_uploaded_documents(self):
         """Clean up documents uploaded during testing"""
         for doc_id in self.uploaded_doc_ids:
@@ -939,6 +1041,11 @@ class LLMCouncilAPITester:
             self.test_lm_studio_test_endpoint()
             self.test_lm_studio_get_urls_endpoint()
             self.test_lm_studio_config_update()
+            
+            # Advanced configuration tests
+            print("\n⚙️ Advanced Configuration Tests")
+            print("-" * 30)
+            self.test_advanced_config_streaming_endpoint()
             
             # OCR-specific tests
             print("\n🔍 OCR Feature Tests")

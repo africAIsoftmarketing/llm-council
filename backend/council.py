@@ -10,13 +10,14 @@ except ImportError:
     from config_manager import get_council_models, get_chairman_model
 
 
-async def stage1_collect_responses(user_query: str, vision_images: list = None) -> List[Dict[str, Any]]:
+async def stage1_collect_responses(user_query: str, vision_images: list = None, advanced_config: dict = None) -> List[Dict[str, Any]]:
     """
     Stage 1: Collect individual responses from all council models.
 
     Args:
         user_query: The user's question
         vision_images: Optional list of vision images with base64 data
+        advanced_config: Advanced configuration from frontend (mode, openrouter, lmstudio, hybrid)
 
     Returns:
         List of dicts with 'model' and 'response' keys
@@ -38,8 +39,8 @@ async def stage1_collect_responses(user_query: str, vision_images: list = None) 
     else:
         messages = [{"role": "user", "content": user_query}]
 
-    # Query all models in parallel
-    responses = await query_models_parallel(council_models, messages)
+    # Query all models in parallel (with advanced config)
+    responses = await query_models_parallel(council_models, messages, advanced_config=advanced_config)
 
     # Format results
     stage1_results = []
@@ -117,8 +118,8 @@ Now provide your evaluation and ranking:"""
 
     messages = [{"role": "user", "content": ranking_prompt}]
 
-    # Get rankings from all council models in parallel
-    responses = await query_models_parallel(council_models, messages)
+    # Get rankings from all council models in parallel (with advanced config)
+    responses = await query_models_parallel(council_models, messages, advanced_config=advanced_config)
 
     # Format results
     stage2_results = []
@@ -138,7 +139,8 @@ Now provide your evaluation and ranking:"""
 async def stage3_synthesize_final(
     user_query: str,
     stage1_results: List[Dict[str, Any]],
-    stage2_results: List[Dict[str, Any]]
+    stage2_results: List[Dict[str, Any]],
+    advanced_config: dict = None
 ) -> Dict[str, Any]:
     """
     Stage 3: Chairman synthesizes final response.
@@ -147,6 +149,7 @@ async def stage3_synthesize_final(
         user_query: The original user query
         stage1_results: Individual model responses from Stage 1
         stage2_results: Rankings from Stage 2
+        advanced_config: Advanced configuration from frontend
 
     Returns:
         Dict with 'model' and 'response' keys
@@ -183,8 +186,8 @@ Provide a clear, well-reasoned final answer that represents the council's collec
 
     messages = [{"role": "user", "content": chairman_prompt}]
 
-    # Query the chairman model
-    response = await query_model(chairman_model, messages)
+    # Query the chairman model (with advanced config and is_chairman flag)
+    response = await query_model(chairman_model, messages, advanced_config=advanced_config, is_chairman=True)
 
     if response is None:
         # Fallback if chairman fails
@@ -318,19 +321,20 @@ Title:"""
     return title
 
 
-async def run_full_council(user_query: str, vision_images: list = None) -> Tuple[List, List, Dict, Dict]:
+async def run_full_council(user_query: str, vision_images: list = None, advanced_config: dict = None) -> Tuple[List, List, Dict, Dict]:
     """
     Run the complete 3-stage council process.
 
     Args:
         user_query: The user's question
         vision_images: Optional list of vision images with base64 data
+        advanced_config: Advanced configuration from frontend (mode, openrouter, lmstudio, hybrid)
 
     Returns:
         Tuple of (stage1_results, stage2_results, stage3_result, metadata)
     """
-    # Stage 1: Collect individual responses (with vision images if available)
-    stage1_results = await stage1_collect_responses(user_query, vision_images=vision_images)
+    # Stage 1: Collect individual responses (with vision images and advanced config if available)
+    stage1_results = await stage1_collect_responses(user_query, vision_images=vision_images, advanced_config=advanced_config)
 
     # If no models responded successfully, return error
     if not stage1_results:
@@ -340,7 +344,7 @@ async def run_full_council(user_query: str, vision_images: list = None) -> Tuple
         }, {}
 
     # Stage 2: Collect rankings (text-only, rankings don't need images)
-    stage2_results, label_to_model = await stage2_collect_rankings(user_query, stage1_results)
+    stage2_results, label_to_model = await stage2_collect_rankings(user_query, stage1_results, advanced_config=advanced_config)
 
     # Calculate aggregate rankings
     aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
@@ -349,7 +353,8 @@ async def run_full_council(user_query: str, vision_images: list = None) -> Tuple
     stage3_result = await stage3_synthesize_final(
         user_query,
         stage1_results,
-        stage2_results
+        stage2_results,
+        advanced_config=advanced_config
     )
 
     # Prepare metadata

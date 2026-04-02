@@ -304,9 +304,21 @@ export const api = {
    * @param {string} content - The message content
    * @param {function} onEvent - Callback function for each event: (eventType, data) => void
    * @param {boolean} includeDocuments - Whether to include document context
+   * @param {object} advancedSettings - Advanced LLM configuration settings
    * @returns {Promise<void>}
    */
-  async sendMessageStream(conversationId, content, onEvent, includeDocuments = true) {
+  async sendMessageStream(conversationId, content, onEvent, includeDocuments = true, advancedSettings = null) {
+    // Build request body
+    const body = { 
+      content, 
+      include_documents: includeDocuments,
+    };
+
+    // Include advanced settings if provided and not using default openrouter mode
+    if (advancedSettings) {
+      body.advanced = advancedSettings;
+    }
+
     const response = await fetch(
       `${API_BASE}/api/conversations/${conversationId}/message/stream`,
       {
@@ -314,7 +326,7 @@ export const api = {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ content, include_documents: includeDocuments }),
+        body: JSON.stringify(body),
       }
     );
 

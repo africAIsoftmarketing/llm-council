@@ -110,6 +110,7 @@ class SendMessageRequest(BaseModel):
     content: str
     include_documents: Optional[bool] = True
     document_ids: Optional[List[str]] = None
+    advanced: Optional[Dict[str, Any]] = None
 
 
 class ConversationMetadata(BaseModel):
@@ -417,10 +418,11 @@ My question: {request.content}"""
         title = await generate_conversation_title(request.content)
         storage.update_conversation_title(conversation_id, title)
 
-    # Run the 3-stage council process (pass vision images if available)
+    # Run the 3-stage council process (pass vision images and advanced config if available)
     stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
         query_content,
-        vision_images=vision_images if vision_images else None
+        vision_images=vision_images if vision_images else None,
+        advanced_config=request.advanced
     )
 
     # Add assistant message with all stages
@@ -494,20 +496,20 @@ My question: {request.content}"""
             if is_first_message:
                 title_task = asyncio.create_task(generate_conversation_title(request.content))
 
-            # Stage 1: Collect responses (with vision images if available)
+            # Stage 1: Collect responses (with vision images and advanced config if available)
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
-            stage1_results = await stage1_collect_responses(query_content, vision_images=vision_images if vision_images else None)
+            stage1_results = await stage1_collect_responses(query_content, vision_images=vision_images if vision_images else None, advanced_config=request.advanced)
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
 
             # Stage 2: Collect rankings
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
-            stage2_results, label_to_model = await stage2_collect_rankings(query_content, stage1_results)
+            stage2_results, label_to_model = await stage2_collect_rankings(query_content, stage1_results, advanced_config=request.advanced)
             aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
             yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
 
             # Stage 3: Synthesize final answer
             yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
-            stage3_result = await stage3_synthesize_final(query_content, stage1_results, stage2_results)
+            stage3_result = await stage3_synthesize_final(query_content, stage1_results, stage2_results, advanced_config=request.advanced)
             yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
 
             # Wait for title generation if it was started

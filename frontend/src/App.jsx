@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
 import Settings from './components/Settings';
+import AdvancedPanel, { getAdvancedSettings } from './components/AdvancedPanel';
 import { api } from './api';
 import './App.css';
 
@@ -14,6 +15,10 @@ function App() {
   const [isConfigured, setIsConfigured] = useState(false);
   const [documents, setDocuments] = useState([]);
   const [toast, setToast] = useState(null);
+  const [showAdvancedPanel, setShowAdvancedPanel] = useState(false);
+  const [advancedSettings, setAdvancedSettings] = useState(() => getAdvancedSettings());
+  const [councilModels, setCouncilModels] = useState([]);
+  const [chairmanModel, setChairmanModel] = useState('');
 
   const checkConfiguration = useCallback(async () => {
     try {
@@ -31,6 +36,16 @@ function App() {
       setDocuments(result.documents || []);
     } catch (error) {
       console.error('Failed to load documents:', error);
+    }
+  }, []);
+
+  const loadCouncilConfig = useCallback(async () => {
+    try {
+      const config = await api.getConfig();
+      setCouncilModels(config.council_models || []);
+      setChairmanModel(config.chairman_model || '');
+    } catch (error) {
+      console.error('Failed to load council config:', error);
     }
   }, []);
 
@@ -63,7 +78,8 @@ function App() {
     checkConfiguration();
      
     loadDocuments();
-  }, [checkConfiguration, loadDocuments]);
+    loadCouncilConfig();
+  }, [checkConfiguration, loadDocuments, loadCouncilConfig]);
 
   // Load conversations on mount
   useEffect(() => {
@@ -156,7 +172,7 @@ function App() {
         messages: [...prev.messages, assistantMessage],
       }));
 
-      // Send message with streaming
+      // Send message with streaming (include advanced settings)
       await api.sendMessageStream(currentConversationId, content, (eventType, event) => {
         switch (eventType) {
           case 'stage1_start':
@@ -237,7 +253,7 @@ function App() {
           default:
             console.log('Unknown event type:', eventType);
         }
-      }, includeDocuments);
+      }, includeDocuments, advancedSettings);
     } catch (error) {
       console.error('Failed to send message:', error);
       showToast(error.message || 'Failed to send message', 'error');
@@ -252,6 +268,11 @@ function App() {
 
   const handleConfigUpdate = () => {
     checkConfiguration();
+    loadCouncilConfig();
+  };
+
+  const handleAdvancedSettingsChange = (newSettings) => {
+    setAdvancedSettings(newSettings);
   };
 
   const handleDocumentUpload = async (file) => {
@@ -296,6 +317,8 @@ function App() {
         currentView={currentView}
         onViewChange={setCurrentView}
         isConfigured={isConfigured}
+        onOpenAdvanced={() => setShowAdvancedPanel(true)}
+        advancedMode={advancedSettings.mode}
       />
       
       {currentView === 'chat' ? (
@@ -313,6 +336,17 @@ function App() {
       ) : (
         <Settings
           onConfigUpdate={handleConfigUpdate}
+          showToast={showToast}
+        />
+      )}
+
+      {/* Advanced Panel */}
+      {showAdvancedPanel && (
+        <AdvancedPanel
+          onClose={() => setShowAdvancedPanel(false)}
+          onSettingsChange={handleAdvancedSettingsChange}
+          councilModels={councilModels}
+          chairmanModel={chairmanModel}
           showToast={showToast}
         />
       )}
