@@ -24,6 +24,19 @@ const DEFAULT_SETTINGS = {
   },
 };
 
+// Deep merge helper for nested objects
+const deepMerge = (target, source) => {
+  const result = { ...target };
+  for (const key of Object.keys(source)) {
+    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      result[key] = deepMerge(target[key] || {}, source[key]);
+    } else {
+      result[key] = source[key];
+    }
+  }
+  return result;
+};
+
 export default function AdvancedPanel({
   onClose,
   onSettingsChange,
@@ -36,7 +49,8 @@ export default function AdvancedPanel({
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        return { ...DEFAULT_SETTINGS, ...parsed };
+        // Deep merge to preserve nested properties
+        return deepMerge(DEFAULT_SETTINGS, parsed);
       }
     } catch (e) {
       console.error('Failed to load advanced settings:', e);
@@ -515,7 +529,8 @@ export function getAdvancedSettings() {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      return deepMerge(DEFAULT_SETTINGS, parsed);
     }
   } catch (e) {
     console.error('Failed to load advanced settings:', e);
