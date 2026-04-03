@@ -114,6 +114,36 @@ export const api = {
     return response.json();
   },
 
+  // ===== Advanced Config APIs =====
+
+  /**
+   * Get advanced LLM configuration.
+   */
+  async getAdvancedConfig() {
+    const response = await fetch(`${API_BASE}/api/config/advanced`);
+    if (!response.ok) {
+      throw new Error('Failed to get advanced config');
+    }
+    return response.json();
+  },
+
+  /**
+   * Save advanced LLM configuration.
+   */
+  async saveAdvancedConfig(advancedConfig) {
+    const response = await fetch(`${API_BASE}/api/config/advanced`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(advancedConfig),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to save advanced config');
+    }
+    return response.json();
+  },
+
   // ===== Document APIs =====
 
   /**

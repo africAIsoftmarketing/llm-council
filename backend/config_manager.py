@@ -44,6 +44,7 @@ DEFAULT_CONFIG = {
     # When a model has an LM Studio URL configured, it will be queried directly
     # instead of going through OpenRouter
     "lm_studio_urls": {},
+    "advanced_config": {},
     "backend_port": 8001,
     "frontend_port": 5173,
     "auto_credit_reminder": True,
@@ -165,7 +166,7 @@ def update_config(updates: Dict[str, Any]) -> Dict[str, Any]:
     # Apply updates (only for allowed keys)
     allowed_keys = [
         "openrouter_api_key", "council_models", "chairman_model",
-        "lm_studio_urls", "backend_port", "frontend_port", "auto_credit_reminder",
+        "lm_studio_urls", "advanced_config", "backend_port", "frontend_port", "auto_credit_reminder",
         "credit_reminder_threshold", "document_settings",
         "storage_location", "theme"
     ]
@@ -206,6 +207,20 @@ def get_lm_studio_url_for_model(model_id: str) -> Optional[str]:
     """Get the LM Studio URL for a specific model, if configured."""
     urls = get_lm_studio_urls()
     return urls.get(model_id)
+
+
+def get_advanced_config() -> Dict[str, Any]:
+    """Get the advanced config from config.json."""
+    config = load_config()
+    return config.get("advanced_config", {})
+
+
+def save_advanced_config(advanced_config: Dict[str, Any]) -> Dict[str, Any]:
+    """Save advanced config to config.json."""
+    config = load_config()
+    config["advanced_config"] = advanced_config
+    save_config(config)
+    return advanced_config
 
 
 async def test_lm_studio_connection(base_url: str, model_name: str = None) -> Dict[str, Any]:

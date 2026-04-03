@@ -24,7 +24,8 @@ try:
     from .config_manager import (
         get_config, update_config, validate_api_key, get_available_models,
         add_custom_model, load_config, get_api_key, apply_config_to_env,
-        test_lm_studio_connection, get_lm_studio_urls
+        test_lm_studio_connection, get_lm_studio_urls,
+        get_advanced_config, save_advanced_config
     )
     from .document_processor import (
         process_uploaded_file, list_documents, get_document, 
@@ -41,7 +42,8 @@ except ImportError:
     from config_manager import (
         get_config, update_config, validate_api_key, get_available_models,
         add_custom_model, load_config, get_api_key, apply_config_to_env,
-        test_lm_studio_connection, get_lm_studio_urls
+        test_lm_studio_connection, get_lm_studio_urls,
+        get_advanced_config, save_advanced_config
     )
     from document_processor import (
         process_uploaded_file, list_documents, get_document, 
@@ -230,6 +232,30 @@ async def test_lm_studio_endpoint(request: TestLmStudioRequest):
 async def get_lm_studio_urls_endpoint():
     """Get all configured LM Studio URLs."""
     return {"urls": get_lm_studio_urls()}
+
+
+# ===== Advanced Config Endpoints =====
+
+class AdvancedConfigRequest(BaseModel):
+    """Request body for saving advanced config."""
+    mode: Optional[str] = None
+    openrouter: Optional[Dict[str, Any]] = None
+    models: Optional[Dict[str, Any]] = None
+    chairman: Optional[Dict[str, Any]] = None
+
+
+@app.get("/api/config/advanced")
+async def get_advanced_config_endpoint():
+    """Get advanced LLM configuration."""
+    return get_advanced_config()
+
+
+@app.post("/api/config/advanced")
+async def save_advanced_config_endpoint(request: AdvancedConfigRequest):
+    """Save advanced LLM configuration."""
+    config_data = request.model_dump(exclude_none=True)
+    saved_config = save_advanced_config(config_data)
+    return saved_config
 
 
 # ===== Document Endpoints =====

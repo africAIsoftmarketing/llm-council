@@ -31,11 +31,6 @@ export default function Settings({ onConfigUpdate, showToast }) {
   const [customModel, setCustomModel] = useState({ id: '', name: '', provider: '' });
   const [theme, setTheme] = useState('light');
 
-  // LM Studio states
-  const [lmStudioUrls, setLmStudioUrls] = useState({});
-  const [testingUrl, setTestingUrl] = useState(null);
-  const [urlTestResults, setUrlTestResults] = useState({});
-
   // Model picker states
   const [modelSearch, setModelSearch] = useState('');
   const [activeProvider, setActiveProvider] = useState('All');
@@ -51,7 +46,6 @@ export default function Settings({ onConfigUpdate, showToast }) {
       setSelectedModels(cfg.council_models || []);
       setChairmanModel(cfg.chairman_model || '');
       setTheme(cfg.theme || 'light');
-      setLmStudioUrls(cfg.lm_studio_urls || {});
     } catch {
       showToast('Failed to load configuration', 'error');
     } finally {
@@ -170,48 +164,6 @@ export default function Settings({ onConfigUpdate, showToast }) {
     finally { setIsSaving(false); }
   };
 
-  /* ── LM Studio ── */
-  const handleLmStudioUrlChange = (modelId, url) =>
-    setLmStudioUrls(prev => ({ ...prev, [modelId]: url }));
-
-  const handleTestLmStudioUrl = async (modelId) => {
-    const url = lmStudioUrls[modelId];
-    if (!url?.trim()) { showToast('Please enter a URL first', 'warning'); return; }
-    setTestingUrl(modelId);
-    setUrlTestResults(prev => ({ ...prev, [modelId]: null }));
-    try {
-      const result = await api.testLmStudioConnection(url, modelId);
-      setUrlTestResults(prev => ({ ...prev, [modelId]: result }));
-      showToast(result.success
-        ? `Connected! Found ${result.models_available?.length || 0} model(s)`
-        : result.error || 'Connection failed',
-        result.success ? 'success' : 'error');
-    } catch (error) {
-      setUrlTestResults(prev => ({ ...prev, [modelId]: { success: false, error: error.message } }));
-      showToast('Failed to test connection', 'error');
-    } finally { setTestingUrl(null); }
-  };
-
-  const handleClearLmStudioUrl = (modelId) => {
-    setLmStudioUrls(prev => { const u = { ...prev }; delete u[modelId]; return u; });
-    setUrlTestResults(prev => { const u = { ...prev }; delete u[modelId]; return u; });
-  };
-
-  const handleSaveLmStudioUrls = async () => {
-    setIsSaving(true);
-    try {
-      const cleanUrls = Object.fromEntries(
-        Object.entries(lmStudioUrls).filter(([, url]) => url?.trim())
-      );
-      const updated = await api.updateConfig({ lm_studio_urls: cleanUrls });
-      setLmStudioUrls(updated.lm_studio_urls || cleanUrls);
-      setConfig(updated);
-      showToast('LM Studio URLs saved!', 'success');
-      onConfigUpdate();
-    } catch { showToast('Failed to save LM Studio URLs', 'error'); }
-    finally { setIsSaving(false); }
-  };
-
   /* ── Derived data ── */
   const providers = ['All', ...Array.from(new Set(availableModels.map(m => m.provider)))];
 
@@ -243,7 +195,7 @@ export default function Settings({ onConfigUpdate, showToast }) {
       </div>
 
       <div className="settings-tabs">
-        {[['api','API Settings'],['lmstudio','LM Studio'],['models','Council Models'],['chairman','Chairman'],['advanced','Advanced']].map(([id, label]) => (
+        {[['api','API Settings'],['models','Council Models'],['chairman','Chairman'],['advanced','Advanced']].map(([id, label]) => (
           <button key={id} className={`settings-tab ${activeTab === id ? 'active' : ''}`}
             onClick={() => setActiveTab(id)} data-testid={`tab-${id}`}>{label}</button>
         ))}
@@ -290,80 +242,6 @@ export default function Settings({ onConfigUpdate, showToast }) {
             <button onClick={handleSaveApiKey} disabled={isSaving || !apiKey.trim()}
               className="btn-primary" data-testid="btn-save-api-key">
               {isSaving ? 'Saving…' : 'Save API Key'}
-            </button>
-          </div>
-        )}
-
-        {/* ── LM Studio ── */}
-        {activeTab === 'lmstudio' && (
-          <div className="settings-section" data-testid="section-lmstudio">
-            <h2>LM Studio Configuration</h2>
-            <p className="settings-description">
-              Assign a local LM Studio server URL to any council model. When configured, that model
-              will be queried locally instead of through OpenRouter.
-            </p>
-            <div className="lm-studio-info">
-              <h4>How to use:</h4>
-              <ol>
-                <li>Start LM Studio and load a model</li>
-                <li>Enable the local server (usually <code>http://localhost:1234/v1</code>)</li>
-                <li>Make sure CORS is enabled in LM Studio settings</li>
-                <li>Enter the server URL below and test the connection</li>
-              </ol>
-            </div>
-            <div className="lm-studio-models">
-              <h3>URLs for Selected Council Models</h3>
-              {selectedModels.length === 0 ? (
-                <p className="no-models-message">
-                  No models selected. Go to &quot;Council Models&quot; tab to select models first.
-                </p>
-              ) : (
-                <div className="lm-studio-url-list">
-                  {selectedModels.map(modelId => {
-                    const model = modelById[modelId];
-                    const testResult = urlTestResults[modelId];
-                    const isTesting = testingUrl === modelId;
-                    return (
-                      <div key={modelId} className="lm-studio-url-item">
-                        <div className="lm-studio-model-info">
-                          <span className="model-name">{model?.name || modelId}</span>
-                          <span className="model-id">{modelId}</span>
-                          {lmStudioUrls[modelId] && <span className="status-badge lm-studio">LM Studio</span>}
-                        </div>
-                        <div className="lm-studio-url-input">
-                          <input type="text" value={lmStudioUrls[modelId] || ''}
-                            onChange={e => handleLmStudioUrlChange(modelId, e.target.value)}
-                            placeholder="http://localhost:1234/v1"
-                            data-testid={`lmstudio-url-${modelId}`} />
-                          <button onClick={() => handleTestLmStudioUrl(modelId)}
-                            disabled={isTesting || !lmStudioUrls[modelId]?.trim()}
-                            className="btn-secondary btn-test"
-                            data-testid={`lmstudio-test-${modelId}`}>
-                            {isTesting ? 'Testing…' : 'Test'}
-                          </button>
-                          {lmStudioUrls[modelId] && (
-                            <button onClick={() => handleClearLmStudioUrl(modelId)}
-                              className="btn-secondary btn-clear" title="Clear URL">✕</button>
-                          )}
-                        </div>
-                        {testResult && (
-                          <div className={`test-result ${testResult.success ? 'success' : 'error'}`}>
-                            <span className="test-icon">{testResult.success ? '✓' : '✗'}</span>
-                            <span>{testResult.success ? testResult.message : testResult.error}</span>
-                            {testResult.success && testResult.models_available?.length > 0 && (
-                              <span className="models-list">Models: {testResult.models_available.join(', ')}</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            <button onClick={handleSaveLmStudioUrls} disabled={isSaving}
-              className="btn-primary" data-testid="btn-save-lmstudio">
-              {isSaving ? 'Saving…' : 'Save LM Studio Configuration'}
             </button>
           </div>
         )}
