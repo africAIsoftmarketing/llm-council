@@ -473,8 +473,27 @@ export default function Settings({ onConfigUpdate, showToast }) {
             </div>
             <div className="info-section">
               <h3>Storage Location</h3>
-              <p>Conversations: <code>data/conversations/</code></p>
-              <p>Documents: <code>data/documents/</code></p>
+              {config?.storage_paths ? (
+                <div className="storage-paths">
+                  <div className="storage-path-row">
+                    <span className="path-label">Config file:</span>
+                    <code className="path-value">{config.storage_paths.config_file}</code>
+                  </div>
+                  <div className="storage-path-row">
+                    <span className="path-label">Conversations:</span>
+                    <code className="path-value">{config.storage_paths.conversations_dir}</code>
+                  </div>
+                  <div className="storage-path-row">
+                    <span className="path-label">Documents:</span>
+                    <code className="path-value">{config.storage_paths.documents_dir}</code>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p>Conversations: <code>data/conversations/</code></p>
+                  <p>Documents: <code>data/documents/</code></p>
+                </>
+              )}
             </div>
             <div className="info-section">
               <h3>About LLM Council</h3>

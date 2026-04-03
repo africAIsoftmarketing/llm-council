@@ -424,6 +424,35 @@
   font-size: 13px;
 }
 
+/* Storage Paths */
+.storage-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.storage-path-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.path-label {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.path-value {
+  font-size: 11px;
+  background: #e9ecef;
+  padding: 6px 10px;
+  border-radius: 4px;
+  word-break: break-all;
+  color: #333;
+  font-family: monospace;
+}
+
 /* Spinner */
 .spinner {
   width: 24px;

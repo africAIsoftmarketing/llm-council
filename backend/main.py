@@ -54,6 +54,36 @@ except ImportError:
 
 app = FastAPI(title="LLM Council API")
 
+
+# ===== Helper Functions =====
+
+def requires_openrouter_key(advanced_config: Optional[Dict] = None) -> bool:
+    """
+    Return True if the request needs an OpenRouter API key.
+    In LM Studio mode, no OpenRouter key is needed.
+    In hybrid mode, key is needed only if any model uses OpenRouter.
+    """
+    if not advanced_config:
+        return True  # Default mode is openrouter
+    
+    mode = advanced_config.get('mode', 'openrouter')
+    
+    if mode == 'lmstudio':
+        return False
+    
+    if mode == 'hybrid':
+        # Need key if any model or chairman uses openrouter
+        models_cfg = advanced_config.get('models', {})
+        has_openrouter_model = any(
+            m.get('source', 'openrouter') == 'openrouter'
+            for m in models_cfg.values()
+        )
+        chairman_source = advanced_config.get('chairman', {}).get('source', 'openrouter')
+        return has_openrouter_model or chairman_source == 'openrouter'
+    
+    return True  # openrouter mode
+
+
 # Enable CORS for local development
 app.add_middleware(
     CORSMiddleware,
@@ -176,10 +206,12 @@ async def health_check():
     """Health check endpoint."""
     config = load_config()
     has_key = bool(config.get("openrouter_api_key"))
+    # Also consider configured if LM Studio URLs or advanced config is set
+    has_lm_studio = bool(config.get("lm_studio_urls")) or bool(config.get("advanced_config"))
     return {
         "status": "ok", 
         "service": "LLM Council API",
-        "configured": has_key,
+        "configured": has_key or has_lm_studio,
         "version": "2.0.0"
     }
 
@@ -398,9 +430,8 @@ async def send_message(conversation_id: str, request: SendMessageRequest):
     Send a message and run the 3-stage council process.
     Returns the complete response with all stages.
     """
-    # Check API key
-    api_key = get_api_key()
-    if not api_key:
+    # Check API key only if needed for the current mode
+    if requires_openrouter_key(request.advanced) and not get_api_key():
         raise HTTPException(
             status_code=400, 
             detail="OpenRouter API key not configured. Please go to Settings to add your API key."
@@ -441,7 +472,7 @@ My question: {request.content}"""
 
     # If this is the first message, generate a title
     if is_first_message:
-        title = await generate_conversation_title(request.content)
+        title = await generate_conversation_title(request.content, advanced_config=request.advanced)
         storage.update_conversation_title(conversation_id, title)
 
     # Run the 3-stage council process (pass vision images and advanced config if available)
@@ -474,9 +505,8 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
     Send a message and stream the 3-stage council process.
     Returns Server-Sent Events as each stage completes.
     """
-    # Check API key
-    api_key = get_api_key()
-    if not api_key:
+    # Check API key only if needed for the current mode
+    if requires_openrouter_key(request.advanced) and not get_api_key():
         raise HTTPException(
             status_code=400, 
             detail="OpenRouter API key not configured. Please go to Settings to add your API key."
@@ -520,7 +550,9 @@ My question: {request.content}"""
             # Start title generation in parallel (don't await yet)
             title_task = None
             if is_first_message:
-                title_task = asyncio.create_task(generate_conversation_title(request.content))
+                title_task = asyncio.create_task(
+                    generate_conversation_title(request.content, advanced_config=request.advanced)
+                )
 
             # Stage 1: Collect responses (with vision images and advanced config if available)
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
@@ -540,9 +572,16 @@ My question: {request.content}"""
 
             # Wait for title generation if it was started
             if title_task:
-                title = await title_task
-                storage.update_conversation_title(conversation_id, title)
-                yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': title}})}\n\n"
+                try:
+                    title = await title_task
+                    storage.update_conversation_title(conversation_id, title)
+                    yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': title}})}\n\n"
+                except Exception as title_err:
+                    print(f"Title generation failed (non-fatal): {title_err}")
+                    # Use query as fallback title
+                    fallback = request.content[:47] + "..." if len(request.content) > 50 else request.content
+                    storage.update_conversation_title(conversation_id, fallback)
+                    yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': fallback}})}\n\n"
 
             # Save complete assistant message
             storage.add_assistant_message(

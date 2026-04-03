@@ -1,32 +1,29 @@
 # LLM Council - Product Requirements Document
 
 ## Original Problem Statement
-Ajouter un onglet "Advanced" dans l'interface frontend de LLM Council pour configurer la source des appels LLM. Refactoring pour supporter des URLs par modèle au lieu d'une URL globale, et persistance backend de la configuration.
+Application LLM Council avec panneau Advanced pour configurer les sources LLM (OpenRouter/LM Studio/Hybrid) avec URL par modèle et persistance backend.
 
 ## Architecture
 
 ### Frontend (React/Vite) - port 5173
-- `App.jsx` : État global, gestion des conversations, advancedSettings
-- `api.js` : Client HTTP avec endpoints advanced config (GET/POST)
-- `ChatInterface.jsx` : Interface principale avec les 3 stages
+- `App.jsx` : État global, advancedSettings, gestion conversations
+- `api.js` : Client HTTP avec advanced config
 - `AdvancedPanel.jsx` : Configuration LLM avec URL par modèle
+- `Settings.jsx` : Configuration générale avec chemins de stockage dynamiques
 - `Sidebar.jsx` : Navigation avec badge du mode actif
-- `Settings.jsx` : Configuration générale (sans onglet LM Studio - supprimé)
 
 ### Backend (Python/FastAPI) - port 8001
-- `main.py` : Routes FastAPI incluant `/api/config/advanced` GET/POST
+- `main.py` : Routes avec guard intelligent `requires_openrouter_key()`
 - `openrouter.py` : Routing intelligent avec extraction URL par modèle
-- `council.py` : Orchestration des 3 stages
-- `config_manager.py` : Gestion config.json avec advanced_config
+- `council.py` : Orchestration 3 stages + `generate_conversation_title` avec routing
+- `config_manager.py` : Config avec `storage_paths`
 
 ## Data Structure (Advanced Config)
 
 ```json
 {
   "mode": "openrouter" | "lmstudio" | "hybrid",
-  "openrouter": {
-    "apiKey": ""
-  },
+  "openrouter": { "apiKey": "" },
   "models": {
     "openai/gpt-4o": {
       "source": "openrouter" | "lmstudio",
@@ -34,40 +31,40 @@ Ajouter un onglet "Advanced" dans l'interface frontend de LLM Council pour confi
       "localModelName": "mistral-7b"
     }
   },
-  "chairman": {
-    "source": "openrouter" | "lmstudio",
-    "endpointUrl": "http://localhost:1234/v1",
-    "localModelName": ""
-  }
+  "chairman": { "source": "...", "endpointUrl": "...", "localModelName": "" }
 }
 ```
 
 ## What's Been Implemented
 
-### 2026-04-03 - Refactoring Configuration LM Studio
+### 2026-04-03 - Bug Fixes Backend LM Studio
 
-#### Bug Fixes
-- [x] Suppression de l'onglet `lmstudio` de Settings.jsx (doublon avec AdvancedPanel)
-- [x] Remplacement de l'URL globale par URL par modèle dans AdvancedPanel
+#### Bug 1: Guard API key ✅
+- Ajout fonction `requires_openrouter_key(advanced_config)` dans `main.py`
+- Modification des guards dans `send_message` et `send_message_stream`
+- En mode `lmstudio`, pas besoin de clé OpenRouter
+- Health check retourne `configured: true` si advanced_config présent
 
-#### New Features
-- [x] Nouvelle structure de données avec `models[modelId]` contenant source/endpointUrl/localModelName
-- [x] UI LM Studio mode : chaque modèle a son propre champ URL + Model Name + bouton Test
-- [x] UI Hybrid mode : toggle source par modèle, champs URL si LM Studio sélectionné
-- [x] Chairman séparé avec sa propre configuration
-- [x] Persistance backend via `GET/POST /api/config/advanced`
-- [x] Auto-save avec debounce (500ms)
-- [x] Chargement depuis backend au mount, fallback localStorage
-- [x] Backend routing intelligent dans `openrouter.py` avec nouvelle structure
+#### Bug 2: generate_conversation_title ✅
+- Modification pour accepter `advanced_config` parameter
+- En mode `lmstudio`/`hybrid`, utilise le premier modèle du conseil avec son routing
+- En mode `openrouter`, continue d'utiliser gemini-2.5-flash
 
-#### Files Modified
-- `frontend/src/components/AdvancedPanel.jsx` : Refonte complète avec URL par modèle
-- `frontend/src/components/AdvancedPanel.css` : Nouveaux styles pour model cards
-- `frontend/src/components/Settings.jsx` : Suppression onglet lmstudio + états associés
-- `frontend/src/api.js` : Ajout getAdvancedConfig/saveAdvancedConfig
-- `backend/main.py` : Ajout endpoints /api/config/advanced
-- `backend/openrouter.py` : Refonte get_model_source/get_chairman_source
-- `backend/config_manager.py` : Ajout advanced_config dans DEFAULT_CONFIG et allowed_keys
+#### Bug 3: Title generation failure ✅
+- Ajout try/except autour de `title_task` dans event_generator
+- Si échec, utilise le contenu de la query comme titre fallback
+- L'échec de génération de titre n'interrompt plus le stream
+
+#### Feature: Storage paths dynamiques ✅
+- Ajout `storage_paths` dans réponse `/api/config`
+- Affichage des vrais chemins dans Settings > Advanced
+- Montre config_file, conversations_dir, documents_dir
+
+### Previous Implementations
+- Panneau Advanced avec 3 modes (OpenRouter/LM Studio/Hybrid)
+- URL par modèle au lieu d'URL globale
+- Persistance backend via `/api/config/advanced`
+- Badge du mode actif dans le header
 
 ## Prioritized Backlog
 
@@ -75,14 +72,13 @@ Ajouter un onglet "Advanced" dans l'interface frontend de LLM Council pour confi
 - Aucun
 
 ### P1 (Important)
-- Auto-complétion des modèles LM Studio après Test Connection réussi
-- Afficher indicateur source dans résultats de chaque stage
+- Auto-complétion des modèles LM Studio après Test réussi
+- Indicateur source dans résultats de chaque stage
 
 ### P2 (Nice to have)
 - Import/export configuration
-- Preset configurations (ex: "All Local", "Hybrid Optimal")
-- Estimation coûts/latence par source
+- Preset configurations
 
 ## Next Tasks
 - Tester avec serveurs LM Studio réels
-- Documenter les modes dans le README
+- Documenter les 3 modes dans le README

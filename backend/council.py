@@ -283,12 +283,15 @@ def calculate_aggregate_rankings(
     return aggregate
 
 
-async def generate_conversation_title(user_query: str) -> str:
+async def generate_conversation_title(user_query: str, advanced_config: dict = None) -> str:
     """
     Generate a short title for a conversation based on the first user message.
+    Uses the first available model from the council configuration, respecting
+    the advanced config (LM Studio/Hybrid modes).
 
     Args:
         user_query: The first user message
+        advanced_config: Advanced configuration from frontend
 
     Returns:
         A short title (3-5 words)
@@ -302,8 +305,15 @@ Title:"""
 
     messages = [{"role": "user", "content": title_prompt}]
 
-    # Use gemini-2.5-flash for title generation (fast and cheap)
-    response = await query_model("google/gemini-2.5-flash", messages, timeout=30.0)
+    # Choose title model based on advanced config
+    if advanced_config and advanced_config.get('mode') in ('lmstudio', 'hybrid'):
+        # Use first council model with its routing (LM Studio or OpenRouter)
+        council_models = get_council_models()
+        title_model = council_models[0] if council_models else "google/gemini-2.5-flash"
+        response = await query_model(title_model, messages, timeout=30.0, advanced_config=advanced_config)
+    else:
+        # Default: use gemini-2.5-flash via OpenRouter (fast and cheap)
+        response = await query_model("google/gemini-2.5-flash", messages, timeout=30.0)
 
     if response is None:
         # Fallback to a generic title

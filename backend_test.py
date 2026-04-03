@@ -1,6 +1,7 @@
 import requests
 import sys
 import json
+import uuid
 from datetime import datetime
 
 class LLMCouncilAPITester:
@@ -138,17 +139,316 @@ class LLMCouncilAPITester:
         )
         return success, response
 
+    def test_health_check_with_advanced_config(self):
+        """Test health check returns configured:true when advanced_config is set"""
+        # First set an advanced config without API key
+        lm_studio_config = {
+            "mode": "lmstudio",
+            "models": {
+                "openai/gpt-4o": {
+                    "source": "lmstudio",
+                    "endpointUrl": "http://localhost:1234/v1",
+                    "localModelName": "gpt-4o"
+                }
+            }
+        }
+        
+        # Save the config
+        self.run_test(
+            "Save LM Studio Config",
+            "POST",
+            "api/config/advanced",
+            200,
+            data=lm_studio_config
+        )
+        
+        # Test health check
+        success, response = self.run_test(
+            "Health Check with Advanced Config",
+            "GET",
+            "api/health",
+            200
+        )
+        
+        if success and response.get('configured') == True:
+            print(f"   ✅ Health check shows configured=true with advanced config")
+            return True
+        else:
+            print(f"   ❌ Health check configured status: {response.get('configured')}")
+            return False
+
+    def test_conversation_creation(self):
+        """Create a test conversation for message testing"""
+        success, response = self.run_test(
+            "Create Conversation",
+            "POST",
+            "api/conversations",
+            200,
+            data={}
+        )
+        if success:
+            conversation_id = response.get('id')
+            print(f"   Created conversation: {conversation_id}")
+            return conversation_id
+        return None
+
+    def test_send_message_lm_studio_mode(self, conversation_id):
+        """Test sending message in LM Studio mode without API key"""
+        if not conversation_id:
+            return False
+            
+        # Set LM Studio mode
+        lm_studio_config = {
+            "mode": "lmstudio",
+            "models": {
+                "openai/gpt-4o": {
+                    "source": "lmstudio",
+                    "endpointUrl": "http://localhost:1234/v1",
+                    "localModelName": "gpt-4o"
+                }
+            }
+        }
+        
+        self.run_test(
+            "Set LM Studio Mode",
+            "POST",
+            "api/config/advanced",
+            200,
+            data=lm_studio_config
+        )
+        
+        # Test regular message endpoint
+        message_data = {
+            "content": "Test message for LM Studio mode",
+            "advanced": lm_studio_config
+        }
+        
+        success, response = self.run_test(
+            "Send Message in LM Studio Mode",
+            "POST",
+            f"api/conversations/{conversation_id}/message",
+            200,  # Should work without API key
+            data=message_data
+        )
+        
+        return success
+
+    def test_send_message_stream_lm_studio_mode(self, conversation_id):
+        """Test streaming message in LM Studio mode without API key"""
+        if not conversation_id:
+            return False
+            
+        # Set LM Studio mode
+        lm_studio_config = {
+            "mode": "lmstudio",
+            "models": {
+                "openai/gpt-4o": {
+                    "source": "lmstudio",
+                    "endpointUrl": "http://localhost:1234/v1",
+                    "localModelName": "gpt-4o"
+                }
+            }
+        }
+        
+        message_data = {
+            "content": "Test streaming message for LM Studio mode",
+            "advanced": lm_studio_config
+        }
+        
+        # Test streaming endpoint - should not require API key
+        url = f"{self.base_url}/api/conversations/{conversation_id}/message/stream"
+        headers = {'Content-Type': 'application/json'}
+        
+        self.tests_run += 1
+        print(f"\n🔍 Testing Send Message Stream in LM Studio Mode...")
+        
+        try:
+            response = requests.post(url, json=message_data, headers=headers, stream=True)
+            
+            # Should not get 400 error about missing API key
+            if response.status_code != 400:
+                self.tests_passed += 1
+                print(f"✅ Passed - Status: {response.status_code} (no API key error)")
+                return True
+            else:
+                print(f"❌ Failed - Got 400 error, likely API key required: {response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Failed - Error: {str(e)}")
+            return False
+
+    def test_config_storage_paths(self):
+        """Test that GET /api/config returns storage_paths object"""
+        success, response = self.run_test(
+            "Get Config with Storage Paths",
+            "GET",
+            "api/config",
+            200
+        )
+        
+        if success:
+            storage_paths = response.get('storage_paths')
+            if storage_paths:
+                required_paths = ['config_file', 'data_dir', 'conversations_dir', 'documents_dir']
+                has_all_paths = all(path in storage_paths for path in required_paths)
+                
+                if has_all_paths:
+                    print(f"   ✅ All required storage paths present:")
+                    for path_key, path_value in storage_paths.items():
+                        print(f"     {path_key}: {path_value}")
+                    return True
+                else:
+                    missing = [p for p in required_paths if p not in storage_paths]
+                    print(f"   ❌ Missing storage paths: {missing}")
+                    return False
+            else:
+                print(f"   ❌ No storage_paths in config response")
+                return False
+        
+        return False
+
+    def test_requires_openrouter_key_logic(self):
+        """Test the requires_openrouter_key logic by testing different modes"""
+        
+        # Test 1: LM Studio mode should not require API key
+        lm_studio_config = {
+            "mode": "lmstudio",
+            "models": {
+                "openai/gpt-4o": {
+                    "source": "lmstudio",
+                    "endpointUrl": "http://localhost:1234/v1",
+                    "localModelName": "gpt-4o"
+                }
+            }
+        }
+        
+        self.run_test(
+            "Set LM Studio Mode for Key Test",
+            "POST",
+            "api/config/advanced",
+            200,
+            data=lm_studio_config
+        )
+        
+        # Create a conversation to test message sending
+        success, conv_response = self.run_test(
+            "Create Test Conversation",
+            "POST",
+            "api/conversations",
+            200,
+            data={}
+        )
+        
+        if not success:
+            print("   ❌ Failed to create conversation for testing")
+            return False
+            
+        conversation_id = conv_response.get('id')
+        if not conversation_id:
+            print("   ❌ No conversation ID returned")
+            return False
+        
+        # Try to send a message - should work without API key in LM Studio mode
+        message_data = {
+            "content": "Test message",
+            "advanced": lm_studio_config
+        }
+        
+        success, response = self.run_test(
+            "Test LM Studio Mode (No API Key Required)",
+            "POST",
+            f"api/conversations/{conversation_id}/message",
+            200,  # Should work
+            data=message_data
+        )
+        
+        lm_studio_test_passed = success
+        
+        # Test 2: OpenRouter mode should require API key
+        openrouter_config = {
+            "mode": "openrouter"
+        }
+        
+        self.run_test(
+            "Set OpenRouter Mode for Key Test",
+            "POST",
+            "api/config/advanced",
+            200,
+            data=openrouter_config
+        )
+        
+        message_data_or = {
+            "content": "Test message",
+            "advanced": openrouter_config
+        }
+        
+        success, response = self.run_test(
+            "Test OpenRouter Mode (API Key Required)",
+            "POST",
+            f"api/conversations/{conversation_id}/message",
+            400,  # Should fail with 400
+            data=message_data_or
+        )
+        
+        openrouter_test_passed = success
+        
+        # Test 3: Hybrid mode with OpenRouter models should require API key
+        hybrid_config = {
+            "mode": "hybrid",
+            "models": {
+                "openai/gpt-4o": {
+                    "source": "openrouter"
+                }
+            }
+        }
+        
+        self.run_test(
+            "Set Hybrid Mode with OpenRouter Models",
+            "POST",
+            "api/config/advanced",
+            200,
+            data=hybrid_config
+        )
+        
+        message_data_hybrid = {
+            "content": "Test message",
+            "advanced": hybrid_config
+        }
+        
+        success, response = self.run_test(
+            "Test Hybrid Mode with OpenRouter (API Key Required)",
+            "POST",
+            f"api/conversations/{conversation_id}/message",
+            400,  # Should fail with 400
+            data=message_data_hybrid
+        )
+        
+        hybrid_test_passed = success
+        
+        print(f"\n📋 API Key Logic Test Results:")
+        print(f"   LM Studio mode (no key required): {'✅' if lm_studio_test_passed else '❌'}")
+        print(f"   OpenRouter mode (key required): {'✅' if openrouter_test_passed else '❌'}")
+        print(f"   Hybrid mode with OR models (key required): {'✅' if hybrid_test_passed else '❌'}")
+        
+        return lm_studio_test_passed and openrouter_test_passed and hybrid_test_passed
+
 def main():
     # Setup
     tester = LLMCouncilAPITester()
     
-    print("🚀 Starting LLM Council Advanced Config API Tests")
+    print("🚀 Starting LLM Council Bug Fix Tests")
     print(f"Testing against: {tester.base_url}")
+    print("\nTesting fixes for:")
+    print("1. API key guard should only block when OpenRouter is needed")
+    print("2. Title generation should use LM Studio when configured")
+    print("3. Title generation failures should be handled gracefully")
+    print("4. Storage paths should be displayed in Settings > Advanced")
     
     # Run tests
-    print("\n" + "="*50)
+    print("\n" + "="*60)
     print("BASIC API TESTS")
-    print("="*50)
+    print("="*60)
     
     if not tester.test_health_check():
         print("❌ Health check failed, stopping tests")
@@ -164,9 +464,43 @@ def main():
     if success:
         print(f"   Available models: {len(models.get('models', []))}")
 
-    print("\n" + "="*50)
+    print("\n" + "="*60)
+    print("BUG FIX TESTS - API KEY GUARD")
+    print("="*60)
+
+    # Test health check with advanced config (should show configured=true)
+    if not tester.test_health_check_with_advanced_config():
+        print("❌ Health check with advanced config failed")
+
+    # Test API key logic with different modes
+    if not tester.test_requires_openrouter_key_logic():
+        print("❌ API key requirement logic tests failed")
+
+    print("\n" + "="*60)
+    print("BUG FIX TESTS - MESSAGE SENDING WITHOUT API KEY")
+    print("="*60)
+
+    # Create a conversation for testing
+    conversation_id = tester.test_conversation_creation()
+    if conversation_id:
+        # Test sending messages in LM Studio mode without API key
+        if not tester.test_send_message_lm_studio_mode(conversation_id):
+            print("❌ Send message in LM Studio mode failed")
+        
+        if not tester.test_send_message_stream_lm_studio_mode(conversation_id):
+            print("❌ Send message stream in LM Studio mode failed")
+
+    print("\n" + "="*60)
+    print("FEATURE TEST - STORAGE PATHS")
+    print("="*60)
+
+    # Test storage paths in config response
+    if not tester.test_config_storage_paths():
+        print("❌ Storage paths test failed")
+
+    print("\n" + "="*60)
     print("ADVANCED CONFIG TESTS")
-    print("="*50)
+    print("="*60)
 
     # Test getting advanced config
     success, advanced_config = tester.test_get_advanced_config()
@@ -183,9 +517,9 @@ def main():
     if success:
         print(f"   Updated config after save: {json.dumps(updated_config, indent=2)}")
 
-    print("\n" + "="*50)
+    print("\n" + "="*60)
     print("LM STUDIO TESTS")
-    print("="*50)
+    print("="*60)
 
     # Test LM Studio connection (will likely fail but should return proper error)
     success, lm_result = tester.test_lm_studio_connection()

@@ -156,6 +156,15 @@ def get_config() -> Dict[str, Any]:
     
     # Remove actual key from response
     del config["openrouter_api_key"]
+    
+    # Add real storage paths for frontend display
+    config["storage_paths"] = {
+        "config_file": CONFIG_FILE,
+        "data_dir": BASE_DATA_DIR,
+        "conversations_dir": os.path.join(BASE_DATA_DIR, "conversations"),
+        "documents_dir": os.path.join(BASE_DATA_DIR, "documents"),
+    }
+    
     return config
 
 
