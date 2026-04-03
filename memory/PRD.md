@@ -1,61 +1,73 @@
 # LLM Council - Product Requirements Document
 
 ## Original Problem Statement
-Ajouter un onglet "Advanced" dans l'interface frontend de LLM Council pour permettre à l'utilisateur de configurer la source des appels LLM avec trois options : OpenRouter (cloud), LM Studio (local), et Hybrid (mix cloud & local). Support du mode développeur LM Studio avec plusieurs modèles simultanés.
+Ajouter un onglet "Advanced" dans l'interface frontend de LLM Council pour configurer la source des appels LLM. Refactoring pour supporter des URLs par modèle au lieu d'une URL globale, et persistance backend de la configuration.
 
 ## Architecture
 
 ### Frontend (React/Vite) - port 5173
 - `App.jsx` : État global, gestion des conversations, advancedSettings
-- `api.js` : Client HTTP avec support des paramètres advanced
+- `api.js` : Client HTTP avec endpoints advanced config (GET/POST)
 - `ChatInterface.jsx` : Interface principale avec les 3 stages
-- `AdvancedPanel.jsx` : Panneau de configuration Advanced avec multi-modèles
+- `AdvancedPanel.jsx` : Configuration LLM avec URL par modèle
 - `Sidebar.jsx` : Navigation avec badge du mode actif
+- `Settings.jsx` : Configuration générale (sans onglet LM Studio - supprimé)
 
 ### Backend (Python/FastAPI) - port 8001
-- `main.py` : Routes FastAPI avec SSE streaming, accepte advanced config
-- `openrouter.py` : Client intelligent avec routing OpenRouter/LM Studio multi-modèles
-- `council.py` : Orchestration des 3 stages avec propagation advanced config
-- `config.py` : Configuration COUNCIL_MODELS, CHAIRMAN_MODEL, LMSTUDIO_BASE_URL
+- `main.py` : Routes FastAPI incluant `/api/config/advanced` GET/POST
+- `openrouter.py` : Routing intelligent avec extraction URL par modèle
+- `council.py` : Orchestration des 3 stages
+- `config_manager.py` : Gestion config.json avec advanced_config
 
-## User Personas
-- Développeur AI cherchant à comparer plusieurs LLMs
-- Utilisateur souhaitant utiliser des modèles locaux (LM Studio) pour la confidentialité
-- Utilisateur avancé avec LM Studio en mode développeur (plusieurs modèles chargés)
-- Utilisateur voulant un mix cloud/local pour optimiser coûts et latence
+## Data Structure (Advanced Config)
 
-## Core Requirements (Static)
-1. Interface 3-stages : Réponses parallèles → Ranking par pairs → Synthèse Chairman
-2. Support OpenRouter API pour les modèles cloud
-3. Support LM Studio pour les modèles locaux
-4. Mode Hybrid pour mixer cloud et local
-5. Support multi-modèles LM Studio (mode développeur)
-6. Persistance des paramètres dans localStorage
+```json
+{
+  "mode": "openrouter" | "lmstudio" | "hybrid",
+  "openrouter": {
+    "apiKey": ""
+  },
+  "models": {
+    "openai/gpt-4o": {
+      "source": "openrouter" | "lmstudio",
+      "endpointUrl": "http://localhost:1234/v1",
+      "localModelName": "mistral-7b"
+    }
+  },
+  "chairman": {
+    "source": "openrouter" | "lmstudio",
+    "endpointUrl": "http://localhost:1234/v1",
+    "localModelName": ""
+  }
+}
+```
 
 ## What's Been Implemented
 
-### 2026-04-02 - Onglet Advanced + Multi-Modèles LM Studio
+### 2026-04-03 - Refactoring Configuration LM Studio
 
-#### Features Implemented
-- [x] Panneau Advanced accessible depuis la sidebar (icône ⚙️)
-- [x] Sélection de mode : OpenRouter / LM Studio / Hybrid
-- [x] Badge visuel du mode actif dans le header
-- [x] Configuration OpenRouter : Override clé API optionnel
-- [x] Configuration LM Studio : URL serveur + modèle par défaut
-- [x] Bouton "Test Connection" pour LM Studio
-- [x] **Multi-modèles LM Studio** : Assigner un modèle LM Studio spécifique à chaque membre du conseil
-- [x] **Chairman Model** : Modèle LM Studio spécifique pour le Chairman
-- [x] Mode Hybrid : Assignation source + nom modèle LM Studio par modèle
-- [x] Persistance localStorage avec deep merge (llm_council_advanced_settings)
-- [x] Compatibilité ascendante (fonctionne sans paramètre advanced)
+#### Bug Fixes
+- [x] Suppression de l'onglet `lmstudio` de Settings.jsx (doublon avec AdvancedPanel)
+- [x] Remplacement de l'URL globale par URL par modèle dans AdvancedPanel
+
+#### New Features
+- [x] Nouvelle structure de données avec `models[modelId]` contenant source/endpointUrl/localModelName
+- [x] UI LM Studio mode : chaque modèle a son propre champ URL + Model Name + bouton Test
+- [x] UI Hybrid mode : toggle source par modèle, champs URL si LM Studio sélectionné
+- [x] Chairman séparé avec sa propre configuration
+- [x] Persistance backend via `GET/POST /api/config/advanced`
+- [x] Auto-save avec debounce (500ms)
+- [x] Chargement depuis backend au mount, fallback localStorage
+- [x] Backend routing intelligent dans `openrouter.py` avec nouvelle structure
 
 #### Files Modified
-- `frontend/src/components/AdvancedPanel.jsx` + `.css` : Nouveau panneau avec multi-modèles
-- `frontend/src/App.jsx`, `api.js`, `Sidebar.jsx` + `.css` : Intégration
-- `backend/main.py` : Accepte advanced config
-- `backend/openrouter.py` : Routing intelligent avec extraction nom modèle par conseil
-- `backend/council.py` : Propagation advanced_config
-- `backend/config.py` : LMSTUDIO_BASE_URL
+- `frontend/src/components/AdvancedPanel.jsx` : Refonte complète avec URL par modèle
+- `frontend/src/components/AdvancedPanel.css` : Nouveaux styles pour model cards
+- `frontend/src/components/Settings.jsx` : Suppression onglet lmstudio + états associés
+- `frontend/src/api.js` : Ajout getAdvancedConfig/saveAdvancedConfig
+- `backend/main.py` : Ajout endpoints /api/config/advanced
+- `backend/openrouter.py` : Refonte get_model_source/get_chairman_source
+- `backend/config_manager.py` : Ajout advanced_config dans DEFAULT_CONFIG et allowed_keys
 
 ## Prioritized Backlog
 
@@ -63,16 +75,14 @@ Ajouter un onglet "Advanced" dans l'interface frontend de LLM Council pour perme
 - Aucun
 
 ### P1 (Important)
+- Auto-complétion des modèles LM Studio après Test Connection réussi
 - Afficher indicateur source dans résultats de chaque stage
-- Auto-détection des modèles disponibles dans LM Studio
 
 ### P2 (Nice to have)
-- Support plusieurs serveurs LM Studio en mode hybrid
-- Estimation coûts/latence par source
 - Import/export configuration
-- Preset configurations
+- Preset configurations (ex: "All Local", "Hybrid Optimal")
+- Estimation coûts/latence par source
 
 ## Next Tasks
-- Tester avec un vrai serveur LM Studio local en mode développeur
-- Documenter l'utilisation dans le README
-- Ajouter validation inline des noms de modèles LM Studio
+- Tester avec serveurs LM Studio réels
+- Documenter les modes dans le README
