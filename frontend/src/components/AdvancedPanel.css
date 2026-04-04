@@ -430,6 +430,71 @@
   line-height: 1.5;
 }
 
+/* Throttle Section */
+.throttle-presets {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.presets-label {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.preset-btn {
+  padding: 6px 14px;
+  border: 1.5px solid #ddd;
+  border-radius: 20px;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: #444;
+}
+
+.preset-btn:hover {
+  border-color: #4a90e2;
+  color: #4a90e2;
+}
+
+.preset-btn.active {
+  background: #4a90e2;
+  border-color: #4a90e2;
+  color: #fff;
+  font-weight: 600;
+}
+
+.throttle-slider {
+  width: 100%;
+  margin: 8px 0 4px;
+  accent-color: #4a90e2;
+  height: 6px;
+}
+
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #999;
+  margin-bottom: 4px;
+  padding: 0 2px;
+}
+
+.badge-sequential {
+  font-size: 10px;
+  background: #e8f5e9;
+  color: #2e7d32;
+  border-radius: 10px;
+  padding: 2px 8px;
+  margin-left: 8px;
+  font-weight: 500;
+}
+
 /* Panel Footer */
 .advanced-panel-footer {
   padding: 16px 24px;

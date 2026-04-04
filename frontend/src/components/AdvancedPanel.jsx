@@ -15,6 +15,11 @@ const DEFAULT_SETTINGS = {
     endpointUrl: 'http://localhost:1234/v1',
     localModelName: '',
   },
+  throttle: {
+    maxConcurrent: 1,
+    delayBetweenRequests: 1.0,
+    requestTimeout: 300,
+  },
 };
 
 // Default model config
@@ -186,6 +191,32 @@ export default function AdvancedPanel({
         return newResults;
       });
     }
+  };
+
+  // Throttle handlers
+  const handleThrottleChange = (field, value) => {
+    setSettings(prev => ({
+      ...prev,
+      throttle: { ...prev.throttle, [field]: value },
+    }));
+  };
+
+  const THROTTLE_PRESETS = {
+    safe:     { maxConcurrent: 1, delayBetweenRequests: 2.0, requestTimeout: 300 },
+    balanced: { maxConcurrent: 2, delayBetweenRequests: 0.5, requestTimeout: 180 },
+    fast:     { maxConcurrent: 4, delayBetweenRequests: 0.0, requestTimeout: 120 },
+  };
+
+  const applyThrottlePreset = (name) => {
+    setSettings(prev => ({ ...prev, throttle: { ...THROTTLE_PRESETS[name] } }));
+  };
+
+  const isThrottlePreset = (name) => {
+    const p = THROTTLE_PRESETS[name];
+    const t = settings.throttle || {};
+    return t.maxConcurrent === p.maxConcurrent
+      && t.delayBetweenRequests === p.delayBetweenRequests
+      && t.requestTimeout === p.requestTimeout;
   };
 
   const testConnection = async (key, url, modelName) => {
@@ -561,6 +592,131 @@ export default function AdvancedPanel({
                     )}
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Performance & Throttling (LM Studio / Hybrid only) */}
+          {(settings.mode === 'lmstudio' || settings.mode === 'hybrid') && (
+            <div className="config-section">
+              <h3>Performance & Throttling</h3>
+              <p className="config-description">
+                Control CPU/RAM load on your laptop during local inference.
+                Local models are slow and resource-heavy — avoid freezing by limiting concurrent requests.
+              </p>
+
+              {/* Preset buttons */}
+              <div className="throttle-presets">
+                <span className="presets-label">Presets:</span>
+                <button
+                  className={`preset-btn ${isThrottlePreset('safe') ? 'active' : ''}`}
+                  onClick={() => applyThrottlePreset('safe')}
+                  title="1 request at a time, 2s between each — recommended for laptops"
+                  data-testid="preset-safe"
+                >
+                  Safe
+                </button>
+                <button
+                  className={`preset-btn ${isThrottlePreset('balanced') ? 'active' : ''}`}
+                  onClick={() => applyThrottlePreset('balanced')}
+                  title="2 concurrent requests, 0.5s between each"
+                  data-testid="preset-balanced"
+                >
+                  Balanced
+                </button>
+                <button
+                  className={`preset-btn ${isThrottlePreset('fast') ? 'active' : ''}`}
+                  onClick={() => applyThrottlePreset('fast')}
+                  title="All parallel — risk of freeze"
+                  data-testid="preset-fast"
+                >
+                  Fast
+                </button>
+              </div>
+
+              {/* Max concurrent slider */}
+              <div className="form-group">
+                <label>
+                  Concurrent requests: <strong>{settings.throttle?.maxConcurrent || 1}</strong>
+                  {(settings.throttle?.maxConcurrent || 1) === 1 && (
+                    <span className="badge-sequential">Sequential</span>
+                  )}
+                </label>
+                <input
+                  type="range"
+                  min="1"
+                  max="4"
+                  step="1"
+                  value={settings.throttle?.maxConcurrent || 1}
+                  onChange={e => handleThrottleChange('maxConcurrent', parseInt(e.target.value))}
+                  className="throttle-slider"
+                  data-testid="slider-max-concurrent"
+                />
+                <div className="slider-labels">
+                  <span>1 (sequential)</span>
+                  <span>2</span>
+                  <span>3</span>
+                  <span>4 (parallel)</span>
+                </div>
+                <span className="form-hint">
+                  {(settings.throttle?.maxConcurrent || 1) === 1
+                    ? "✅ Recommended — requests execute one by one. Slower but stable."
+                    : (settings.throttle?.maxConcurrent || 1) <= 2
+                    ? "⚠️ Moderate — monitor CPU temperature."
+                    : "⛔ Risk of freeze on laptops with large models."}
+                </span>
+              </div>
+
+              {/* Delay between requests */}
+              <div className="form-group">
+                <label>
+                  Delay between requests: <strong>{settings.throttle?.delayBetweenRequests || 1}s</strong>
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="5"
+                  step="0.5"
+                  value={settings.throttle?.delayBetweenRequests || 1}
+                  onChange={e => handleThrottleChange('delayBetweenRequests', parseFloat(e.target.value))}
+                  className="throttle-slider"
+                  data-testid="slider-delay"
+                />
+                <div className="slider-labels">
+                  <span>0s</span>
+                  <span>2.5s</span>
+                  <span>5s</span>
+                </div>
+                <span className="form-hint">
+                  Pause time between starting each request.
+                  Gives CPU time to breathe between inferences.
+                </span>
+              </div>
+
+              {/* Request timeout */}
+              <div className="form-group">
+                <label>
+                  Request timeout: <strong>{Math.floor((settings.throttle?.requestTimeout || 300) / 60)}min {(settings.throttle?.requestTimeout || 300) % 60}s</strong>
+                </label>
+                <input
+                  type="range"
+                  min="30"
+                  max="600"
+                  step="30"
+                  value={settings.throttle?.requestTimeout || 300}
+                  onChange={e => handleThrottleChange('requestTimeout', parseInt(e.target.value))}
+                  className="throttle-slider"
+                  data-testid="slider-timeout"
+                />
+                <div className="slider-labels">
+                  <span>30s</span>
+                  <span>5 min</span>
+                  <span>10 min</span>
+                </div>
+                <span className="form-hint">
+                  Max duration per model before giving up.
+                  Large models (7B+) can take 2-5 min on CPU.
+                </span>
               </div>
             </div>
           )}

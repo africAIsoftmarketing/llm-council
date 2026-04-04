@@ -6,9 +6,11 @@ from typing import List, Dict, Any, Optional
 try:
     from .config_manager import get_api_key, get_lm_studio_url_for_model
     from .config import LMSTUDIO_BASE_URL
+    from .load_balancer import get_throttle_config, execute_with_throttle
 except ImportError:
     from config_manager import get_api_key, get_lm_studio_url_for_model
     from config import LMSTUDIO_BASE_URL
+    from load_balancer import get_throttle_config, execute_with_throttle
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_LMSTUDIO_URL = "http://localhost:1234/v1"
@@ -107,7 +109,7 @@ async def query_lm_studio(
     base_url: str,
     model: str,
     messages: List[Dict[str, str]],
-    timeout: float = 120.0
+    timeout: float = 300.0    # 5 minutes for local models (they can be slow)
 ) -> Optional[Dict[str, Any]]:
     """
     Query an LM Studio server directly using OpenAI-compatible API.
@@ -259,7 +261,11 @@ async def query_models_parallel(
     advanced_config: Optional[Dict] = None
 ) -> Dict[str, Optional[Dict[str, Any]]]:
     """
-    Query multiple models in parallel.
+    Query multiple models with throttle-aware concurrency control.
+    
+    Uses sequential execution with delays for local LM Studio models
+    to prevent laptop freeze. Uses parallel execution for OpenRouter
+    cloud models.
 
     Args:
         models: List of OpenRouter model identifiers
@@ -269,13 +275,21 @@ async def query_models_parallel(
     Returns:
         Dict mapping model identifier to response dict (or None if failed)
     """
-    import asyncio
-
-    # Create tasks for all models
-    tasks = [query_model(model, messages, advanced_config=advanced_config) for model in models]
-
-    # Wait for all to complete
-    responses = await asyncio.gather(*tasks)
-
-    # Map models to their responses
-    return {model: response for model, response in zip(models, responses)}
+    # Get throttle configuration based on mode
+    throttle = get_throttle_config(advanced_config)
+    
+    mode = advanced_config.get('mode', 'openrouter') if advanced_config else 'openrouter'
+    if mode in ('lmstudio', 'hybrid'):
+        print(f"[LoadBalancer] Using throttled execution: max_concurrent={throttle.max_concurrent}, "
+              f"delay={throttle.delay_between_requests}s, timeout={throttle.request_timeout}s")
+    
+    # Build (model_id, coroutine) pairs
+    # Note: We create the coroutines here, they will be awaited by execute_with_throttle
+    tasks = [
+        (model, query_model(model, messages, advanced_config=advanced_config))
+        for model in models
+    ]
+    
+    # Execute with throttling
+    results = await execute_with_throttle(tasks, throttle)
+    return results

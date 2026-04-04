@@ -274,6 +274,7 @@ class AdvancedConfigRequest(BaseModel):
     openrouter: Optional[Dict[str, Any]] = None
     models: Optional[Dict[str, Any]] = None
     chairman: Optional[Dict[str, Any]] = None
+    throttle: Optional[Dict[str, Any]] = None
 
 
 @app.get("/api/config/advanced")

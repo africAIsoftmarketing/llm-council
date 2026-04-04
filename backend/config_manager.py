@@ -45,6 +45,18 @@ DEFAULT_CONFIG = {
     # instead of going through OpenRouter
     "lm_studio_urls": {},
     "advanced_config": {},
+    "throttle": {
+        "openrouter": {
+            "maxConcurrent": 4,
+            "delayBetweenRequests": 0.0,
+            "requestTimeout": 120.0
+        },
+        "lmstudio": {
+            "maxConcurrent": 1,
+            "delayBetweenRequests": 1.0,
+            "requestTimeout": 300.0
+        }
+    },
     "backend_port": 8001,
     "frontend_port": 5173,
     "auto_credit_reminder": True,
@@ -175,7 +187,7 @@ def update_config(updates: Dict[str, Any]) -> Dict[str, Any]:
     # Apply updates (only for allowed keys)
     allowed_keys = [
         "openrouter_api_key", "council_models", "chairman_model",
-        "lm_studio_urls", "advanced_config", "backend_port", "frontend_port", "auto_credit_reminder",
+        "lm_studio_urls", "advanced_config", "throttle", "backend_port", "frontend_port", "auto_credit_reminder",
         "credit_reminder_threshold", "document_settings",
         "storage_location", "theme"
     ]

@@ -308,6 +308,176 @@ class LLMCouncilAPITester:
         
         return False
 
+    def test_throttle_config_openrouter_mode(self):
+        """Test throttle config returns max_concurrent=4 for openrouter mode"""
+        openrouter_config = {
+            "mode": "openrouter",
+            "throttle": {
+                "maxConcurrent": 4,
+                "delayBetweenRequests": 0.0,
+                "requestTimeout": 120
+            }
+        }
+        
+        # Save config and test
+        success, response = self.run_test(
+            "Save OpenRouter Throttle Config",
+            "POST",
+            "api/config/advanced",
+            200,
+            data=openrouter_config
+        )
+        
+        if success:
+            # Verify the config was saved correctly
+            success, saved_config = self.run_test(
+                "Get Saved OpenRouter Config",
+                "GET",
+                "api/config/advanced",
+                200
+            )
+            
+            if success:
+                throttle = saved_config.get('throttle', {})
+                max_concurrent = throttle.get('maxConcurrent', 0)
+                if max_concurrent == 4:
+                    print(f"   ✅ OpenRouter mode throttle config correct: maxConcurrent={max_concurrent}")
+                    return True
+                else:
+                    print(f"   ❌ OpenRouter mode throttle config wrong: maxConcurrent={max_concurrent}, expected 4")
+                    return False
+        
+        return False
+
+    def test_throttle_config_lmstudio_mode(self):
+        """Test throttle config returns max_concurrent=1 for lmstudio mode by default"""
+        lmstudio_config = {
+            "mode": "lmstudio",
+            "models": {
+                "openai/gpt-4o": {
+                    "source": "lmstudio",
+                    "endpointUrl": "http://localhost:1234/v1",
+                    "localModelName": "gpt-4o"
+                }
+            },
+            "throttle": {
+                "maxConcurrent": 1,
+                "delayBetweenRequests": 1.0,
+                "requestTimeout": 300
+            }
+        }
+        
+        # Save config and test
+        success, response = self.run_test(
+            "Save LM Studio Throttle Config",
+            "POST",
+            "api/config/advanced",
+            200,
+            data=lmstudio_config
+        )
+        
+        if success:
+            # Verify the config was saved correctly
+            success, saved_config = self.run_test(
+                "Get Saved LM Studio Config",
+                "GET",
+                "api/config/advanced",
+                200
+            )
+            
+            if success:
+                throttle = saved_config.get('throttle', {})
+                max_concurrent = throttle.get('maxConcurrent', 0)
+                delay = throttle.get('delayBetweenRequests', 0)
+                timeout = throttle.get('requestTimeout', 0)
+                
+                if max_concurrent == 1 and delay == 1.0 and timeout == 300:
+                    print(f"   ✅ LM Studio mode throttle config correct: maxConcurrent={max_concurrent}, delay={delay}s, timeout={timeout}s")
+                    return True
+                else:
+                    print(f"   ❌ LM Studio mode throttle config wrong: maxConcurrent={max_concurrent}, delay={delay}, timeout={timeout}")
+                    return False
+        
+        return False
+
+    def test_throttle_presets(self):
+        """Test throttle preset configurations"""
+        # Test Safe preset
+        safe_config = {
+            "mode": "lmstudio",
+            "throttle": {
+                "maxConcurrent": 1,
+                "delayBetweenRequests": 2.0,
+                "requestTimeout": 300
+            }
+        }
+        
+        success, response = self.run_test(
+            "Save Safe Preset Config",
+            "POST",
+            "api/config/advanced",
+            200,
+            data=safe_config
+        )
+        
+        safe_test_passed = False
+        if success:
+            success, saved_config = self.run_test(
+                "Get Safe Preset Config",
+                "GET",
+                "api/config/advanced",
+                200
+            )
+            
+            if success:
+                throttle = saved_config.get('throttle', {})
+                if (throttle.get('maxConcurrent') == 1 and 
+                    throttle.get('delayBetweenRequests') == 2.0 and 
+                    throttle.get('requestTimeout') == 300):
+                    print(f"   ✅ Safe preset config correct")
+                    safe_test_passed = True
+                else:
+                    print(f"   ❌ Safe preset config wrong: {throttle}")
+        
+        # Test Fast preset
+        fast_config = {
+            "mode": "lmstudio",
+            "throttle": {
+                "maxConcurrent": 4,
+                "delayBetweenRequests": 0.0,
+                "requestTimeout": 120
+            }
+        }
+        
+        success, response = self.run_test(
+            "Save Fast Preset Config",
+            "POST",
+            "api/config/advanced",
+            200,
+            data=fast_config
+        )
+        
+        fast_test_passed = False
+        if success:
+            success, saved_config = self.run_test(
+                "Get Fast Preset Config",
+                "GET",
+                "api/config/advanced",
+                200
+            )
+            
+            if success:
+                throttle = saved_config.get('throttle', {})
+                if (throttle.get('maxConcurrent') == 4 and 
+                    throttle.get('delayBetweenRequests') == 0.0 and 
+                    throttle.get('requestTimeout') == 120):
+                    print(f"   ✅ Fast preset config correct")
+                    fast_test_passed = True
+                else:
+                    print(f"   ❌ Fast preset config wrong: {throttle}")
+        
+        return safe_test_passed and fast_test_passed
+
     def test_requires_openrouter_key_logic(self):
         """Test the requires_openrouter_key logic by testing different modes"""
         
@@ -437,13 +607,14 @@ def main():
     # Setup
     tester = LLMCouncilAPITester()
     
-    print("🚀 Starting LLM Council Bug Fix Tests")
+    print("🚀 Starting LLM Council Load Balancer & Throttling Tests")
     print(f"Testing against: {tester.base_url}")
-    print("\nTesting fixes for:")
-    print("1. API key guard should only block when OpenRouter is needed")
-    print("2. Title generation should use LM Studio when configured")
-    print("3. Title generation failures should be handled gracefully")
-    print("4. Storage paths should be displayed in Settings > Advanced")
+    print("\nTesting features:")
+    print("1. Load balancer module with ThrottleConfig, get_throttle_config, execute_with_throttle")
+    print("2. Throttle config returns correct values for different modes")
+    print("3. OpenRouter.py uses execute_with_throttle instead of asyncio.gather")
+    print("4. Throttle presets (Safe/Balanced/Fast) work correctly")
+    print("5. Advanced Panel shows/hides Performance & Throttling section based on mode")
     
     # Run tests
     print("\n" + "="*60)
@@ -463,6 +634,20 @@ def main():
     success, models = tester.test_get_available_models()
     if success:
         print(f"   Available models: {len(models.get('models', []))}")
+
+    print("\n" + "="*60)
+    print("THROTTLE CONFIG TESTS")
+    print("="*60)
+
+    # Test throttle config for different modes
+    if not tester.test_throttle_config_openrouter_mode():
+        print("❌ OpenRouter throttle config test failed")
+
+    if not tester.test_throttle_config_lmstudio_mode():
+        print("❌ LM Studio throttle config test failed")
+
+    if not tester.test_throttle_presets():
+        print("❌ Throttle presets test failed")
 
     print("\n" + "="*60)
     print("BUG FIX TESTS - API KEY GUARD")
