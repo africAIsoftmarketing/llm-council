@@ -115,20 +115,26 @@ async def query_lm_studio(
     Query an LM Studio server directly using OpenAI-compatible API.
     
     Args:
-        base_url: LM Studio server URL (e.g., http://localhost:1234/v1)
-        model: Model name/identifier to use
+        base_url: LM Studio server URL (e.g., http://localhost:1234/v1 or http://localhost:1234)
+        model: Model name/identifier to use (can be empty for auto-select)
         messages: List of message dicts with 'role' and 'content'
         timeout: Request timeout in seconds
     
     Returns:
         Response dict with 'content', or None if failed
     """
-    # Normalize URL
+    # Normalize URL - remove trailing slash
     base_url = base_url.rstrip('/')
-    if not base_url.endswith('/v1'):
-        base_url = base_url + '/v1'
     
-    api_url = f"{base_url}/chat/completions"
+    # Build the API URL - check if /v1 is already present
+    if base_url.endswith('/v1'):
+        api_url = f"{base_url}/chat/completions"
+    elif '/v1' in base_url:
+        # URL like http://localhost:1234/v1/something - use as-is + /chat/completions
+        api_url = f"{base_url}/chat/completions"
+    else:
+        # No /v1 in URL, add it
+        api_url = f"{base_url}/v1/chat/completions"
     
     headers = {
         "Content-Type": "application/json",
@@ -136,14 +142,17 @@ async def query_lm_studio(
     
     # Use model name as-is, or extract from path if it looks like provider/model
     model_name = model.split('/')[-1] if '/' in model else model
-    # If model is empty or 'default', let LM Studio auto-select
-    if not model_name or model_name == 'default':
+    # If model is empty, 'default', or 'local', use empty string for LM Studio auto-select
+    if not model_name or model_name in ('default', 'local'):
         model_name = ''
     
     payload = {
         "model": model_name,
         "messages": messages,
+        "stream": False,
     }
+    
+    print(f"[LM Studio] POST {api_url} | model='{model_name}' | messages={len(messages)}")
     
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -157,15 +166,25 @@ async def query_lm_studio(
             data = response.json()
             message = data['choices'][0]['message']
             
+            # LM Studio uses 'reasoning_content' not 'reasoning_details'
+            reasoning = message.get('reasoning_content') or message.get('reasoning_details')
+            
             return {
                 'content': message.get('content'),
-                'reasoning_details': message.get('reasoning_details'),
+                'reasoning_details': reasoning,
                 'source': 'lm_studio',
-                'lm_studio_url': base_url
+                'lm_studio_url': base_url,
+                'model_used': data.get('model', model_name),
             }
     
+    except httpx.TimeoutException:
+        print(f"[LM Studio] Timeout after {timeout}s for {api_url}")
+        return None
+    except httpx.HTTPStatusError as e:
+        print(f"[LM Studio] HTTP error {e.response.status_code} for {api_url}: {e.response.text[:200]}")
+        return None
     except Exception as e:
-        print(f"Error querying LM Studio at {api_url} for model {model}: {e}")
+        print(f"[LM Studio] Error querying {api_url} for model {model}: {e}")
         return None
 
 
@@ -283,12 +302,13 @@ async def query_models_parallel(
         print(f"[LoadBalancer] Using throttled execution: max_concurrent={throttle.max_concurrent}, "
               f"delay={throttle.delay_between_requests}s, timeout={throttle.request_timeout}s")
     
-    # Build (model_id, coroutine) pairs
-    # Note: We create the coroutines here, they will be awaited by execute_with_throttle
-    tasks = [
-        (model, query_model(model, messages, advanced_config=advanced_config))
-        for model in models
-    ]
+    # Create a factory function that returns a coroutine when called
+    # This ensures coroutines are created lazily inside execute_with_throttle
+    async def make_query(model_id: str):
+        return await query_model(model_id, messages, advanced_config=advanced_config)
+    
+    # Build (model_id, coroutine) pairs - coroutines created here
+    tasks = [(model, make_query(model)) for model in models]
     
     # Execute with throttling
     results = await execute_with_throttle(tasks, throttle)
