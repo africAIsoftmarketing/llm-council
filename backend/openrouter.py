@@ -169,8 +169,11 @@ async def query_lm_studio(
             # LM Studio uses 'reasoning_content' not 'reasoning_details'
             reasoning = message.get('reasoning_content') or message.get('reasoning_details')
             
+            content = message.get('content', '')
+            print(f"[LM Studio] Success: {api_url} | response_length={len(content)} chars")
+            
             return {
-                'content': message.get('content'),
+                'content': content,
                 'reasoning_details': reasoning,
                 'source': 'lm_studio',
                 'lm_studio_url': base_url,

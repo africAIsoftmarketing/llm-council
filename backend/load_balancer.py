@@ -64,6 +64,10 @@ async def execute_with_throttle(
     Uses a semaphore to limit concurrent executions and adds delays
     between starting each task to prevent overwhelming local resources.
     
+    Note: We don't use asyncio.wait_for here because httpx already handles
+    timeouts internally via the timeout parameter passed to query_lm_studio.
+    Using both creates conflicts where httpx completes but asyncio times out.
+    
     Args:
         tasks_with_keys: List of (key, coroutine) tuples
         config: Throttle configuration
@@ -82,10 +86,10 @@ async def execute_with_throttle(
         
         async with semaphore:
             try:
-                result = await asyncio.wait_for(coro, timeout=config.request_timeout)
-            except asyncio.TimeoutError:
-                print(f"[LoadBalancer] Timeout after {config.request_timeout}s for: {key}")
-                result = None
+                # Don't use asyncio.wait_for - httpx handles timeouts internally
+                # The timeout is passed via query_model -> query_lm_studio -> httpx.AsyncClient
+                result = await coro
+                print(f"[LoadBalancer] Completed: {key}")
             except Exception as e:
                 print(f"[LoadBalancer] Error for {key}: {e}")
                 result = None

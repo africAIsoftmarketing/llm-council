@@ -558,6 +558,7 @@ My question: {request.content}"""
             # Stage 1: Collect responses (with vision images and advanced config if available)
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
             stage1_results = await stage1_collect_responses(query_content, vision_images=vision_images if vision_images else None, advanced_config=request.advanced)
+            print(f"[Stage1] Completed with {len(stage1_results)} responses")
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
 
             # Stage 2: Collect rankings
