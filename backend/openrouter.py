@@ -152,7 +152,7 @@ async def query_lm_studio(
         "stream": False,
     }
     
-    print(f"[LM Studio] POST {api_url} | model='{model_name}' | messages={len(messages)}")
+    print(f"[LM Studio] POST {api_url} | model='{model_name}' | messages={len(messages)} | timeout={timeout}s")
     
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -302,14 +302,17 @@ async def query_models_parallel(
         print(f"[LoadBalancer] Using throttled execution: max_concurrent={throttle.max_concurrent}, "
               f"delay={throttle.delay_between_requests}s, timeout={throttle.request_timeout}s")
     
+    # Extract timeout from throttle config to pass to query_model
+    request_timeout = throttle.request_timeout
+    
     # Create a factory function that returns a coroutine when called
     # This ensures coroutines are created lazily inside execute_with_throttle
     async def make_query(model_id: str):
-        return await query_model(model_id, messages, advanced_config=advanced_config)
+        return await query_model(model_id, messages, timeout=request_timeout, advanced_config=advanced_config)
     
     # Build (model_id, coroutine) pairs - coroutines created here
     tasks = [(model, make_query(model)) for model in models]
     
-    # Execute with throttling
+    # Execute with throttling (asyncio.wait_for timeout is a safety net, httpx timeout does the real work)
     results = await execute_with_throttle(tasks, throttle)
     return results

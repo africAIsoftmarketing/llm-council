@@ -305,12 +305,19 @@ Title:"""
 
     messages = [{"role": "user", "content": title_prompt}]
 
+    # Get timeout from advanced config throttle settings, or use default
+    title_timeout = 60.0  # Default for title generation
+    if advanced_config:
+        throttle_cfg = advanced_config.get('throttle', {})
+        # Use half of the request timeout for title (it should be faster than full queries)
+        title_timeout = min(throttle_cfg.get('requestTimeout', 300) / 2, 120.0)
+
     # Choose title model based on advanced config
     if advanced_config and advanced_config.get('mode') in ('lmstudio', 'hybrid'):
         # Use first council model with its routing (LM Studio or OpenRouter)
         council_models = get_council_models()
         title_model = council_models[0] if council_models else "google/gemini-2.5-flash"
-        response = await query_model(title_model, messages, timeout=30.0, advanced_config=advanced_config)
+        response = await query_model(title_model, messages, timeout=title_timeout, advanced_config=advanced_config)
     else:
         # Default: use gemini-2.5-flash via OpenRouter (fast and cheap)
         response = await query_model("google/gemini-2.5-flash", messages, timeout=30.0)
