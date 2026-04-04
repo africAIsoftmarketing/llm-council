@@ -1,70 +1,67 @@
 # LLM Council - Product Requirements Document
 
 ## Original Problem Statement
-Application LLM Council avec panneau Advanced pour configurer les sources LLM (OpenRouter/LM Studio/Hybrid) avec URL par modèle et persistance backend.
+Application LLM Council avec panneau Advanced pour configurer les sources LLM (OpenRouter/LM Studio/Hybrid) avec URL par modèle, throttling pour éviter le freeze du laptop, et persistance backend.
 
 ## Architecture
 
 ### Frontend (React/Vite) - port 5173
-- `App.jsx` : État global, advancedSettings, gestion conversations
+- `App.jsx` : État global, advancedSettings
 - `api.js` : Client HTTP avec advanced config
-- `AdvancedPanel.jsx` : Configuration LLM avec URL par modèle
-- `Settings.jsx` : Configuration générale avec chemins de stockage dynamiques
+- `AdvancedPanel.jsx` : Configuration LLM + Performance & Throttling
+- `Settings.jsx` : Configuration générale avec chemins dynamiques
 - `Sidebar.jsx` : Navigation avec badge du mode actif
 
 ### Backend (Python/FastAPI) - port 8001
 - `main.py` : Routes avec guard intelligent `requires_openrouter_key()`
-- `openrouter.py` : Routing intelligent avec extraction URL par modèle
-- `council.py` : Orchestration 3 stages + `generate_conversation_title` avec routing
-- `config_manager.py` : Config avec `storage_paths`
+- `openrouter.py` : Routing intelligent avec throttling via `execute_with_throttle()`
+- `load_balancer.py` : Module throttling (ThrottleConfig, semaphore, delays)
+- `council.py` : Orchestration 3 stages + title generation avec routing
+- `config_manager.py` : Config avec `storage_paths` et `throttle`
 
-## Data Structure (Advanced Config)
+## Data Structures
 
+### Advanced Config
 ```json
 {
   "mode": "openrouter" | "lmstudio" | "hybrid",
   "openrouter": { "apiKey": "" },
-  "models": {
-    "openai/gpt-4o": {
-      "source": "openrouter" | "lmstudio",
-      "endpointUrl": "http://localhost:1234/v1",
-      "localModelName": "mistral-7b"
-    }
-  },
-  "chairman": { "source": "...", "endpointUrl": "...", "localModelName": "" }
+  "models": { "model-id": { "source": "...", "endpointUrl": "...", "localModelName": "" } },
+  "chairman": { "source": "...", "endpointUrl": "...", "localModelName": "" },
+  "throttle": { "maxConcurrent": 1, "delayBetweenRequests": 1.0, "requestTimeout": 300 }
 }
 ```
 
+### Throttle Presets
+- **Safe**: maxConcurrent=1, delay=2s, timeout=300s (recommandé pour laptops)
+- **Balanced**: maxConcurrent=2, delay=0.5s, timeout=180s
+- **Fast**: maxConcurrent=4, delay=0s, timeout=120s (risque de freeze)
+
 ## What's Been Implemented
 
-### 2026-04-03 - Bug Fixes Backend LM Studio
+### 2026-04-04 - Load Balancer & Throttling
 
-#### Bug 1: Guard API key ✅
-- Ajout fonction `requires_openrouter_key(advanced_config)` dans `main.py`
-- Modification des guards dans `send_message` et `send_message_stream`
-- En mode `lmstudio`, pas besoin de clé OpenRouter
-- Health check retourne `configured: true` si advanced_config présent
+#### New Module: `backend/load_balancer.py`
+- `ThrottleConfig` dataclass avec max_concurrent, delay_between_requests, request_timeout
+- `get_throttle_config()` extrait la config throttle selon le mode
+- `execute_with_throttle()` utilise semaphore + delays au lieu de asyncio.gather
 
-#### Bug 2: generate_conversation_title ✅
-- Modification pour accepter `advanced_config` parameter
-- En mode `lmstudio`/`hybrid`, utilise le premier modèle du conseil avec son routing
-- En mode `openrouter`, continue d'utiliser gemini-2.5-flash
+#### Modifications Backend
+- `openrouter.py`: `query_models_parallel()` utilise `execute_with_throttle()`
+- Timeout LM Studio augmenté à 300s (modèles locaux lents)
+- `config_manager.py`: ajout `throttle` dans DEFAULT_CONFIG et allowed_keys
 
-#### Bug 3: Title generation failure ✅
-- Ajout try/except autour de `title_task` dans event_generator
-- Si échec, utilise le contenu de la query comme titre fallback
-- L'échec de génération de titre n'interrompt plus le stream
-
-#### Feature: Storage paths dynamiques ✅
-- Ajout `storage_paths` dans réponse `/api/config`
-- Affichage des vrais chemins dans Settings > Advanced
-- Montre config_file, conversations_dir, documents_dir
+#### Modifications Frontend
+- `AdvancedPanel.jsx`: Section "Performance & Throttling" (visible en lmstudio/hybrid)
+- Presets: Safe, Balanced, Fast
+- Sliders: Concurrent requests (1-4), Delay (0-5s), Timeout (30s-10min)
+- Messages d'aide contextuels selon les valeurs
 
 ### Previous Implementations
-- Panneau Advanced avec 3 modes (OpenRouter/LM Studio/Hybrid)
-- URL par modèle au lieu d'URL globale
-- Persistance backend via `/api/config/advanced`
-- Badge du mode actif dans le header
+- Bug fixes: guard API key, generate_conversation_title, title_task isolation
+- Feature: storage_paths dynamiques
+- Refactoring: URL par modèle, persistance backend advanced config
+- Panneau Advanced avec 3 modes
 
 ## Prioritized Backlog
 
@@ -72,13 +69,13 @@ Application LLM Council avec panneau Advanced pour configurer les sources LLM (O
 - Aucun
 
 ### P1 (Important)
+- Indicateur throttle pendant les stages (ex: "Stage 1: 1/4 modèles")
 - Auto-complétion des modèles LM Studio après Test réussi
-- Indicateur source dans résultats de chaque stage
 
 ### P2 (Nice to have)
+- Monitoring CPU/RAM en temps réel
 - Import/export configuration
-- Preset configurations
 
 ## Next Tasks
 - Tester avec serveurs LM Studio réels
-- Documenter les 3 modes dans le README
+- Documenter les modes et presets dans le README
