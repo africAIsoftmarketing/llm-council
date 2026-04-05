@@ -1,95 +1,260 @@
-name: Build LLM Council Executable
+name: Build LLM Council Windows Installer
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ master, main, master_innosetup_lmstudioserver ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ master, main ]
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (ex: 2.1.0)'
+        required: false
+        default: '2.1.0'
 
 jobs:
-  build:
+  # ─── Job 1 : Build du frontend React ───────────────────────────────────────
+  build-frontend:
     runs-on: windows-latest
-
     steps:
-      # ── 1. Récupérer le code ──────────────────────────────────────────────
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # ── 2. Installer Python 3.10 (version du projet) ──────────────────────
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      # ── 3. Installer les dépendances backend ──────────────────────────────
-      # Le projet utilise pyproject.toml (pas requirements.txt)
-      - name: Install backend dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller
-          pip install fastapi "uvicorn[standard]" python-dotenv httpx pydantic
-
-      # ── 4. Builder le frontend (Vite + React) ─────────────────────────────
-      - name: Set up Node.js
+      - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: '20'
+          cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
 
-      - name: Build frontend
+      - name: Build frontend (Vite → dist/)
         working-directory: frontend
         run: npm run build
-        # Output dans frontend/dist/ (défaut Vite)
 
-      # ── 5. Compiler l'exécutable avec PyInstaller ─────────────────────────
-      # backend/main.py est le point d'entrée FastAPI (uvicorn)
-      # On embarque le frontend/dist dans l'exe
-      - name: Build executable with PyInstaller
-        run: |
-          python -m PyInstaller `
-            --onefile `
-            --name "LLM-Council" `
-            --add-data "frontend/dist;frontend/dist" `
-            --hidden-import "uvicorn.logging" `
-            --hidden-import "uvicorn.loops" `
-            --hidden-import "uvicorn.loops.auto" `
-            --hidden-import "uvicorn.protocols" `
-            --hidden-import "uvicorn.protocols.http" `
-            --hidden-import "uvicorn.protocols.http.auto" `
-            --hidden-import "uvicorn.lifespan" `
-            --hidden-import "uvicorn.lifespan.on" `
-            backend/main.py
-
-      # ── 6. Uploader l'artifact ────────────────────────────────────────────
-      - name: Upload executable
+      - name: Upload frontend dist
         uses: actions/upload-artifact@v4
         with:
-          name: LLM-Council-Windows
-          path: dist\LLM-Council.exe
-          retention-days: 30
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 1
 
-  # ── Release automatique sur tag v* ────────────────────────────────────────
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-
+  # ─── Job 2 : Préparer Python embarqué + librairies ────────────────────────
+  build-python:
+    runs-on: windows-latest
     steps:
-      - name: Download artifact
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Python 3.11 embeddable (64-bit)
+        shell: pwsh
+        run: |
+          $PY_VERSION = "3.11.9"
+          $PY_URL = "https://www.python.org/ftp/python/$PY_VERSION/python-$PY_VERSION-embed-amd64.zip"
+          $DEST = "installer\embedded-python"
+          New-Item -ItemType Directory -Force -Path $DEST | Out-Null
+          Invoke-WebRequest -Uri $PY_URL -OutFile "$DEST\python-embed.zip"
+          Expand-Archive -Path "$DEST\python-embed.zip" -DestinationPath $DEST -Force
+          Remove-Item "$DEST\python-embed.zip"
+
+      - name: Install pip into embedded Python
+        shell: pwsh
+        run: |
+          $DEST = "installer\embedded-python"
+          # Enable site-packages
+          $pthFile = Get-ChildItem "$DEST" -Filter "python*._pth" | Select-Object -First 1
+          (Get-Content $pthFile.FullName) -replace '#import site', 'import site' | Set-Content $pthFile.FullName
+          # Install pip
+          Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile "$DEST\get-pip.py"
+          & "$DEST\python.exe" "$DEST\get-pip.py" --no-warn-script-location
+          Remove-Item "$DEST\get-pip.py"
+
+      - name: Install Python packages
+        shell: pwsh
+        run: |
+          $PY = "installer\embedded-python\python.exe"
+          # Core packages (from pyproject.toml + requirements.txt)
+          & $PY -m pip install --no-warn-script-location `
+            "fastapi>=0.110.0" `
+            "uvicorn[standard]>=0.29.0" `
+            "python-dotenv>=1.0.0" `
+            "httpx>=0.27.0" `
+            "pydantic>=2.0.0" `
+            "python-multipart>=0.0.9" `
+            "aiofiles>=23.0.0" `
+            "PyPDF2>=3.0.0" `
+            "python-docx>=1.1.0" `
+            "python-pptx>=0.6.23" `
+            "Pillow>=10.0.0" `
+            "pystray>=0.19.0"
+
+      - name: Clean Python cache and test dirs (reduce size)
+        shell: pwsh
+        run: |
+          $SP = "installer\embedded-python\Lib\site-packages"
+          if (Test-Path $SP) {
+            # Remove test directories
+            Get-ChildItem -Path $SP -Directory -Recurse -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -in @('tests','test','testing','__pycache__') } |
+              ForEach-Object { Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+            # Remove compiled files
+            Get-ChildItem -Path $SP -Recurse -Include '*.pyc','*.pyo' -ErrorAction SilentlyContinue |
+              Remove-Item -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Upload embedded Python
+        uses: actions/upload-artifact@v4
+        with:
+          name: embedded-python
+          path: installer/embedded-python/
+          retention-days: 1
+
+  # ─── Job 3 : Compiler l'installeur Inno Setup ─────────────────────────────
+  build-installer:
+    runs-on: windows-latest
+    needs: [build-frontend, build-python]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download frontend dist artifact
         uses: actions/download-artifact@v4
         with:
-          name: LLM-Council-Windows
+          name: frontend-dist
+          path: frontend/dist/
+
+      - name: Download embedded Python artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: embedded-python
+          path: installer/embedded-python/
+
+      - name: Set version number
+        shell: pwsh
+        run: |
+          $VERSION = "${{ github.event.inputs.version || '2.1.0' }}"
+          # Inject version into .iss file
+          (Get-Content installer\inno-setup\llm-council-installer.iss) `
+            -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"$VERSION`"" |
+            Set-Content installer\inno-setup\llm-council-installer.iss
+          echo "VERSION=$VERSION" >> $env:GITHUB_ENV
+
+      - name: Setup Python for PyInstaller (launcher compilation)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Generate fallback icon if missing
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "installer\assets" | Out-Null
+          if (-not (Test-Path "installer\assets\icon.ico")) {
+            Write-Host "No icon.ico found - generating placeholder icon"
+            pip install pillow --quiet
+            python -c @"
+          from PIL import Image, ImageDraw, ImageFont
+          img = Image.new('RGBA', (256, 256), (74, 144, 226, 255))
+          draw = ImageDraw.Draw(img)
+          draw.ellipse([20, 20, 236, 236], fill=(255, 255, 255, 220))
+          # Draw 'LLC' text
+          try:
+              font = ImageFont.truetype('arial.ttf', 60)
+          except:
+              font = ImageFont.load_default()
+          draw.text((128, 128), 'LLC', fill=(74, 144, 226, 255), anchor='mm', font=font)
+          img.save('installer/assets/icon.ico', format='ICO', sizes=[(256,256),(128,128),(64,64),(32,32),(16,16)])
+          print('Icon generated successfully.')
+          "@
+          } else {
+            Write-Host "icon.ico found - using existing."
+          }
+
+      - name: Compile launcher to LLMCouncil.exe
+        shell: pwsh
+        run: |
+          pip install pyinstaller pystray pillow --quiet
+          New-Item -ItemType Directory -Force -Path "launcher" | Out-Null
+          pyinstaller `
+            --onefile `
+            --noconsole `
+            --name "LLMCouncil" `
+            --icon "installer\assets\icon.ico" `
+            launcher\launcher.py
+          # Verify
+          if (-not (Test-Path "dist\LLMCouncil.exe")) {
+            throw "LLMCouncil.exe not found after PyInstaller"
+          }
+          # Copy for .iss to find
+          Copy-Item "dist\LLMCouncil.exe" "launcher\LLMCouncil.exe"
+          Write-Host "LLMCouncil.exe compiled successfully"
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: |
+          $url = "https://files.jrsoftware.org/is/6/innosetup-6.3.3.exe"
+          Invoke-WebRequest -Uri $url -OutFile "innosetup-installer.exe"
+          Start-Process -FilePath "innosetup-installer.exe" -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
+          Remove-Item "innosetup-installer.exe"
+
+      - name: Create installer output directory
+        run: New-Item -ItemType Directory -Force -Path installer\output
+
+      - name: Compile installer with Inno Setup
+        shell: pwsh
+        run: |
+          $ISCC = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          $ISS  = "installer\inno-setup\llm-council-installer.iss"
+          & $ISCC $ISS
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed (exit $LASTEXITCODE)" }
+
+      - name: Verify installer was created
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "installer\output\*.exe" | Select-Object -First 1
+          if (-not $installer) { throw "No installer .exe found in installer\output\" }
+          Write-Host "Installer created: $($installer.Name) ($([math]::Round($installer.Length/1MB, 1)) MB)"
+          echo "INSTALLER_PATH=$($installer.FullName)" >> $env:GITHUB_ENV
+          echo "INSTALLER_NAME=$($installer.Name)" >> $env:GITHUB_ENV
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LLMCouncil-Windows-Installer
+          path: installer/output/*.exe
+          retention-days: 30
+
+  # ─── Job 4 : Release GitHub automatique sur tag v* ────────────────────────
+  release:
+    needs: build-installer
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Download installer
+        uses: actions/download-artifact@v4
+        with:
+          name: LLMCouncil-Windows-Installer
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: "LLM-Council.exe"
+          files: "*.exe"
           generate_release_notes: true
+          body: |
+            ## LLM Council Windows Installer
+
+            ### Installation
+            1. Télécharger `LLMCouncil-Setup-*.exe`
+            2. Double-cliquer et suivre l'assistant d'installation
+            3. Un raccourci **LLM Council** apparaîtra sur le bureau
+            4. Double-cliquer le raccourci pour démarrer le serveur et ouvrir l'interface
+
+            ### Prérequis
+            - Windows 10/11 64-bit
+            - Aucune installation Python requise (Python 3.11 embarqué inclus)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -6,7 +6,7 @@
 #define MyAppVersion "2.1.0"
 #define MyAppPublisher "LLM Council"
 #define MyAppURL "https://github.com/karpathy/llm-council"
-#define MyAppExeName "LLM Council.exe"
+#define MyAppExeName "LLMCouncil.exe"
 
 [Setup]
 ; Basic installer information
@@ -21,11 +21,10 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
-; LicenseFile=..\docs\LICENSE.txt
 InfoBeforeFile=..\docs\README_INSTALLER.txt
 OutputDir=..\output
 OutputBaseFilename=LLMCouncil-Setup-{#MyAppVersion}
-; SetupIconFile=..\assets\icon.ico
+SetupIconFile=..\assets\icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -42,25 +41,30 @@ DiskSliceSize=2100000000
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 6.1; Check: not IsAdminInstallMode
-Name: "startupicon"; Description: "Start LLM Council when Windows starts"; GroupDescription: "Startup Options:"; Flags: unchecked
+; Desktop icon checked by default (removed Flags: unchecked)
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+Name: "startupicon"; Description: "Démarrer LLM Council au lancement de Windows"; GroupDescription: "Options de démarrage:"; Flags: unchecked
 
 [Files]
+; Launcher EXE wrapper (compiled by PyInstaller in CI)
+Source: "..\..\launcher\LLMCouncil.exe"; DestDir: "{app}"; Flags: ignoreversion
+
+; Application icon
+Source: "..\assets\icon.ico"; DestDir: "{app}"; Flags: ignoreversion
+
 ; Backend Python code
 Source: "..\..\backend\*"; DestDir: "{app}\backend"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,*.pyc,*.pyo,.env"
 
-; Frontend built files (run 'npm run build' in frontend folder first)
-; NOTE: Comment this line if frontend/dist doesn't exist
-Source: "..\..\frontend\dist\*"; DestDir: "{app}\frontend"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+; Frontend built files - CORRECTED: destination is frontend/dist/ (backend serves from this path)
+Source: "..\..\frontend\dist\*"; DestDir: "{app}\frontend\dist"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
-; Embedded Python (run download_python.bat first)
-; Exclude test directories, caches, and unnecessary files to avoid long path issues and reduce installer size
+; Embedded Python (prepared by CI workflow)
 Source: "..\embedded-python\python.exe"; DestDir: "{app}\python"; Flags: ignoreversion
 Source: "..\embedded-python\python*.dll"; DestDir: "{app}\python"; Flags: ignoreversion
-Source: "..\embedded-python\*.pyd"; DestDir: "{app}\python"; Flags: ignoreversion
+Source: "..\embedded-python\*.pyd"; DestDir: "{app}\python"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\embedded-python\python*._pth"; DestDir: "{app}\python"; Flags: ignoreversion
 Source: "..\embedded-python\Lib\*"; DestDir: "{app}\python\Lib"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,*.pyc,*.pyo,tests,test,testing,*.egg,*-stubs"
 Source: "..\embedded-python\DLLs\*"; DestDir: "{app}\python\DLLs"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
@@ -70,31 +74,39 @@ Source: "..\embedded-python\Scripts\*"; DestDir: "{app}\python\Scripts"; Flags: 
 Source: "..\scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; Configuration
-Source: "..\config\default_config.json"; DestDir: "{app}\config"; Flags: ignoreversion
+Source: "..\config\default_config.json"; DestDir: "{app}\config"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; Documentation  
-Source: "..\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\scripts\launch.bat"; WorkingDir: "{app}"
+; Menu Démarrer - points to LLMCouncil.exe
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\icon.ico"
+Name: "{group}\Arrêter LLM Council"; Filename: "{app}\scripts\stop_services.bat"; WorkingDir: "{app}"; IconFilename: "{sys}\shell32.dll"; IconIndex: 131
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\scripts\launch.bat"; WorkingDir: "{app}"; Tasks: desktopicon
-Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\scripts\launch.bat"; WorkingDir: "{app}"; Tasks: startupicon
+
+; Bureau - checked by default (no Flags: unchecked)
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\icon.ico"; Tasks: desktopicon
+
+; Démarrage automatique Windows (optional)
+Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: startupicon
 
 [Run]
-; Post-installation: Install Python packages (already done if using embedded python with packages)
-; Filename: "{app}\scripts\setup.bat"; Parameters: ""; StatusMsg: "Installing Python dependencies..."; Flags: runhidden waituntilterminated
+; Post-installation: Install Python dependencies (if needed)
+Filename: "{app}\scripts\setup.bat"; StatusMsg: "Installation des dépendances Python..."; Flags: runhidden waituntilterminated skipifsourcedoesntexist
+
 ; Launch application after install
-Filename: "{app}\scripts\launch.bat"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent shellexec
+Filename: "{app}\{#MyAppExeName}"; Description: "Lancer LLM Council maintenant"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 ; Stop services before uninstall
-Filename: "{app}\scripts\stop_services.bat"; Flags: runhidden waituntilterminated
+Filename: "{app}\scripts\stop_services.bat"; Flags: runhidden waituntilterminated skipifsourcedoesntexist
 
 [UninstallDelete]
-; Clean up data directory (optional - ask user)
+; Clean up data directory
 Type: filesandordirs; Name: "{app}\data"
 Type: filesandordirs; Name: "{app}\logs"
+Type: filesandordirs; Name: "{app}\__pycache__"
 
 [Registry]
 ; Add to PATH (optional)
@@ -123,8 +135,8 @@ end;
 procedure InitializeWizard;
 begin
   // Create progress page for dependency installation
-  ProgressPage := CreateOutputProgressPage('Installing Dependencies',
-    'Please wait while LLM Council installs required components...');
+  ProgressPage := CreateOutputProgressPage('Installation des dépendances',
+    'Veuillez patienter pendant l''installation des composants requis...');
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -133,7 +145,7 @@ begin
   // Check for minimum Windows version
   if not IsWin64 then
   begin
-    Result := 'LLM Council requires a 64-bit version of Windows.';
+    Result := 'LLM Council nécessite une version 64-bit de Windows.';
     exit;
   end;
 end;
@@ -147,13 +159,13 @@ begin
     // Show progress during post-install
     ProgressPage.Show;
     try
-      ProgressPage.SetText('Installing Python packages...', '');
+      ProgressPage.SetText('Installation des packages Python...', '');
       ProgressPage.SetProgress(0, 100);
       
       // Run pip install
       ProgressPage.SetProgress(50, 100);
       
-      ProgressPage.SetText('Configuration complete!', '');
+      ProgressPage.SetText('Configuration terminée!', '');
       ProgressPage.SetProgress(100, 100);
     finally
       ProgressPage.Hide;
@@ -165,7 +177,7 @@ function InitializeUninstall(): Boolean;
 var
   MsgResult: Integer;
 begin
-  MsgResult := MsgBox('Do you want to keep your conversation history and settings?',
+  MsgResult := MsgBox('Voulez-vous conserver votre historique de conversations et vos paramètres?',
     mbConfirmation, MB_YESNOCANCEL);
   
   case MsgResult of
