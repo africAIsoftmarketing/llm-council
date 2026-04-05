@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 
 class LLMCouncilAPITester:
-    def __init__(self, base_url="https://llm-council-advanced.preview.emergentagent.com"):
+    def __init__(self, base_url="https://inno-build.preview.emergentagent.com"):
         self.base_url = base_url
         self.tests_run = 0
         self.tests_passed = 0

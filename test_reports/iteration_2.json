@@ -11,7 +11,7 @@
         "issue": "CORS/blocked request error prevents frontend from loading",
         "details": "Frontend displays 'Blocked request. This host is not allowed' error, preventing any UI testing",
         "fix_priority": "CRITICAL",
-        "affected_url": "https://llm-council-advanced.preview.emergentagent.com"
+        "affected_url": "https://inno-build.preview.emergentagent.com"
       }
     ],
     "integration_issues": [
