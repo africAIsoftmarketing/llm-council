@@ -6,7 +6,6 @@
 #define MyAppVersion "2.1.0"
 #define MyAppPublisher "LLM Council"
 #define MyAppURL "https://github.com/karpathy/llm-council"
-#define MyAppExeName "LLMCouncil.exe"
 
 [Setup]
 ; Basic installer information
@@ -31,10 +30,10 @@ WizardStyle=modern
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
-UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallDisplayIcon={app}\scripts\launch.bat
 UninstallDisplayName={#MyAppName}
 
-; Disk spanning (for large installers)
+; Disk spanning (will be removed by CI patch step)
 DiskSpanning=yes
 SlicesPerDisk=1
 DiskSliceSize=2100000000
@@ -44,21 +43,15 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 
 [Tasks]
-; Desktop icon checked by default (removed Flags: unchecked)
+; Desktop icon checked by default (no Flags: unchecked)
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "startupicon"; Description: "Démarrer LLM Council au lancement de Windows"; GroupDescription: "Options de démarrage:"; Flags: unchecked
+Name: "startupicon"; Description: "Start LLM Council when Windows starts"; GroupDescription: "Startup Options:"; Flags: unchecked
 
 [Files]
-; Launcher EXE wrapper (compiled by PyInstaller in CI)
-Source: "..\..\launcher\LLMCouncil.exe"; DestDir: "{app}"; Flags: ignoreversion
-
-; Application icon
-Source: "..\assets\icon.ico"; DestDir: "{app}"; Flags: ignoreversion
-
 ; Backend Python code
 Source: "..\..\backend\*"; DestDir: "{app}\backend"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,*.pyc,*.pyo,.env"
 
-; Frontend built files - CORRECTED: destination is frontend/dist/ (backend serves from this path)
+; Frontend built files - destination is frontend/dist/ (backend serves from this path)
 Source: "..\..\frontend\dist\*"; DestDir: "{app}\frontend\dist"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; Embedded Python (prepared by CI workflow)
@@ -79,24 +72,23 @@ Source: "..\config\default_config.json"; DestDir: "{app}\config"; Flags: ignorev
 ; Documentation  
 Source: "..\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
+; Application icon
+Source: "..\assets\icon.ico"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+
 [Icons]
-; Menu Démarrer - points to LLMCouncil.exe
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\icon.ico"
-Name: "{group}\Arrêter LLM Council"; Filename: "{app}\scripts\stop_services.bat"; WorkingDir: "{app}"; IconFilename: "{sys}\shell32.dll"; IconIndex: 131
+; Menu Démarrer - points to launch.bat
+Name: "{group}\{#MyAppName}"; Filename: "{app}\scripts\launch.bat"; WorkingDir: "{app}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 
 ; Bureau - checked by default (no Flags: unchecked)
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\icon.ico"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\scripts\launch.bat"; WorkingDir: "{app}"; Tasks: desktopicon
 
 ; Démarrage automatique Windows (optional)
-Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: startupicon
+Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\scripts\launch.bat"; WorkingDir: "{app}"; Tasks: startupicon
 
 [Run]
-; Post-installation: Install Python dependencies (if needed)
-Filename: "{app}\scripts\setup.bat"; StatusMsg: "Installation des dépendances Python..."; Flags: runhidden waituntilterminated skipifsourcedoesntexist
-
-; Launch application after install
-Filename: "{app}\{#MyAppExeName}"; Description: "Lancer LLM Council maintenant"; Flags: nowait postinstall skipifsilent
+; Launch application after install via launch.bat
+Filename: "{app}\scripts\launch.bat"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent shellexec
 
 [UninstallRun]
 ; Stop services before uninstall
@@ -151,20 +143,12 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
-var
-  ResultCode: Integer;
 begin
   if CurStep = ssPostInstall then
   begin
     // Show progress during post-install
     ProgressPage.Show;
     try
-      ProgressPage.SetText('Installation des packages Python...', '');
-      ProgressPage.SetProgress(0, 100);
-      
-      // Run pip install
-      ProgressPage.SetProgress(50, 100);
-      
       ProgressPage.SetText('Configuration terminée!', '');
       ProgressPage.SetProgress(100, 100);
     finally

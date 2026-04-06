@@ -1,60 +1,61 @@
 # LLM Council - Windows Installer PRD
 
 ## Problem Statement
-Le workflow GitHub Actions actuel produisait un seul fichier `LLM-Council.exe` (PyInstaller) sans installation propre. L'objectif était de créer un vrai installeur Windows avec Inno Setup.
+Le workflow GitHub Actions produisait un `LLM-Council.exe` via PyInstaller (exécutable portable) au lieu d'un vrai installeur Windows. Le fichier `workflows/innobuild.yml` était ignoré car mal placé (GitHub n'exécute que `.github/workflows/`).
 
 ## What's Been Implemented (Jan 2026)
 
-### 1. `workflows/innobuild.yml` - REFACTORÉ
-- **Job 1 (build-frontend)**: Build React/Vite → `frontend/dist/`
-- **Job 2 (build-python)**: Python 3.11 embarqué + pip + packages (fastapi, uvicorn, pystray, etc.)
-- **Job 3 (build-installer)**: Compilation `launcher.py` → `LLMCouncil.exe` + Inno Setup → `LLMCouncil-Setup-2.1.0.exe`
-- **Job 4 (release)**: Création automatique de release GitHub sur tag `v*`
+### Correction 1 : `.github/workflows/build.yml` - REMPLACÉ
+Workflow complet Inno Setup (copié de la branche OCR qui fonctionne) :
+- Build frontend React/Vite → `frontend/dist/`
+- Télécharge Python 3.11 embeddable + pip + packages
+- Prune des fichiers inutiles (tests, __pycache__)
+- Génère icône placeholder si absente
+- Installe Inno Setup 6.7.1
+- Patch le .iss (supprime disk spanning)
+- Compile → `installer/output/LLMCouncil-Setup-2.1.0.exe`
+- Upload artifact + release GitHub sur tag v*
 
-### 2. `installer/inno-setup/llm-council-installer.iss` - CORRIGÉ
-- ✅ Chemin frontend corrigé: `frontend/dist` au lieu de `frontend`
-- ✅ Raccourci bureau **coché par défaut** (retiré `Flags: unchecked`)
-- ✅ Icônes pointant vers `LLMCouncil.exe` au lieu de `launch.bat`
+### Correction 2 : `installer/inno-setup/llm-council-installer.iss` - CORRIGÉ
+- ✅ Raccourcis pointent vers `launch.bat` (pas de launcher PyInstaller)
+- ✅ Raccourci bureau **coché par défaut** (sans `Flags: unchecked`)
+- ✅ Chemin frontend corrigé : `frontend/dist`
 - ✅ Support multilingue (anglais + français)
-- ✅ Désinstalleur avec nettoyage
 
-### 3. `launcher/launcher.py` - CRÉÉ
-- Lanceur léger avec systray (pystray + Pillow)
-- Démarre uvicorn en arrière-plan (fenêtre cachée)
-- Ouvre le navigateur sur `http://localhost:8001`
-- Menu systray: "Ouvrir LLM Council" / "Arrêter le serveur"
-- Gestion d'erreur avec messagebox tkinter
+### Fichiers supprimés (nettoyage)
+- `workflows/innobuild.yml` - Mauvais emplacement, ignoré par GitHub
+- `launcher/launcher.py` - Plus nécessaire (launch.bat suffit)
 
-### 4. `installer/docs/README_INSTALLER.txt` - CRÉÉ
-- Page d'information affichée avant l'installation
-
-## Architecture
+## Architecture installée
 ```
 C:\Program Files\LLM Council\
-├── LLMCouncil.exe          # Launcher (systray)
-├── icon.ico                # Application icon
+├── scripts/
+│   ├── launch.bat          ← Raccourci bureau pointe ici
+│   ├── setup.bat
+│   └── stop_services.bat
 ├── backend/                # FastAPI code
 ├── frontend/dist/          # React built files
 ├── python/                 # Embedded Python 3.11
 │   ├── python.exe
 │   ├── Lib/site-packages/
 │   └── Scripts/
-├── scripts/                # Batch scripts (setup, stop)
 ├── config/
 └── docs/
 ```
 
-## Testing Status
-- Workflow YAML: Syntaxe validée
-- Launcher Python: Lint passé ✅
-- Script Inno Setup: Syntaxe validée
+## Flux utilisateur
+1. Double-clic sur `LLMCouncil-Setup-2.1.0.exe`
+2. Wizard d'installation → `C:\Program Files\LLM Council\`
+3. Raccourci "LLM Council" créé sur le bureau (coché par défaut)
+4. Double-clic raccourci → `launch.bat` démarre uvicorn + ouvre navigateur
 
 ## Next Action Items
-- [ ] Pousser les changements sur GitHub (branche `master_innosetup_lmstudioserver`)
-- [ ] Vérifier que le workflow GitHub Actions s'exécute correctement
-- [ ] Tester l'installeur généré sur une machine Windows
+- [x] Remplacer `.github/workflows/build.yml`
+- [x] Corriger `.iss` (raccourcis vers launch.bat)
+- [x] Supprimer fichiers inutiles
+- [ ] Pousser sur GitHub via "Save to Github"
+- [ ] Vérifier exécution du workflow sur `master_innosetup_lmstudioserver`
 
 ## Backlog
-- P1: Ajouter une vraie icône personnalisée (remplacer le fallback généré)
-- P2: Option pour choisir le port au premier lancement
+- P1: Ajouter vraie icône personnalisée
 - P2: Auto-update depuis GitHub Releases

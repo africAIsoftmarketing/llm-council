@@ -1,38 +1,25 @@
-name: Build LLM Council Executable
+name: Build LLM Council Installer
 
 on:
   push:
-    branches: [ master, master_innosetup_lmstudioserver ]
+    branches: [master_innosetup_lmstudioserver]
+    tags:
+      - "v*"
   pull_request:
-    branches: [ master, master_innosetup_lmstudioserver ]
+    branches: [master_innosetup_lmstudioserver]
   workflow_dispatch:
 
 jobs:
   build:
+    name: Build Windows Installer
     runs-on: windows-latest
 
     steps:
-      # ── 1. Récupérer le code ──────────────────────────────────────────────
-      - name: Checkout code
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Installer Python 3.11 ──────────────────────────────────────────
-      # Plusieurs dépendances (networkx==3.6, torch==2.9.1, scipy==1.16.3)
-      # requièrent Python >=3.11
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      # ── 3. Installer toutes les dépendances backend ───────────────────────
-      - name: Install backend dependencies
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller
-          pip install -r requirements.txt
-
-      # ── 4. Builder le frontend (Vite + React) ─────────────────────────────
+      # ── 2. Node.js (frontend) ──────────────────────────────────────────────
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -40,89 +27,196 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
+      # ── 3. Build React frontend ────────────────────────────────────────────
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
 
-      - name: Build frontend
+      - name: Build frontend (Vite)
         working-directory: frontend
         run: npm run build
 
-      # ── 5. Créer le fichier d'entrée run.py ───────────────────────────────
-      # backend/main.py utilise des imports relatifs (from . import ...)
-      # PyInstaller ne peut pas compiler un package directement
-      - name: Create PyInstaller entry point (run.py)
-        shell: python
+      # ── 4. Embedded Python setup ───────────────────────────────────────────
+      - name: Download Python 3.11 embeddable
+        shell: pwsh
         run: |
-          content = """import sys
-          import os
+          $PythonDir = "installer\embedded-python"
+          New-Item -ItemType Directory -Path $PythonDir -Force | Out-Null
 
-          sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+          $PythonUrl  = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip"
+          $ZipPath    = "$PythonDir\python-embed.zip"
+          $GetPipUrl  = "https://bootstrap.pypa.io/get-pip.py"
+          $GetPipPath = "$PythonDir\get-pip.py"
+          $PythonExe  = "$PythonDir\python.exe"
 
-          import uvicorn
+          Write-Host "Downloading Python embeddable..."
+          Invoke-WebRequest -Uri $PythonUrl -OutFile $ZipPath
+          Expand-Archive -Path $ZipPath -DestinationPath $PythonDir -Force
+          Remove-Item $ZipPath
 
-          if __name__ == "__main__":
-              uvicorn.run("backend.main:app", host="0.0.0.0", port=8001)
-          """
-          with open("run.py", "w") as f:
-              f.write(content)
+          # Enable site-packages so pip-installed packages are importable
+          $PthFile = Get-ChildItem $PythonDir -Filter "python3*._pth" | Select-Object -First 1
+          if ($PthFile) {
+            (Get-Content $PthFile.FullName) -replace '#import site','import site' |
+              Set-Content $PthFile.FullName
+          }
 
-      # ── 6. Compiler l'exécutable avec PyInstaller ─────────────────────────
-      - name: Build executable with PyInstaller
+          Write-Host "Installing pip..."
+          Invoke-WebRequest -Uri $GetPipUrl -OutFile $GetPipPath
+          & $PythonExe $GetPipPath --no-warn-script-location
+          Remove-Item $GetPipPath
+
+      - name: Install Python runtime dependencies
+        shell: pwsh
         run: |
-          python -m PyInstaller `
-            --onefile `
-            --name "LLM-Council" `
-            --add-data "frontend/dist;frontend/dist" `
-            --add-data "backend;backend" `
-            --hidden-import "backend.main" `
-            --hidden-import "backend.storage" `
-            --hidden-import "backend.council" `
-            --hidden-import "backend.config" `
-            --hidden-import "backend.config_manager" `
-            --hidden-import "backend.openrouter" `
-            --hidden-import "backend.document_processor" `
-            --hidden-import "backend.server" `
-            --hidden-import "uvicorn.logging" `
-            --hidden-import "uvicorn.loops" `
-            --hidden-import "uvicorn.loops.auto" `
-            --hidden-import "uvicorn.protocols" `
-            --hidden-import "uvicorn.protocols.http" `
-            --hidden-import "uvicorn.protocols.http.auto" `
-            --hidden-import "uvicorn.lifespan" `
-            --hidden-import "uvicorn.lifespan.on" `
-            --hidden-import "PyPDF2" `
-            --hidden-import "docx" `
-            --hidden-import "pptx" `
-            --hidden-import "PIL" `
-            --hidden-import "easyocr" `
-            --hidden-import "pytesseract" `
-            run.py
+          $PythonExe = "installer\embedded-python\python.exe"
 
-      # ── 7. Uploader l'artifact ────────────────────────────────────────────
-      - name: Upload executable
+          & $PythonExe -m pip install --upgrade pip --no-warn-script-location
+
+          $packages = @(
+            "fastapi",
+            "uvicorn[standard]",
+            "python-dotenv",
+            "httpx",
+            "pydantic",
+            "PyPDF2",
+            "python-docx",
+            "python-pptx",
+            "Pillow",
+            "python-multipart",
+            "aiofiles",
+            "pystray"
+          )
+
+          foreach ($pkg in $packages) {
+            Write-Host "Installing $pkg ..."
+            & $PythonExe -m pip install $pkg --no-warn-script-location
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to install package: $pkg"
+            }
+          }
+
+      - name: Prune unnecessary files from embedded Python
+        shell: pwsh
+        run: |
+          $SitePackages = "installer\embedded-python\Lib\site-packages"
+          if (-not (Test-Path $SitePackages)) { exit 0 }
+
+          $testDirs = @("tests","test","testing","__pycache__")
+          foreach ($name in $testDirs) {
+            Get-ChildItem -Path $SitePackages -Directory -Recurse -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -eq $name } |
+              ForEach-Object { Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+          }
+
+          Get-ChildItem -Path $SitePackages -Recurse -Include "*.pyc","*.pyo" -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+
+          Write-Host "Prune complete."
+
+      # ── 5. Prepare assets & docs ───────────────────────────────────────────
+      - name: Prepare installer assets and docs
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "installer\assets"  | Out-Null
+          New-Item -ItemType Directory -Force -Path "installer\docs"    | Out-Null
+          New-Item -ItemType Directory -Force -Path "installer\output"  | Out-Null
+
+          $readmePath = "installer\docs\README_INSTALLER.txt"
+          if (-not (Test-Path $readmePath)) {
+            "LLM Council - Windows Installer`nSee https://github.com/africAIsoftmarketing/llm-council" |
+              Set-Content $readmePath
+          }
+
+          # Create a minimal valid ICO placeholder if no icon exists
+          $iconPath = "installer\assets\icon.ico"
+          if (-not (Test-Path $iconPath)) {
+            Write-Host "icon.ico not found - generating placeholder"
+            [byte[]]$ico = (
+              0,0,1,0,1,0,1,1,0,0,1,0,4,0,
+              40,0,0,0,22,0,0,0,40,0,0,0,1,0,0,0,
+              2,0,0,0,1,0,4,0,0,0,0,0,8,0,0,0,
+              0,0,0,0,0,0,0,0,16,0,0,0,0,0,0,0,
+              255,255,255,0,240,0,0,0,0,0,0,0
+            )
+            $assetsDir = (Resolve-Path "installer\assets").Path
+            [System.IO.File]::WriteAllBytes((Join-Path $assetsDir "icon.ico"), $ico)
+          }
+
+      # ── 6. Install Inno Setup ──────────────────────────────────────────────
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: |
+          $url      = "https://github.com/jrsoftware/issrc/releases/download/is-6_7_1/innosetup-6.7.1.exe"
+          $installer = "$env:TEMP\innosetup.exe"
+          Write-Host "Downloading Inno Setup..."
+          Invoke-WebRequest -Uri $url -OutFile $installer
+          Write-Host "Installing Inno Setup (silent)..."
+          Start-Process -FilePath $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
+          Write-Host "Inno Setup installed."
+
+      # ── 7. Patch ISS ──────────────────────────────────────────────────────
+      - name: Patch ISS - disable disk spanning, fix paths
+        shell: pwsh
+        run: |
+          $IssFile = "installer\inno-setup\llm-council-installer.iss"
+          $content = Get-Content $IssFile -Raw
+
+          # Remove disk spanning directives (produces single self-contained .exe)
+          $content = $content -replace '(?m)^\s*DiskSpanning\s*=.*(\r?\n)', ''
+          $content = $content -replace '(?m)^\s*SlicesPerDisk\s*=.*(\r?\n)', ''
+          $content = $content -replace '(?m)^\s*DiskSliceSize\s*=.*(\r?\n)', ''
+          $content = $content -replace '(?m)^\s*;\s*Disk spanning.*(\r?\n)', ''
+
+          Set-Content $IssFile $content -NoNewline
+          Write-Host "ISS patched."
+
+      # ── 8. Compile installer ───────────────────────────────────────────────
+      - name: Compile installer with Inno Setup
+        shell: pwsh
+        run: |
+          $ISCC = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $ISCC)) {
+            $ISCC = Get-ChildItem "C:\Program Files (x86)\Inno Setup*" -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue |
+                    Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $ISCC) { throw "ISCC.exe not found." }
+
+          $IssFile = "installer\inno-setup\llm-council-installer.iss"
+          Write-Host "Running ISCC..."
+          & $ISCC $IssFile
+          if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup compilation failed (exit code $LASTEXITCODE)"
+          }
+          Write-Host "Compilation succeeded."
+
+      # ── 9. Verify & upload ─────────────────────────────────────────────────
+      - name: Verify installer output
+        shell: pwsh
+        run: |
+          $output = Get-ChildItem "installer\output" -Filter "*.exe" -ErrorAction SilentlyContinue
+          if ($output.Count -eq 0) {
+            throw "No .exe found in installer\output"
+          }
+          foreach ($f in $output) {
+            $sizeMB = [math]::Round($f.Length / 1MB, 1)
+            Write-Host "Found installer: $($f.Name)  ($sizeMB MB)"
+          }
+
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LLM-Council-Windows
-          path: dist\LLM-Council.exe
+          name: LLMCouncil-Windows-Installer
+          path: installer/output/*.exe
           retention-days: 30
+          if-no-files-found: error
 
-  # ── Release automatique sur tag v* ────────────────────────────────────────
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: LLM-Council-Windows
-
-      - name: Create GitHub Release
+      # ── 10. Attach to GitHub Release (tag builds only) ────────────────────
+      - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: "LLM-Council.exe"
+          files: installer/output/*.exe
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
