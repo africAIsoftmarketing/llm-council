@@ -92,7 +92,7 @@ Filename: "{app}\scripts\launch.bat"; Description: "{cm:LaunchProgram,{#StringCh
 
 [UninstallRun]
 ; Stop services before uninstall
-Filename: "{app}\scripts\stop_services.bat"; Flags: runhidden waituntilterminated skipifsourcedoesntexist
+Filename: "{app}\scripts\stop_services.bat"; Flags: runhidden waituntilterminated
 
 [UninstallDelete]
 ; Clean up data directory
