@@ -5,9 +5,6 @@ on:
     branches:
       - master_innosetup_lmstudioserver
       - master_innosetup_lmstudioserver_v1
-      - master_innosetup_lmstudioserver_v2
-      - master_innosetup_lmstudioserver_v3
-      - master_innosetup_lmstudioserver_v4
     tags:
       - "v*"
   pull_request:
