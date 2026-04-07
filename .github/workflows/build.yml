@@ -66,6 +66,34 @@ jobs:
           & $PythonExe $GetPipPath --no-warn-script-location
           Remove-Item $GetPipPath
 
+      - name: Copy SSL DLLs to embedded Python
+        shell: pwsh
+        run: |
+          # Python embeddable doesn't include SSL DLLs - copy from system Python
+          $EmbedDir = "installer\embedded-python"
+          $SysPythonDir = (Get-Command python).Source | Split-Path
+          
+          # Find and copy SSL DLLs (libssl-3.dll, libcrypto-3.dll for Python 3.11+)
+          $sslDlls = @("libssl-3-x64.dll", "libcrypto-3-x64.dll", "libssl-3.dll", "libcrypto-3.dll")
+          foreach ($dll in $sslDlls) {
+            $srcPath = Join-Path $SysPythonDir $dll
+            if (Test-Path $srcPath) {
+              Write-Host "Copying $dll to embedded Python..."
+              Copy-Item $srcPath $EmbedDir -Force
+            }
+          }
+          
+          # Also check DLLs subdirectory
+          $dllsDir = Join-Path $SysPythonDir "DLLs"
+          if (Test-Path $dllsDir) {
+            Get-ChildItem $dllsDir -Filter "*.dll" | ForEach-Object {
+              Write-Host "Copying $($_.Name) from DLLs..."
+              Copy-Item $_.FullName $EmbedDir -Force
+            }
+          }
+          
+          Write-Host "SSL DLLs copied."
+
       - name: Install Python runtime dependencies
         shell: pwsh
         run: |
