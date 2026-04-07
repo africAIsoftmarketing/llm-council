@@ -19,7 +19,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Node.js (frontend) ──────────────────────────────────────────────
+      # ── 2. Setup Python 3.11 (needed to copy SSL DLLs) ─────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ── 3. Node.js (frontend) ──────────────────────────────────────────────
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -27,7 +33,7 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      # ── 3. Build React frontend ────────────────────────────────────────────
+      # ── 4. Build React frontend ────────────────────────────────────────────
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
@@ -36,7 +42,7 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      # ── 4. Embedded Python setup ───────────────────────────────────────────
+      # ── 5. Embedded Python setup ───────────────────────────────────────────
       - name: Download Python 3.11 embeddable
         shell: pwsh
         run: |
@@ -71,28 +77,46 @@ jobs:
         run: |
           # Python embeddable doesn't include SSL DLLs - copy from system Python
           $EmbedDir = "installer\embedded-python"
-          $SysPythonDir = (Get-Command python).Source | Split-Path
+          $SysPythonPath = (Get-Command python).Source
+          $SysPythonDir = Split-Path $SysPythonPath
           
-          # Find and copy SSL DLLs (libssl-3.dll, libcrypto-3.dll for Python 3.11+)
-          $sslDlls = @("libssl-3-x64.dll", "libcrypto-3-x64.dll", "libssl-3.dll", "libcrypto-3.dll")
-          foreach ($dll in $sslDlls) {
-            $srcPath = Join-Path $SysPythonDir $dll
-            if (Test-Path $srcPath) {
-              Write-Host "Copying $dll to embedded Python..."
-              Copy-Item $srcPath $EmbedDir -Force
-            }
+          Write-Host "System Python directory: $SysPythonDir"
+          Write-Host "Embedded Python directory: $EmbedDir"
+          
+          # List all DLLs in system Python dir for debugging
+          Write-Host "=== DLLs in system Python root ==="
+          Get-ChildItem $SysPythonDir -Filter "*.dll" | ForEach-Object { Write-Host $_.Name }
+          
+          # Copy all DLLs from system Python root (includes libssl, libcrypto, etc.)
+          Get-ChildItem $SysPythonDir -Filter "*.dll" | ForEach-Object {
+            Write-Host "Copying $($_.Name)..."
+            Copy-Item $_.FullName $EmbedDir -Force
           }
           
-          # Also check DLLs subdirectory
+          # Copy all .pyd files from DLLs subdirectory (includes _ssl.pyd, _hashlib.pyd)
           $dllsDir = Join-Path $SysPythonDir "DLLs"
           if (Test-Path $dllsDir) {
-            Get-ChildItem $dllsDir -Filter "*.dll" | ForEach-Object {
+            Write-Host "=== Files in DLLs subdirectory ==="
+            Get-ChildItem $dllsDir | ForEach-Object { Write-Host $_.Name }
+            
+            # Copy all DLLs and PYD files
+            Get-ChildItem $dllsDir -Include "*.dll","*.pyd" -Recurse | ForEach-Object {
               Write-Host "Copying $($_.Name) from DLLs..."
               Copy-Item $_.FullName $EmbedDir -Force
             }
           }
           
-          Write-Host "SSL DLLs copied."
+          # Verify SSL DLLs are present
+          Write-Host "=== Verifying SSL files in embedded Python ==="
+          $requiredFiles = @("libssl-3.dll", "libcrypto-3.dll", "_ssl.pyd")
+          foreach ($file in $requiredFiles) {
+            $path = Join-Path $EmbedDir $file
+            if (Test-Path $path) {
+              Write-Host "OK: $file found"
+            } else {
+              Write-Host "WARNING: $file NOT found"
+            }
+          }
 
       - name: Install Python runtime dependencies
         shell: pwsh
