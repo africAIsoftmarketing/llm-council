@@ -2,11 +2,17 @@ name: Build LLM Council Installer
 
 on:
   push:
-    branches: [master_innosetup_lmstudioserver]
+    branches:
+      - master_innosetup_lmstudioserver
+      - master_innosetup_lmstudioserver_v1
+      - master_innosetup_lmstudioserver_v2
+      - master_innosetup_lmstudioserver_v3
+      - master_innosetup_lmstudioserver_v4
     tags:
       - "v*"
   pull_request:
-    branches: [master_innosetup_lmstudioserver]
+    branches:
+      - master_innosetup_lmstudioserver_v1
   workflow_dispatch:
 
 jobs:
@@ -19,13 +25,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Setup Python 3.11 (needed to copy SSL DLLs) ─────────────────────
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      # ── 3. Node.js (frontend) ──────────────────────────────────────────────
+      # ── 2. Node.js + frontend ─────────────────────────────────────────────
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -33,7 +33,6 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      # ── 4. Build React frontend ────────────────────────────────────────────
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
@@ -42,106 +41,111 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      # ── 5. Embedded Python setup ───────────────────────────────────────────
+      # ── 3. Telecharger Python 3.11 embarque ───────────────────────────────
       - name: Download Python 3.11 embeddable
         shell: pwsh
         run: |
           $PythonDir = "installer\embedded-python"
           New-Item -ItemType Directory -Path $PythonDir -Force | Out-Null
 
-          $PythonUrl  = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip"
-          $ZipPath    = "$PythonDir\python-embed.zip"
-          $GetPipUrl  = "https://bootstrap.pypa.io/get-pip.py"
-          $GetPipPath = "$PythonDir\get-pip.py"
-          $PythonExe  = "$PythonDir\python.exe"
+          $PythonUrl = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip"
+          $ZipPath   = "$PythonDir\python-embed.zip"
 
-          Write-Host "Downloading Python embeddable..."
+          Write-Host "Downloading Python 3.11 embeddable..."
           Invoke-WebRequest -Uri $PythonUrl -OutFile $ZipPath
           Expand-Archive -Path $ZipPath -DestinationPath $PythonDir -Force
           Remove-Item $ZipPath
 
-          # Create Lib directory for site-packages
-          New-Item -ItemType Directory -Path "$PythonDir\Lib\site-packages" -Force | Out-Null
-
-          # Configure python311._pth to include all required paths
-          $PthFile = Get-ChildItem $PythonDir -Filter "python3*._pth" | Select-Object -First 1
-          if ($PthFile) {
-            Write-Host "Configuring $($PthFile.Name)..."
-            # Write correct paths - this is critical for embedded Python
-            @"
-python311.zip
-.
-Lib
-Lib\site-packages
-import site
-"@ | Set-Content $PthFile.FullName -Encoding ASCII
-            Write-Host "._pth file configured:"
-            Get-Content $PthFile.FullName
+          Write-Host "=== Contenu embedded-python ==="
+          Get-ChildItem $PythonDir | ForEach-Object {
+            Write-Host "  $($_.Name)  ($([math]::Round($_.Length/1KB,1)) KB)"
           }
 
-          Write-Host "Installing pip..."
-          Invoke-WebRequest -Uri $GetPipUrl -OutFile $GetPipPath
-          & $PythonExe $GetPipPath --no-warn-script-location
-          Remove-Item $GetPipPath
-          
-          # Verify Python works
-          Write-Host "Verifying Python installation..."
-          & $PythonExe -c "import sys; print('Python OK:', sys.version)"
+          if (-not (Test-Path "$PythonDir\python311.zip")) {
+            throw "FATAL: python311.zip introuvable."
+          }
 
-      - name: Copy SSL DLLs to embedded Python
+      # ── 4. Extraire la stdlib sur disque ──────────────────────────────────
+      #
+      # CAUSE RACINE DU BUG "No module named encodings" :
+      #
+      # Le Python embarque stocke sa stdlib dans python311.zip.
+      # En usage normal (sans PYTHONHOME externe), Python lit ce zip
+      # directement via zipimport — ca fonctionne.
+      #
+      # Mais launch.bat definit PYTHONPATH=%BACKEND_DIR% ce qui place
+      # Python en mode "installation standard". Dans ce mode, Python
+      # cherche les modules dans Lib/ SUR DISQUE, pas dans python311.zip.
+      # Or Lib/ ne contient que site-packages — pas encodings, pas os.py.
+      # Resultat : crash immediat avant meme de demarrer.
+      #
+      # SOLUTION : extraire python311.zip dans Lib/ au moment du build.
+      # Les modules seront disponibles sur disque quel que soit le mode
+      # de demarrage de Python (avec ou sans PYTHONHOME/PYTHONPATH).
+      #
+      - name: Extract stdlib from python311.zip into Lib/
         shell: pwsh
         run: |
-          # Python embeddable doesn't include SSL DLLs - copy from system Python
-          $EmbedDir = "installer\embedded-python"
-          $SysPythonPath = (Get-Command python).Source
-          $SysPythonDir = Split-Path $SysPythonPath
-          
-          Write-Host "System Python directory: $SysPythonDir"
-          Write-Host "Embedded Python directory: $EmbedDir"
-          
-          # List all DLLs in system Python dir for debugging
-          Write-Host "=== DLLs in system Python root ==="
-          Get-ChildItem $SysPythonDir -Filter "*.dll" | ForEach-Object { Write-Host $_.Name }
-          
-          # Copy all DLLs from system Python root (includes libssl, libcrypto, etc.)
-          Get-ChildItem $SysPythonDir -Filter "*.dll" | ForEach-Object {
-            Write-Host "Copying $($_.Name)..."
-            Copy-Item $_.FullName $EmbedDir -Force
+          $PythonDir = "installer\embedded-python"
+          $StdlibZip = "$PythonDir\python311.zip"
+          $LibDir    = "$PythonDir\Lib"
+
+          New-Item -ItemType Directory -Path $LibDir -Force | Out-Null
+
+          Write-Host "Extracting stdlib into Lib/..."
+          Expand-Archive -Path $StdlibZip -DestinationPath $LibDir -Force
+
+          # Verifications critiques
+          if (-not (Test-Path "$LibDir\encodings")) {
+            throw "FATAL: Lib\encodings absent — Python ne demarrera pas."
           }
-          
-          # Copy all .pyd files from DLLs subdirectory (includes _ssl.pyd, _hashlib.pyd)
-          $dllsDir = Join-Path $SysPythonDir "DLLs"
-          if (Test-Path $dllsDir) {
-            Write-Host "=== Files in DLLs subdirectory ==="
-            Get-ChildItem $dllsDir | ForEach-Object { Write-Host $_.Name }
-            
-            # Copy all DLLs and PYD files
-            Get-ChildItem $dllsDir -Include "*.dll","*.pyd" -Recurse | ForEach-Object {
-              Write-Host "Copying $($_.Name) from DLLs..."
-              Copy-Item $_.FullName $EmbedDir -Force
-            }
-          }
-          
-          # Verify SSL DLLs are present
-          Write-Host "=== Verifying SSL files in embedded Python ==="
-          $requiredFiles = @("libssl-3.dll", "libcrypto-3.dll", "_ssl.pyd")
-          foreach ($file in $requiredFiles) {
-            $path = Join-Path $EmbedDir $file
-            if (Test-Path $path) {
-              Write-Host "OK: $file found"
-            } else {
-              Write-Host "WARNING: $file NOT found"
-            }
+          if (-not (Test-Path "$LibDir\os.py")) {
+            throw "FATAL: Lib\os.py absent — stdlib incomplete."
           }
 
-      - name: Install Python runtime dependencies
+          $count = (Get-ChildItem $LibDir -File).Count
+          Write-Host "OK: Stdlib extraite ($count fichiers dans Lib/)"
+
+      # ── 5. Patcher le .pth ────────────────────────────────────────────────
+      - name: Patch python._pth
+        shell: pwsh
+        run: |
+          $PythonDir = "installer\embedded-python"
+          $PthFile = Get-ChildItem $PythonDir -Filter "python3*._pth" | Select-Object -First 1
+          if (-not $PthFile) { throw "FATAL: python3*._pth introuvable." }
+
+          # Pointer explicitement vers Lib/ sur disque
+          # Lib/ est maintenant extrait et contient toute la stdlib
+          $newPth = "python311.zip`r`n.`r`nLib`r`nLib\site-packages`r`nDLLs`r`nimport site"
+          Set-Content $PthFile.FullName $newPth
+
+          Write-Host "Contenu du .pth apres patch:"
+          Get-Content $PthFile.FullName | ForEach-Object { Write-Host "  $_" }
+
+      # ── 6. Installer pip ──────────────────────────────────────────────────
+      - name: Install pip
+        shell: pwsh
+        run: |
+          $PythonExe  = "installer\embedded-python\python.exe"
+          $GetPipPath = "installer\embedded-python\get-pip.py"
+
+          Invoke-WebRequest -Uri "https://bootstrap.pypa.io/get-pip.py" -OutFile $GetPipPath
+          & $PythonExe $GetPipPath --no-warn-script-location
+          if ($LASTEXITCODE -ne 0) { throw "pip installation echouee." }
+          Remove-Item $GetPipPath
+
+          # Test critique : Python doit trouver encodings
+          & $PythonExe -c "import sys, encodings, os; print('Python OK:', sys.version)"
+          if ($LASTEXITCODE -ne 0) {
+            throw "FATAL: Python ne peut pas importer encodings."
+          }
+
+      # ── 7. Installer les packages ─────────────────────────────────────────
+      - name: Install Python packages
         shell: pwsh
         run: |
           $PythonExe = "installer\embedded-python\python.exe"
-          $PythonDir = "installer\embedded-python"
-
-          # Install pip to Lib\site-packages
-          & $PythonExe -m pip install --upgrade pip --no-warn-script-location --target "$PythonDir\Lib\site-packages"
+          & $PythonExe -m pip install --upgrade pip --no-warn-script-location
 
           $packages = @(
             "fastapi",
@@ -159,54 +163,84 @@ import site
           )
 
           foreach ($pkg in $packages) {
-            Write-Host "Installing $pkg ..."
-            & $PythonExe -m pip install $pkg --no-warn-script-location --target "$PythonDir\Lib\site-packages"
-            if ($LASTEXITCODE -ne 0) {
-              throw "Failed to install package: $pkg"
-            }
+            Write-Host "Installing $pkg..."
+            & $PythonExe -m pip install $pkg --no-warn-script-location
+            if ($LASTEXITCODE -ne 0) { throw "Echec: $pkg" }
           }
-          
-          # Verify uvicorn is importable
-          Write-Host "=== Verifying installation ==="
-          & $PythonExe -c "import uvicorn; print('uvicorn OK:', uvicorn.__version__)"
-          & $PythonExe -c "import fastapi; print('fastapi OK:', fastapi.__version__)"
 
-      - name: Prune unnecessary files from embedded Python
+          & $PythonExe -c "import fastapi, uvicorn, httpx, pydantic; print('Packages OK')"
+          if ($LASTEXITCODE -ne 0) { throw "Verification packages echouee." }
+
+      # ── 8. Nettoyer bytecodes et tests ────────────────────────────────────
+      - name: Prune bytecode and tests
         shell: pwsh
         run: |
-          $SitePackages = "installer\embedded-python\Lib\site-packages"
-          if (-not (Test-Path $SitePackages)) { exit 0 }
-
-          $testDirs = @("tests","test","testing","__pycache__")
-          foreach ($name in $testDirs) {
-            Get-ChildItem -Path $SitePackages -Directory -Recurse -ErrorAction SilentlyContinue |
+          $LibDir = "installer\embedded-python\Lib"
+          foreach ($name in @("__pycache__","tests","test","testing")) {
+            Get-ChildItem -Path $LibDir -Directory -Recurse -ErrorAction SilentlyContinue |
               Where-Object { $_.Name -eq $name } |
               ForEach-Object { Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
           }
-
-          Get-ChildItem -Path $SitePackages -Recurse -Include "*.pyc","*.pyo" -ErrorAction SilentlyContinue |
+          Get-ChildItem -Path $LibDir -Recurse -Include "*.pyc","*.pyo" -ErrorAction SilentlyContinue |
             Remove-Item -Force -ErrorAction SilentlyContinue
+          Write-Host "Nettoyage termine."
 
-          Write-Host "Prune complete."
+      # ── 9. Corriger launch.bat ────────────────────────────────────────────
+      #
+      # launch.bat original : set "PYTHONPATH=%BACKEND_DIR%"
+      # Ce PYTHONPATH ecrase la detection de la stdlib.
+      # Il faut inclure Lib/ ET Lib/site-packages dans PYTHONPATH.
+      #
+      - name: Fix launch.bat PYTHONPATH
+        shell: pwsh
+        run: |
+          $LaunchBat = "installer\scripts\launch.bat"
+          $content = Get-Content $LaunchBat -Raw
 
-      # ── 5. Prepare assets & docs ───────────────────────────────────────────
+          # Remplacer la ligne PYTHONPATH defectueuse
+          $oldLine = 'set "PYTHONPATH=%BACKEND_DIR%"'
+          $newLine = 'set "PYTHONPATH=%PYTHON_DIR%\Lib;%PYTHON_DIR%\Lib\site-packages;%BACKEND_DIR%"'
+
+          if ($content -like "*$oldLine*") {
+            $content = $content.Replace($oldLine, $newLine)
+            Set-Content $LaunchBat $content -NoNewline
+            Write-Host "launch.bat corrige : PYTHONPATH inclut Lib/ et Lib/site-packages."
+          } else {
+            Write-Host "AVERTISSEMENT: Ligne PYTHONPATH non trouvee dans launch.bat."
+            Write-Host "Lignes PYTHON dans launch.bat:"
+            ($content -split "`n") | Where-Object { $_ -match "PYTHON" } |
+              ForEach-Object { Write-Host "  $_" }
+          }
+
+      # ── 10. Patcher le .iss ───────────────────────────────────────────────
+      - name: Patch ISS - disable disk spanning
+        shell: pwsh
+        run: |
+          $IssFile = "installer\inno-setup\llm-council-installer.iss"
+          $content = Get-Content $IssFile -Raw
+
+          $content = $content -replace '(?m)^\s*DiskSpanning\s*=.*(\r?\n)', ''
+          $content = $content -replace '(?m)^\s*SlicesPerDisk\s*=.*(\r?\n)', ''
+          $content = $content -replace '(?m)^\s*DiskSliceSize\s*=.*(\r?\n)', ''
+          $content = $content -replace '(?m)^\s*;\s*Disk spanning.*(\r?\n)', ''
+
+          Set-Content $IssFile $content -NoNewline
+          Write-Host "ISS patche."
+
+      # ── 11. Assets et docs ────────────────────────────────────────────────
       - name: Prepare installer assets and docs
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path "installer\assets"  | Out-Null
-          New-Item -ItemType Directory -Force -Path "installer\docs"    | Out-Null
-          New-Item -ItemType Directory -Force -Path "installer\output"  | Out-Null
+          New-Item -ItemType Directory -Force -Path "installer\assets" | Out-Null
+          New-Item -ItemType Directory -Force -Path "installer\docs"   | Out-Null
+          New-Item -ItemType Directory -Force -Path "installer\output" | Out-Null
 
-          $readmePath = "installer\docs\README_INSTALLER.txt"
-          if (-not (Test-Path $readmePath)) {
+          if (-not (Test-Path "installer\docs\README_INSTALLER.txt")) {
             "LLM Council - Windows Installer`nSee https://github.com/africAIsoftmarketing/llm-council" |
-              Set-Content $readmePath
+              Set-Content "installer\docs\README_INSTALLER.txt"
           }
 
-          # Create a minimal valid ICO placeholder if no icon exists
-          $iconPath = "installer\assets\icon.ico"
-          if (-not (Test-Path $iconPath)) {
-            Write-Host "icon.ico not found - generating placeholder"
+          if (-not (Test-Path "installer\assets\icon.ico")) {
             [byte[]]$ico = (
               0,0,1,0,1,0,1,1,0,0,1,0,4,0,
               40,0,0,0,22,0,0,0,40,0,0,0,1,0,0,0,
@@ -214,39 +248,23 @@ import site
               0,0,0,0,0,0,0,0,16,0,0,0,0,0,0,0,
               255,255,255,0,240,0,0,0,0,0,0,0
             )
-            $assetsDir = (Resolve-Path "installer\assets").Path
-            [System.IO.File]::WriteAllBytes((Join-Path $assetsDir "icon.ico"), $ico)
+            [System.IO.File]::WriteAllBytes(
+              (Join-Path (Resolve-Path "installer\assets").Path "icon.ico"), $ico
+            )
+            Write-Host "Icone placeholder generee."
           }
 
-      # ── 6. Install Inno Setup ──────────────────────────────────────────────
+      # ── 12. Inno Setup 6.7.1 ──────────────────────────────────────────────
       - name: Install Inno Setup 6
         shell: pwsh
         run: |
-          $url      = "https://github.com/jrsoftware/issrc/releases/download/is-6_7_1/innosetup-6.7.1.exe"
+          $url = "https://github.com/jrsoftware/issrc/releases/download/is-6_7_1/innosetup-6.7.1.exe"
           $installer = "$env:TEMP\innosetup.exe"
-          Write-Host "Downloading Inno Setup..."
           Invoke-WebRequest -Uri $url -OutFile $installer
-          Write-Host "Installing Inno Setup (silent)..."
           Start-Process -FilePath $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
-          Write-Host "Inno Setup installed."
+          Write-Host "Inno Setup 6.7.1 installe."
 
-      # ── 7. Patch ISS ──────────────────────────────────────────────────────
-      - name: Patch ISS - disable disk spanning, fix paths
-        shell: pwsh
-        run: |
-          $IssFile = "installer\inno-setup\llm-council-installer.iss"
-          $content = Get-Content $IssFile -Raw
-
-          # Remove disk spanning directives (produces single self-contained .exe)
-          $content = $content -replace '(?m)^\s*DiskSpanning\s*=.*(\r?\n)', ''
-          $content = $content -replace '(?m)^\s*SlicesPerDisk\s*=.*(\r?\n)', ''
-          $content = $content -replace '(?m)^\s*DiskSliceSize\s*=.*(\r?\n)', ''
-          $content = $content -replace '(?m)^\s*;\s*Disk spanning.*(\r?\n)', ''
-
-          Set-Content $IssFile $content -NoNewline
-          Write-Host "ISS patched."
-
-      # ── 8. Compile installer ───────────────────────────────────────────────
+      # ── 13. Compilation ───────────────────────────────────────────────────
       - name: Compile installer with Inno Setup
         shell: pwsh
         run: |
@@ -255,27 +273,21 @@ import site
             $ISCC = Get-ChildItem "C:\Program Files (x86)\Inno Setup*" -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue |
                     Select-Object -First 1 -ExpandProperty FullName
           }
-          if (-not $ISCC) { throw "ISCC.exe not found." }
+          if (-not $ISCC) { throw "ISCC.exe introuvable." }
 
-          $IssFile = "installer\inno-setup\llm-council-installer.iss"
-          Write-Host "Running ISCC..."
-          & $ISCC $IssFile
+          & $ISCC "installer\inno-setup\llm-council-installer.iss"
           if ($LASTEXITCODE -ne 0) {
-            throw "Inno Setup compilation failed (exit code $LASTEXITCODE)"
+            throw "Compilation Inno Setup echouee (code $LASTEXITCODE)"
           }
-          Write-Host "Compilation succeeded."
 
-      # ── 9. Verify & upload ─────────────────────────────────────────────────
+      # ── 14. Verification et upload ────────────────────────────────────────
       - name: Verify installer output
         shell: pwsh
         run: |
           $output = Get-ChildItem "installer\output" -Filter "*.exe" -ErrorAction SilentlyContinue
-          if ($output.Count -eq 0) {
-            throw "No .exe found in installer\output"
-          }
+          if ($output.Count -eq 0) { throw "Aucun .exe dans installer\output" }
           foreach ($f in $output) {
-            $sizeMB = [math]::Round($f.Length / 1MB, 1)
-            Write-Host "Found installer: $($f.Name)  ($sizeMB MB)"
+            Write-Host "Installeur pret: $($f.Name) ($([math]::Round($f.Length/1MB,1)) MB)"
           }
 
       - name: Upload installer artifact
@@ -286,7 +298,6 @@ import site
           retention-days: 30
           if-no-files-found: error
 
-      # ── 10. Attach to GitHub Release (tag builds only) ────────────────────
       - name: Upload to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
