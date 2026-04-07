@@ -57,8 +57,10 @@ Source: "..\..\frontend\dist\*"; DestDir: "{app}\frontend\dist"; Flags: ignoreve
 ; Embedded Python (prepared by CI workflow)
 Source: "..\embedded-python\python.exe"; DestDir: "{app}\python"; Flags: ignoreversion
 Source: "..\embedded-python\python*.dll"; DestDir: "{app}\python"; Flags: ignoreversion
+Source: "..\embedded-python\python311.zip"; DestDir: "{app}\python"; Flags: ignoreversion
 Source: "..\embedded-python\*.pyd"; DestDir: "{app}\python"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\embedded-python\python*._pth"; DestDir: "{app}\python"; Flags: ignoreversion
+Source: "..\embedded-python\*.dll"; DestDir: "{app}\python"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "..\embedded-python\Lib\*"; DestDir: "{app}\python\Lib"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "__pycache__,*.pyc,*.pyo,tests,test,testing,*.egg,*-stubs"
 Source: "..\embedded-python\DLLs\*"; DestDir: "{app}\python\DLLs"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 Source: "..\embedded-python\Scripts\*"; DestDir: "{app}\python\Scripts"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist; Excludes: "__pycache__,*.pyc"

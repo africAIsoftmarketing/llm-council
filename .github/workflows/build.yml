@@ -60,17 +60,33 @@ jobs:
           Expand-Archive -Path $ZipPath -DestinationPath $PythonDir -Force
           Remove-Item $ZipPath
 
-          # Enable site-packages so pip-installed packages are importable
+          # Create Lib directory for site-packages
+          New-Item -ItemType Directory -Path "$PythonDir\Lib\site-packages" -Force | Out-Null
+
+          # Configure python311._pth to include all required paths
           $PthFile = Get-ChildItem $PythonDir -Filter "python3*._pth" | Select-Object -First 1
           if ($PthFile) {
-            (Get-Content $PthFile.FullName) -replace '#import site','import site' |
-              Set-Content $PthFile.FullName
+            Write-Host "Configuring $($PthFile.Name)..."
+            # Write correct paths - this is critical for embedded Python
+            @"
+python311.zip
+.
+Lib
+Lib\site-packages
+import site
+"@ | Set-Content $PthFile.FullName -Encoding ASCII
+            Write-Host "._pth file configured:"
+            Get-Content $PthFile.FullName
           }
 
           Write-Host "Installing pip..."
           Invoke-WebRequest -Uri $GetPipUrl -OutFile $GetPipPath
           & $PythonExe $GetPipPath --no-warn-script-location
           Remove-Item $GetPipPath
+          
+          # Verify Python works
+          Write-Host "Verifying Python installation..."
+          & $PythonExe -c "import sys; print('Python OK:', sys.version)"
 
       - name: Copy SSL DLLs to embedded Python
         shell: pwsh
@@ -122,8 +138,10 @@ jobs:
         shell: pwsh
         run: |
           $PythonExe = "installer\embedded-python\python.exe"
+          $PythonDir = "installer\embedded-python"
 
-          & $PythonExe -m pip install --upgrade pip --no-warn-script-location
+          # Install pip to Lib\site-packages
+          & $PythonExe -m pip install --upgrade pip --no-warn-script-location --target "$PythonDir\Lib\site-packages"
 
           $packages = @(
             "fastapi",
@@ -142,11 +160,16 @@ jobs:
 
           foreach ($pkg in $packages) {
             Write-Host "Installing $pkg ..."
-            & $PythonExe -m pip install $pkg --no-warn-script-location
+            & $PythonExe -m pip install $pkg --no-warn-script-location --target "$PythonDir\Lib\site-packages"
             if ($LASTEXITCODE -ne 0) {
               throw "Failed to install package: $pkg"
             }
           }
+          
+          # Verify uvicorn is importable
+          Write-Host "=== Verifying installation ==="
+          & $PythonExe -c "import uvicorn; print('uvicorn OK:', uvicorn.__version__)"
+          & $PythonExe -c "import fastapi; print('fastapi OK:', fastapi.__version__)"
 
       - name: Prune unnecessary files from embedded Python
         shell: pwsh
