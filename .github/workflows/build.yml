@@ -38,7 +38,7 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      # ── 3. Télécharger Python 3.11 embarqué (avec retry + vérification) ─────
+      # ── 3. Download Python 3.11 embeddable (with retry) ───────────────────
       - name: Download Python 3.11 embeddable
         shell: pwsh
         run: |
@@ -48,7 +48,6 @@ jobs:
           $PythonUrl = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip"
           $ZipPath   = "$PythonDir\python-embed.zip"
 
-          # Retry download (transient network issues are common on runners)
           $attempt = 0
           $maxAttempts = 3
           $success = $false
@@ -68,9 +67,9 @@ jobs:
           Expand-Archive -Path $ZipPath -DestinationPath $PythonDir -Force
           Remove-Item $ZipPath
 
-          # Critical size check
           $stdlibZip = "$PythonDir\python311.zip"
           if (-not (Test-Path $stdlibZip)) { throw "FATAL: python311.zip introuvable." }
+
           $sizeMB = [math]::Round((Get-Item $stdlibZip).Length / 1MB, 1)
           Write-Host "python311.zip downloaded successfully ($sizeMB MB)"
 
@@ -79,7 +78,7 @@ jobs:
             Write-Host "  $($_.Name)  ($([math]::Round($_.Length/1KB,1)) KB)"
           }
 
-      # ── 4. Extraire la stdlib sur disque (avec debug complet) ─────────────
+      # ── 4. Extract stdlib (fixed check for .pyc + full debug) ─────────────
       - name: Extract stdlib from python311.zip into Lib/
         shell: pwsh
         run: |
@@ -91,15 +90,15 @@ jobs:
 
           Write-Host "Extracting stdlib into Lib/..."
 
-          # Debug: what is inside the zip?
-          Write-Host "=== Fichiers dans python311.zip (30 premiers + check os.py) ==="
+          # Debug: show what's inside the zip
+          Write-Host "=== Fichiers dans python311.zip (30 premiers + os check) ==="
           try {
             $zip = [System.IO.Compression.ZipFile]::OpenRead($StdlibZip)
             $zip.Entries | Select-Object -First 30 | ForEach-Object {
               Write-Host "  $($_.FullName)  ($([math]::Round($_.Length/1KB,1)) KB)"
             }
-            $hasOsPy = $zip.Entries | Where-Object { $_.FullName -eq "os.py" } | Select-Object -First 1
-            if ($hasOsPy) { Write-Host "✓ os.py FOUND in zip" } else { Write-Host "✗ os.py ABSENT from zip!" }
+            $hasOs = $zip.Entries | Where-Object { $_.FullName -eq "os.pyc" } | Select-Object -First 1
+            if ($hasOs) { Write-Host "✓ os.pyc FOUND in zip" } else { Write-Host "✗ os.pyc ABSENT from zip!" }
             $zip.Dispose()
           } catch {
             Write-Host "Error reading zip: $_"
@@ -107,32 +106,26 @@ jobs:
 
           Expand-Archive -Path $StdlibZip -DestinationPath $LibDir -Force
 
-          # Debug: what was actually extracted?
-          Write-Host "=== Contenu extrait dans Lib/ ==="
-          Get-ChildItem $LibDir -Depth 1 | Select-Object -First 20 | ForEach-Object {
+          # Debug: show extracted content
+          Write-Host "=== Contenu extrait dans Lib/ (premiers dossiers/fichiers) ==="
+          Get-ChildItem $LibDir -Depth 1 | Select-Object -First 25 | ForEach-Object {
             $type = if ($_.PSIsContainer) { "DIR" } else { "FILE" }
             Write-Host "  $type : $($_.Name)"
           }
-          if (Test-Path "$LibDir\os.py") {
-            Write-Host "✓ os.py successfully extracted"
-          } else {
-            Write-Host "✗ os.py STILL MISSING after extraction!"
-          }
 
-          # Verifications critiques (original)
+          # Critical checks (UPDATED: os.pyc instead of os.py)
           if (-not (Test-Path "$LibDir\encodings")) {
             throw "FATAL: Lib\encodings absent — Python ne demarrera pas."
           }
-          if (-not (Test-Path "$LibDir\os.py")) {
-            throw "FATAL: Lib\os.py absent — stdlib incomplete."
+          if (-not (Test-Path "$LibDir\os.pyc")) {
+            throw "FATAL: Lib\os.pyc absent — stdlib incomplete."
           }
 
+          Write-Host "✓ os.pyc successfully extracted"
           $count = (Get-ChildItem $LibDir -File).Count
           Write-Host "OK: Stdlib extraite ($count fichiers dans Lib/)"
 
-      # ── 5 à 14 ─────────────────────────────────────────────────────────────
-      # (All your remaining steps are unchanged — I kept them exactly as you had them)
-
+      # ── 5. Patch python._pth ──────────────────────────────────────────────
       - name: Patch python._pth
         shell: pwsh
         run: |
@@ -146,6 +139,7 @@ jobs:
           Write-Host "Contenu du .pth apres patch:"
           Get-Content $PthFile.FullName | ForEach-Object { Write-Host "  $_" }
 
+      # ── 6. Install pip ────────────────────────────────────────────────────
       - name: Install pip
         shell: pwsh
         run: |
@@ -157,11 +151,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "pip installation echouee." }
           Remove-Item $GetPipPath
 
+          # Test
           & $PythonExe -c "import sys, encodings, os; print('Python OK:', sys.version)"
           if ($LASTEXITCODE -ne 0) {
             throw "FATAL: Python ne peut pas importer encodings."
           }
 
+      # ── 7. Install Python packages ────────────────────────────────────────
       - name: Install Python packages
         shell: pwsh
         run: |
@@ -169,18 +165,9 @@ jobs:
           & $PythonExe -m pip install --upgrade pip --no-warn-script-location
 
           $packages = @(
-            "fastapi",
-            "uvicorn[standard]",
-            "python-dotenv",
-            "httpx",
-            "pydantic",
-            "PyPDF2",
-            "python-docx",
-            "python-pptx",
-            "Pillow",
-            "python-multipart",
-            "aiofiles",
-            "pystray"
+            "fastapi", "uvicorn[standard]", "python-dotenv", "httpx", "pydantic",
+            "PyPDF2", "python-docx", "python-pptx", "Pillow", "python-multipart",
+            "aiofiles", "pystray"
           )
 
           foreach ($pkg in $packages) {
@@ -192,6 +179,7 @@ jobs:
           & $PythonExe -c "import fastapi, uvicorn, httpx, pydantic; print('Packages OK')"
           if ($LASTEXITCODE -ne 0) { throw "Verification packages echouee." }
 
+      # ── 8. Prune bytecode and tests ───────────────────────────────────────
       - name: Prune bytecode and tests
         shell: pwsh
         run: |
@@ -205,6 +193,7 @@ jobs:
             Remove-Item -Force -ErrorAction SilentlyContinue
           Write-Host "Nettoyage termine."
 
+      # ── 9. Fix launch.bat PYTHONPATH ──────────────────────────────────────
       - name: Fix launch.bat PYTHONPATH
         shell: pwsh
         run: |
@@ -220,11 +209,9 @@ jobs:
             Write-Host "launch.bat corrige : PYTHONPATH inclut Lib/ et Lib/site-packages."
           } else {
             Write-Host "AVERTISSEMENT: Ligne PYTHONPATH non trouvee dans launch.bat."
-            Write-Host "Lignes PYTHON dans launch.bat:"
-            ($content -split "`n") | Where-Object { $_ -match "PYTHON" } |
-              ForEach-Object { Write-Host "  $_" }
           }
 
+      # ── 10. Patch ISS ─────────────────────────────────────────────────────
       - name: Patch ISS - disable disk spanning
         shell: pwsh
         run: |
@@ -239,6 +226,7 @@ jobs:
           Set-Content $IssFile $content -NoNewline
           Write-Host "ISS patche."
 
+      # ── 11. Prepare assets and docs ───────────────────────────────────────
       - name: Prepare installer assets and docs
         shell: pwsh
         run: |
@@ -257,6 +245,7 @@ jobs:
             Write-Host "Icone placeholder generee."
           }
 
+      # ── 12. Install Inno Setup ────────────────────────────────────────────
       - name: Install Inno Setup 6
         shell: pwsh
         run: |
@@ -266,6 +255,7 @@ jobs:
           Start-Process -FilePath $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
           Write-Host "Inno Setup 6.7.1 installe."
 
+      # ── 13. Compile installer ─────────────────────────────────────────────
       - name: Compile installer with Inno Setup
         shell: pwsh
         run: |
@@ -281,6 +271,7 @@ jobs:
             throw "Compilation Inno Setup echouee (code $LASTEXITCODE)"
           }
 
+      # ── 14. Verify & upload ───────────────────────────────────────────────
       - name: Verify installer output
         shell: pwsh
         run: |
