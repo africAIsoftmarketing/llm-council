@@ -1,28 +1,31 @@
-# LLM Council — Heroku Deployment (branch `heroku-deploy`)
+# LLM Council — Heroku Deployment
 
-## Problem statement
-Transform the LLM Council project (fork of karpathy/llm-council, repo `africAIsoftmarketing/llm-council`) into a Heroku-deployable single-dyno web app on a new branch `heroku-deploy` (branched from `master`). `master` stays untouched.
+## Goal
+Make the LLM Council app (repo `africAIsoftmarketing/llm-council`) deployable on Heroku as a single web dyno: FastAPI serves the API + the pre-built React frontend.
 
-## Architecture (target)
-Monolithic single-dyno: FastAPI serves the `/api/*` backend AND the pre-built React frontend (`frontend/dist/`) via `StaticFiles` + SPA catch-all. Two Heroku buildpacks: `heroku/nodejs` (builds frontend via root `package.json` `heroku-postbuild`) then `heroku/python`.
+## KEY FINDING (2026-06-30)
+- The Emergent workspace `/app` IS the connected repo (full-featured version: documents, vision, LM Studio, advanced config, built-in Settings UI). "Save to Github" pushes `/app`.
+- The earlier failed Heroku deploy used branch `master_herokuVersion` which had NO deploy files → `Procfile (none)` → H14 "No web processes". Only `heroku/python` buildpack ran (no root package.json), Python 3.10 (.python-version), uv sync.
 
-## What's been implemented (2026-06-30)
-- Root files: `Procfile`, `runtime.txt` (python-3.12.10), `requirements.txt`, `app.json` (buildpacks+env+formation), `package.json` (delegates build to frontend), `.env.example`.
-- `backend/main.py`: reads `$PORT`; dynamic CORS (localhost + `$HEROKU_APP_NAME` + `$CUSTOM_DOMAIN`); static serving + SPA catch-all declared AFTER all `/api` routes (route order is critical); old `GET /` health moved to `GET /api/health`.
-- `backend/config.py`: `COUNCIL_MODELS` (comma-separated) and `CHAIRMAN_MODEL` env-configurable with defaults; `DATA_DIR` env-configurable.
-- `backend/storage.py`: ephemeral-filesystem note + `# TODO: Migrate to Heroku Postgres`.
-- `frontend/src/api.js`: relative API base in prod, `localhost:8001` in dev, `VITE_API_URL` override.
-- `frontend/vite.config.js`: `/api` dev proxy + build outDir `dist`.
+## What was done on /app (Heroku-ready)
+- Root files created: `Procfile` (`uvicorn backend.main:app --port $PORT`), `runtime.txt` (python-3.12.10), `.python-version` -> 3.12.10, `requirements.txt` (minimal), `app.json` (2 buildpacks), `package.json` (heroku-postbuild builds frontend), `.env.example`.
+- `pyproject.toml` updated to the real minimal runtime deps and `uv.lock` regenerated (Heroku uses `uv sync --locked`). Deliberately EXCLUDES torch/easyocr/opencv/pandas (backend/requirements.txt bloat) to stay under Heroku's 500MB slug limit — code only imports fastapi/uvicorn/httpx/pydantic/dotenv/PyPDF2/docx/pptx/PIL/multipart.
+- Backend already served static frontend (SPA catch-all after /api) and api.js already used relative URLs — no change needed there.
 - Branding: title `LLM Council — AfricAIsoft`, footer `Powered by AfricAIsoft`, accent `#1a5276`.
-- README Heroku section + CLAUDE.md branch notes. `.gitignore` keeps `frontend/dist/` ignored.
+- `.gitignore`: keeps `frontend/dist/`, `node_modules/` ignored; tracks `.env.example`.
+- Cleaned up: removed irrelevant nested clone `/app/llm-council` and `/app/artifacts`.
 
-## Validation (done)
-- `npm run build` -> `frontend/dist/index.html` OK
-- `pip install -r requirements.txt` OK
-- `PORT=... python -m backend.main`: `/` -> index.html, `/api/health` & `/api/conversations` -> JSON, POST create works, SPA fallback works, unknown `/api/*` -> 404 OK
-- Visual preview verified: UI loads, title + footer + accent correct, conversation list loads via relative `/api` OK
-- LLM deliberation pipeline (Stage 1->2->3) NOT triggered — requires real OpenRouter key, user tests post-deploy (their choice).
+## Validation (done locally)
+- `uv lock` OK; frontend `npm run build` OK; `uvicorn backend.main:app --port $PORT` boots and serves `/` (AfricAIsoft title), `/api/health`, `/api/conversations`, `/assets/*` (all 200). Preview confirmed branding.
+- LLM pipeline not run (no OpenRouter key) — app shows "Configuration Required"; key set in-app Settings or via OPENROUTER_API_KEY.
+- NOTE: pre-existing bug (not deployment-related): GET /api/documents/supported-types returns 404 because `/api/documents/{doc_id}` route is declared before it.
 
-## Notes / Next actions
-- Code lives in nested repo `/app/llm-council` on branch `heroku-deploy`, committed locally. Needs `git push` to GitHub.
-- Storage is ephemeral on Heroku (MVP). P1: migrate to Heroku Postgres.
+## Deploy steps for the user
+1. Click "Save to Github" (pushes /app to africAIsoftmarketing/llm-council). Note the target branch.
+2. heroku buildpacks:clear; add `heroku/nodejs` (index 1) then `heroku/python` (index 2).
+3. (optional) `heroku config:set OPENROUTER_API_KEY=...` (or configure in-app).
+4. `git push heroku <branch>:main` ; `heroku open`.
+
+## Backlog / next
+- P1: pre-existing route-order bug for /api/documents/supported-types.
+- P2: ephemeral storage on Heroku (conversations/documents lost on restart) -> Postgres/S3.

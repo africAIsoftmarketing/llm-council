@@ -1,0 +1,13 @@
+{
+  "name": "llm-council",
+  "version": "1.0.0",
+  "description": "LLM Council - Heroku deployment (AfricAIsoft)",
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "heroku-postbuild": "cd frontend && npm install && npm run build"
+  },
+  "cacheDirectories": ["frontend/node_modules"]
+}

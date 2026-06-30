@@ -357,6 +357,10 @@ function App() {
           {toast.message}
         </div>
       )}
+
+      <footer className="app-footer" data-testid="app-footer">
+        Powered by AfricAIsoft
+      </footer>
     </div>
   );
 }

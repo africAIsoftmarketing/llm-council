@@ -1,0 +1,21 @@
+{
+  "name": "LLM Council",
+  "description": "Multi-LLM deliberation system — AfricAIsoft deployment",
+  "repository": "https://github.com/africAIsoftmarketing/llm-council",
+  "buildpacks": [
+    { "url": "heroku/nodejs" },
+    { "url": "heroku/python" }
+  ],
+  "env": {
+    "OPENROUTER_API_KEY": {
+      "description": "Clé API OpenRouter pour accéder aux LLMs",
+      "required": false
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  }
+}

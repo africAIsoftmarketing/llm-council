@@ -155,3 +155,12 @@ credentials.json
 *.pem
 *.key
 .credentials
+
+# Heroku deployment — build happens on Heroku, keep dist ignored
+frontend/dist/
+__pycache__/
+node_modules/
+/yarn.lock
+# but DO track the example env file
+!.env.example
+
