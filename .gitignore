@@ -156,11 +156,16 @@ credentials.json
 *.key
 .credentials
 
-# Heroku deployment — build happens on Heroku, keep dist ignored
-frontend/dist/
+# Heroku deployment
+# NOTE: frontend/dist IS committed so the Python buildpack alone can serve the
+# pre-built React app (no Node buildpack required). Rebuild it (cd frontend &&
+# npm run build) whenever the frontend changes, then commit.
 __pycache__/
 node_modules/
 /yarn.lock
 # but DO track the example env file
 !.env.example
+# and DO track the production frontend build
+!frontend/dist/
+!frontend/dist/**
 
