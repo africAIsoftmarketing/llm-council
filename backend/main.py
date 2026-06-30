@@ -93,6 +93,113 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ===== Live council run hub (survives client refresh) =====
+# Single uvicorn worker -> a module-level registry is sufficient. Each run is a
+# detached asyncio task that persists progress incrementally and broadcasts SSE
+# events to any subscribers (the original sender AND reconnecting tabs).
+_run_hub: Dict[str, Dict[str, Any]] = {}
+
+
+def _publish(conversation_id: str, event: Dict[str, Any]):
+    hub = _run_hub.get(conversation_id)
+    if not hub:
+        return
+    hub["events"].append(event)
+    for q in list(hub["subscribers"]):
+        try:
+            q.put_nowait(event)
+        except Exception:
+            pass
+
+
+async def _stream_from_hub(conversation_id: str):
+    """Yield SSE events for a running council, replaying past events first."""
+    hub = _run_hub.get(conversation_id)
+    if not hub:
+        # No live run -> client should rely on the persisted conversation state.
+        yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+        return
+
+    q: asyncio.Queue = asyncio.Queue()
+    # Replay events that already happened so a reconnecting tab catches up.
+    for event in list(hub["events"]):
+        q.put_nowait(event)
+    hub["subscribers"].add(q)
+    try:
+        while True:
+            try:
+                event = await asyncio.wait_for(q.get(), timeout=30)
+            except asyncio.TimeoutError:
+                yield ": keepalive\n\n"
+                continue
+            yield f"data: {json.dumps(event)}\n\n"
+            if event.get("type") in ("complete", "error"):
+                break
+    finally:
+        hub["subscribers"].discard(q)
+
+
+async def _run_council_task(
+    conversation_id: str,
+    query_content: str,
+    vision_images,
+    advanced_config,
+    is_first_message: bool,
+    original_content: str,
+):
+    """Run the 3-stage council detached from the request; persist each stage."""
+    try:
+        title_task = None
+        if is_first_message:
+            title_task = asyncio.create_task(
+                generate_conversation_title(original_content, advanced_config=advanced_config)
+            )
+
+        _publish(conversation_id, {"type": "stage1_start"})
+        stage1_results = await stage1_collect_responses(
+            query_content, vision_images=vision_images, advanced_config=advanced_config
+        )
+        storage.update_last_assistant_message(conversation_id, stage1=stage1_results)
+        _publish(conversation_id, {"type": "stage1_complete", "data": stage1_results})
+
+        _publish(conversation_id, {"type": "stage2_start"})
+        stage2_results, label_to_model = await stage2_collect_rankings(
+            query_content, stage1_results, advanced_config=advanced_config
+        )
+        aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
+        metadata = {"label_to_model": label_to_model, "aggregate_rankings": aggregate_rankings}
+        storage.update_last_assistant_message(conversation_id, stage2=stage2_results, metadata=metadata)
+        _publish(conversation_id, {"type": "stage2_complete", "data": stage2_results, "metadata": metadata})
+
+        _publish(conversation_id, {"type": "stage3_start"})
+        stage3_result = await stage3_synthesize_final(
+            query_content, stage1_results, stage2_results, advanced_config=advanced_config
+        )
+        storage.update_last_assistant_message(conversation_id, stage3=stage3_result, status="complete")
+        _publish(conversation_id, {"type": "stage3_complete", "data": stage3_result})
+
+        if title_task:
+            try:
+                title = await title_task
+            except Exception as title_err:
+                print(f"Title generation failed (non-fatal): {title_err}")
+                title = original_content[:47] + "..." if len(original_content) > 50 else original_content
+            storage.update_conversation_title(conversation_id, title)
+            _publish(conversation_id, {"type": "title_complete", "data": {"title": title}})
+
+        _publish(conversation_id, {"type": "complete"})
+    except Exception as e:
+        try:
+            storage.update_last_assistant_message(conversation_id, status="error", error=str(e))
+        except Exception:
+            pass
+        _publish(conversation_id, {"type": "error", "message": str(e)})
+    finally:
+        # Grace period so connected clients flush the terminal event, then clean up.
+        await asyncio.sleep(3)
+        _run_hub.pop(conversation_id, None)
+
+
 # Determine frontend path
 def get_frontend_path():
     """Get the path to frontend dist folder."""
@@ -503,110 +610,76 @@ My question: {request.content}"""
 @app.post("/api/conversations/{conversation_id}/message/stream")
 async def send_message_stream(conversation_id: str, request: SendMessageRequest):
     """
-    Send a message and stream the 3-stage council process.
-    Returns Server-Sent Events as each stage completes.
+    Send a message and run the 3-stage council as a DETACHED background task.
+
+    The pipeline survives a client disconnect/refresh and persists each stage
+    incrementally. This endpoint streams live events; a refreshed tab can resume
+    via GET /api/conversations/{id}/stream.
     """
     # Check API key only if needed for the current mode
     if requires_openrouter_key(request.advanced) and not get_api_key():
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail="OpenRouter API key not configured. Please go to Settings to add your API key."
         )
-    
-    # Check if conversation exists
+
     conversation = storage.get_conversation(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    # Check if this is the first message
-    is_first_message = len(conversation["messages"]) == 0
+    # If a run is already in progress for this conversation, just attach to it.
+    if conversation_id not in _run_hub:
+        is_first_message = len(conversation["messages"]) == 0
 
-    async def event_generator():
-        try:
-            # Build query with document context if requested
-            query_content = request.content
-            vision_images = []
-            
-            if request.include_documents:
-                # Get text document context
-                doc_context = get_active_documents_context()
-                if doc_context:
-                    query_content = f"""I have uploaded the following documents for reference:
+        # Build query with document context if requested
+        query_content = request.content
+        vision_images = []
+        if request.include_documents:
+            doc_context = get_active_documents_context()
+            if doc_context:
+                query_content = f"""I have uploaded the following documents for reference:
 
 {doc_context}
 
 ---
 
 My question: {request.content}"""
-                
-                # Get vision images for analysis
-                vision_images = get_active_vision_images()
-                if vision_images:
-                    image_note = f"\n\n[Note: {len(vision_images)} image(s) attached for visual analysis]"
-                    query_content += image_note
+            vision_images = get_active_vision_images()
+            if vision_images:
+                query_content += f"\n\n[Note: {len(vision_images)} image(s) attached for visual analysis]"
 
-            # Add user message
-            storage.add_user_message(conversation_id, request.content)
+        # Persist the user message and a 'running' assistant placeholder.
+        storage.add_user_message(conversation_id, request.content)
+        storage.add_running_assistant_message(conversation_id)
 
-            # Start title generation in parallel (don't await yet)
-            title_task = None
-            if is_first_message:
-                title_task = asyncio.create_task(
-                    generate_conversation_title(request.content, advanced_config=request.advanced)
-                )
-
-            # Stage 1: Collect responses (with vision images and advanced config if available)
-            yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
-            stage1_results = await stage1_collect_responses(query_content, vision_images=vision_images if vision_images else None, advanced_config=request.advanced)
-            print(f"[Stage1] Completed with {len(stage1_results)} responses")
-            yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
-
-            # Stage 2: Collect rankings
-            yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
-            stage2_results, label_to_model = await stage2_collect_rankings(query_content, stage1_results, advanced_config=request.advanced)
-            aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
-            yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
-
-            # Stage 3: Synthesize final answer
-            yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
-            stage3_result = await stage3_synthesize_final(query_content, stage1_results, stage2_results, advanced_config=request.advanced)
-            yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
-
-            # Wait for title generation if it was started
-            if title_task:
-                try:
-                    title = await title_task
-                    storage.update_conversation_title(conversation_id, title)
-                    yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': title}})}\n\n"
-                except Exception as title_err:
-                    print(f"Title generation failed (non-fatal): {title_err}")
-                    # Use query as fallback title
-                    fallback = request.content[:47] + "..." if len(request.content) > 50 else request.content
-                    storage.update_conversation_title(conversation_id, fallback)
-                    yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': fallback}})}\n\n"
-
-            # Save complete assistant message
-            storage.add_assistant_message(
+        # Create the hub and launch the detached task.
+        _run_hub[conversation_id] = {"events": [], "subscribers": set()}
+        task = asyncio.create_task(
+            _run_council_task(
                 conversation_id,
-                stage1_results,
-                stage2_results,
-                stage3_result
+                query_content,
+                vision_images if vision_images else None,
+                request.advanced,
+                is_first_message,
+                request.content,
             )
-
-            # Send completion event
-            yield f"data: {json.dumps({'type': 'complete'})}\n\n"
-
-        except Exception as e:
-            # Send error event
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        )
+        _run_hub[conversation_id]["task"] = task  # keep a reference
 
     return StreamingResponse(
-        event_generator(),
+        _stream_from_hub(conversation_id),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-        }
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
+
+
+@app.get("/api/conversations/{conversation_id}/stream")
+async def resume_message_stream(conversation_id: str):
+    """Reconnect to an in-progress council run (used after a page refresh)."""
+    return StreamingResponse(
+        _stream_from_hub(conversation_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
     )
 
 

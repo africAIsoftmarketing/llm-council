@@ -180,16 +180,44 @@ def add_assistant_message(
 
 
 def update_conversation_title(conversation_id: str, title: str):
-    """
-    Update the title of a conversation.
-
-    Args:
-        conversation_id: Conversation identifier
-        title: New title for the conversation
-    """
+    """Update the title of a conversation."""
     conversation = get_conversation(conversation_id)
     if conversation is None:
         raise ValueError(f"Conversation {conversation_id} not found")
 
     conversation["title"] = title
+    save_conversation(conversation)
+
+
+def add_running_assistant_message(conversation_id: str):
+    """Append a placeholder assistant message marked as 'running'.
+
+    Stages are persisted incrementally as the council progresses, so a page
+    refresh mid-run can reload the partial progress (and resume the live stream).
+    """
+    conversation = get_conversation(conversation_id)
+    if conversation is None:
+        raise ValueError(f"Conversation {conversation_id} not found")
+
+    conversation["messages"].append({
+        "role": "assistant",
+        "status": "running",
+        "stage1": None,
+        "stage2": None,
+        "stage3": None,
+        "metadata": None,
+    })
+    save_conversation(conversation)
+
+
+def update_last_assistant_message(conversation_id: str, **fields):
+    """Update fields on the most recent assistant message (in place)."""
+    conversation = get_conversation(conversation_id)
+    if conversation is None:
+        raise ValueError(f"Conversation {conversation_id} not found")
+
+    for i in range(len(conversation["messages"]) - 1, -1, -1):
+        if conversation["messages"][i].get("role") == "assistant":
+            conversation["messages"][i].update(fields)
+            break
     save_conversation(conversation)

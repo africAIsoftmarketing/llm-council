@@ -61,10 +61,29 @@ function App() {
   const loadConversation = useCallback(async (id) => {
     try {
       const conv = await api.getConversation(id);
-      setCurrentConversation(conv);
+      const last = conv.messages[conv.messages.length - 1];
+      // If the council is still running for this conversation, reconstruct the
+      // loading flags from the persisted partial stages and resume the live stream.
+      if (last && last.role === 'assistant' && last.status === 'running') {
+        last.loading = {
+          stage1: !last.stage1,
+          stage2: !!last.stage1 && !last.stage2,
+          stage3: !!last.stage2 && !last.stage3,
+        };
+        setCurrentConversation(conv);
+        setIsLoading(true);
+        // Resume in the background (don't block the load).
+        api.resumeStream(id, makeEventHandler(id)).catch((err) => {
+          console.error('Resume stream failed:', err);
+          setIsLoading(false);
+        });
+      } else {
+        setCurrentConversation(conv);
+      }
     } catch (error) {
       console.error('Failed to load conversation:', error);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const showToast = useCallback((message, type = 'info') => {
@@ -135,6 +154,73 @@ function App() {
     }
   };
 
+  // Builds an SSE event handler bound to a conversation id. Used both for the
+  // initial send and for resuming a running council after a page refresh.
+  function makeEventHandler(convId) {
+    const updateLast = (updater) => {
+      setCurrentConversation((prev) => {
+        if (!prev || prev.id !== convId) return prev;
+        const messages = [...prev.messages];
+        const lastMsg = messages[messages.length - 1];
+        if (!lastMsg || lastMsg.role !== 'assistant') return prev;
+        if (!lastMsg.loading) {
+          lastMsg.loading = { stage1: false, stage2: false, stage3: false };
+        }
+        updater(lastMsg);
+        return { ...prev, messages };
+      });
+    };
+
+    return (eventType, event) => {
+      switch (eventType) {
+        case 'stage1_start':
+          updateLast((m) => { m.loading.stage1 = true; });
+          break;
+        case 'stage1_complete':
+          updateLast((m) => { m.stage1 = event.data; m.loading.stage1 = false; });
+          break;
+        case 'stage2_start':
+          updateLast((m) => { m.loading.stage2 = true; });
+          break;
+        case 'stage2_complete':
+          updateLast((m) => {
+            m.stage2 = event.data;
+            m.metadata = event.metadata;
+            m.loading.stage2 = false;
+          });
+          break;
+        case 'stage3_start':
+          updateLast((m) => { m.loading.stage3 = true; });
+          break;
+        case 'stage3_complete':
+          updateLast((m) => { m.stage3 = event.data; m.loading.stage3 = false; });
+          break;
+        case 'title_complete':
+          loadConversations();
+          break;
+        case 'complete':
+          loadConversations();
+          setIsLoading(false);
+          // Sync the final persisted state (covers resume-after-finish races).
+          api.getConversation(convId)
+            .then((conv) => {
+              setCurrentConversation((prev) =>
+                prev && prev.id === convId ? conv : prev
+              );
+            })
+            .catch(() => {});
+          break;
+        case 'error':
+          console.error('Stream error:', event.message);
+          showToast(event.message || 'An error occurred', 'error');
+          setIsLoading(false);
+          break;
+        default:
+          break;
+      }
+    };
+  }
+
   const handleSendMessage = async (content, includeDocuments = true) => {
     if (!currentConversationId) return;
     if (!isConfigured) {
@@ -173,87 +259,13 @@ function App() {
       }));
 
       // Send message with streaming (include advanced settings)
-      await api.sendMessageStream(currentConversationId, content, (eventType, event) => {
-        switch (eventType) {
-          case 'stage1_start':
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.loading.stage1 = true;
-              return { ...prev, messages };
-            });
-            break;
-
-          case 'stage1_complete':
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.stage1 = event.data;
-              lastMsg.loading.stage1 = false;
-              return { ...prev, messages };
-            });
-            break;
-
-          case 'stage2_start':
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.loading.stage2 = true;
-              return { ...prev, messages };
-            });
-            break;
-
-          case 'stage2_complete':
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.stage2 = event.data;
-              lastMsg.metadata = event.metadata;
-              lastMsg.loading.stage2 = false;
-              return { ...prev, messages };
-            });
-            break;
-
-          case 'stage3_start':
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.loading.stage3 = true;
-              return { ...prev, messages };
-            });
-            break;
-
-          case 'stage3_complete':
-            setCurrentConversation((prev) => {
-              const messages = [...prev.messages];
-              const lastMsg = messages[messages.length - 1];
-              lastMsg.stage3 = event.data;
-              lastMsg.loading.stage3 = false;
-              return { ...prev, messages };
-            });
-            break;
-
-          case 'title_complete':
-            // Reload conversations to get updated title
-            loadConversations();
-            break;
-
-          case 'complete':
-            // Stream complete, reload conversations list
-            loadConversations();
-            setIsLoading(false);
-            break;
-
-          case 'error':
-            console.error('Stream error:', event.message);
-            showToast(event.message || 'An error occurred', 'error');
-            setIsLoading(false);
-            break;
-
-          default:
-            console.log('Unknown event type:', eventType);
-        }
-      }, includeDocuments, advancedSettings);
+      await api.sendMessageStream(
+        currentConversationId,
+        content,
+        makeEventHandler(currentConversationId),
+        includeDocuments,
+        advancedSettings
+      );
     } catch (error) {
       console.error('Failed to send message:', error);
       showToast(error.message || 'Failed to send message', 'error');

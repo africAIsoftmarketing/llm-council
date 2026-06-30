@@ -29,3 +29,12 @@ Make the LLM Council app (repo `africAIsoftmarketing/llm-council`) deployable on
 ## Backlog / next
 - P1: pre-existing route-order bug for /api/documents/supported-types.
 - P2: ephemeral storage on Heroku (conversations/documents lost on restart) -> Postgres/S3.
+
+## 2026-06-30 — Resume-on-refresh for in-progress council runs
+Problem: refreshing mid-conversation lost all streaming progress (response only saved after Stage 3; client disconnect cancelled the run).
+Fix:
+- `backend/storage.py`: `add_running_assistant_message` + `update_last_assistant_message` (incremental per-stage persistence with a `status` field: running/complete/error).
+- `backend/main.py`: in-memory run hub (`_run_hub`) with publish/subscribe + event replay; council now runs in a DETACHED `asyncio` task (`_run_council_task`) that survives client disconnect and persists each stage. POST `/message/stream` starts the task and streams; new GET `/conversations/{id}/stream` resumes (replays past events + live).
+- `frontend/src/api.js`: `resumeStream()` (GET SSE reader).
+- `frontend/src/App.jsx`: extracted `makeEventHandler(convId)` (conversation-guarded); `loadConversation` detects a `running` assistant, reconstructs loading flags from saved stages, and resumes the live stream; `complete` re-syncs persisted state.
+Validated locally (dummy key): MAIN + RESUME streams both received replayed events; stage1 persisted incrementally; error path persisted+broadcast. Rebuilt & committed `frontend/dist`.

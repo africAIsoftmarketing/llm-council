@@ -389,8 +389,43 @@ export const api = {
     }
   },
 
-  // ===== Health Check =====
+  /**
+   * Reconnect to an in-progress council run (after a page refresh).
+   * Streams replayed + live SSE events for the conversation.
+   */
+  async resumeStream(conversationId, onEvent) {
+    const response = await fetch(
+      `${API_BASE}/api/conversations/${conversationId}/stream`
+    );
+    if (!response.ok) {
+      throw new Error('Failed to resume stream');
+    }
 
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          try {
+            const event = JSON.parse(data);
+            onEvent(event.type, event);
+          } catch (e) {
+            console.error('Failed to parse SSE event:', e);
+          }
+        }
+      }
+    }
+  },
+
+  // ===== Health Check =====
   /**
    * Check backend health and configuration status.
    */
