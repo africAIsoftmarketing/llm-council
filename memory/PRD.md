@@ -1,61 +1,28 @@
-# LLM Council - Windows Installer PRD
+# LLM Council — Heroku Deployment (branch `heroku-deploy`)
 
-## Problem Statement
-Le workflow GitHub Actions produisait un `LLM-Council.exe` via PyInstaller (exécutable portable) au lieu d'un vrai installeur Windows. Le fichier `workflows/innobuild.yml` était ignoré car mal placé (GitHub n'exécute que `.github/workflows/`).
+## Problem statement
+Transform the LLM Council project (fork of karpathy/llm-council, repo `africAIsoftmarketing/llm-council`) into a Heroku-deployable single-dyno web app on a new branch `heroku-deploy` (branched from `master`). `master` stays untouched.
 
-## What's Been Implemented (Jan 2026)
+## Architecture (target)
+Monolithic single-dyno: FastAPI serves the `/api/*` backend AND the pre-built React frontend (`frontend/dist/`) via `StaticFiles` + SPA catch-all. Two Heroku buildpacks: `heroku/nodejs` (builds frontend via root `package.json` `heroku-postbuild`) then `heroku/python`.
 
-### Correction 1 : `.github/workflows/build.yml` - REMPLACÉ
-Workflow complet Inno Setup (copié de la branche OCR qui fonctionne) :
-- Build frontend React/Vite → `frontend/dist/`
-- Télécharge Python 3.11 embeddable + pip + packages
-- Prune des fichiers inutiles (tests, __pycache__)
-- Génère icône placeholder si absente
-- Installe Inno Setup 6.7.1
-- Patch le .iss (supprime disk spanning)
-- Compile → `installer/output/LLMCouncil-Setup-2.1.0.exe`
-- Upload artifact + release GitHub sur tag v*
+## What's been implemented (2026-06-30)
+- Root files: `Procfile`, `runtime.txt` (python-3.12.10), `requirements.txt`, `app.json` (buildpacks+env+formation), `package.json` (delegates build to frontend), `.env.example`.
+- `backend/main.py`: reads `$PORT`; dynamic CORS (localhost + `$HEROKU_APP_NAME` + `$CUSTOM_DOMAIN`); static serving + SPA catch-all declared AFTER all `/api` routes (route order is critical); old `GET /` health moved to `GET /api/health`.
+- `backend/config.py`: `COUNCIL_MODELS` (comma-separated) and `CHAIRMAN_MODEL` env-configurable with defaults; `DATA_DIR` env-configurable.
+- `backend/storage.py`: ephemeral-filesystem note + `# TODO: Migrate to Heroku Postgres`.
+- `frontend/src/api.js`: relative API base in prod, `localhost:8001` in dev, `VITE_API_URL` override.
+- `frontend/vite.config.js`: `/api` dev proxy + build outDir `dist`.
+- Branding: title `LLM Council — AfricAIsoft`, footer `Powered by AfricAIsoft`, accent `#1a5276`.
+- README Heroku section + CLAUDE.md branch notes. `.gitignore` keeps `frontend/dist/` ignored.
 
-### Correction 2 : `installer/inno-setup/llm-council-installer.iss` - CORRIGÉ
-- ✅ Raccourcis pointent vers `launch.bat` (pas de launcher PyInstaller)
-- ✅ Raccourci bureau **coché par défaut** (sans `Flags: unchecked`)
-- ✅ Chemin frontend corrigé : `frontend/dist`
-- ✅ Support multilingue (anglais + français)
+## Validation (done)
+- `npm run build` -> `frontend/dist/index.html` OK
+- `pip install -r requirements.txt` OK
+- `PORT=... python -m backend.main`: `/` -> index.html, `/api/health` & `/api/conversations` -> JSON, POST create works, SPA fallback works, unknown `/api/*` -> 404 OK
+- Visual preview verified: UI loads, title + footer + accent correct, conversation list loads via relative `/api` OK
+- LLM deliberation pipeline (Stage 1->2->3) NOT triggered — requires real OpenRouter key, user tests post-deploy (their choice).
 
-### Fichiers supprimés (nettoyage)
-- `workflows/innobuild.yml` - Mauvais emplacement, ignoré par GitHub
-- `launcher/launcher.py` - Plus nécessaire (launch.bat suffit)
-
-## Architecture installée
-```
-C:\Program Files\LLM Council\
-├── scripts/
-│   ├── launch.bat          ← Raccourci bureau pointe ici
-│   ├── setup.bat
-│   └── stop_services.bat
-├── backend/                # FastAPI code
-├── frontend/dist/          # React built files
-├── python/                 # Embedded Python 3.11
-│   ├── python.exe
-│   ├── Lib/site-packages/
-│   └── Scripts/
-├── config/
-└── docs/
-```
-
-## Flux utilisateur
-1. Double-clic sur `LLMCouncil-Setup-2.1.0.exe`
-2. Wizard d'installation → `C:\Program Files\LLM Council\`
-3. Raccourci "LLM Council" créé sur le bureau (coché par défaut)
-4. Double-clic raccourci → `launch.bat` démarre uvicorn + ouvre navigateur
-
-## Next Action Items
-- [x] Remplacer `.github/workflows/build.yml`
-- [x] Corriger `.iss` (raccourcis vers launch.bat)
-- [x] Supprimer fichiers inutiles
-- [ ] Pousser sur GitHub via "Save to Github"
-- [ ] Vérifier exécution du workflow sur `master_innosetup_lmstudioserver`
-
-## Backlog
-- P1: Ajouter vraie icône personnalisée
-- P2: Auto-update depuis GitHub Releases
+## Notes / Next actions
+- Code lives in nested repo `/app/llm-council` on branch `heroku-deploy`, committed locally. Needs `git push` to GitHub.
+- Storage is ephemeral on Heroku (MVP). P1: migrate to Heroku Postgres.
