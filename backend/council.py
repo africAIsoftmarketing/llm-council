@@ -167,8 +167,27 @@ def detect_output_mode(
 
 
 # ---------------------------------------------------------------------------
-# Stage 1 — Collect individual responses (unchanged)
+# Stage 1 — Collect individual responses (FIXED: individual framing)
 # ---------------------------------------------------------------------------
+
+# System message injected in Stage 1 to prevent each model from acting
+# as the entire "council". Without this, prompts like "You are a council
+# of 5 experts..." cause every model to produce a full synthesis instead
+# of its own individual perspective.
+STAGE1_SYSTEM_MESSAGE = (
+    "You are one individual AI model providing your own independent, "
+    "comprehensive response to the user's question. "
+    "Other AI models are also answering this same question separately. "
+    "Your response will later be evaluated, ranked by peers, and then "
+    "synthesized by a chairman into a single final answer.\n\n"
+    "IMPORTANT: Even if the user's prompt asks you to act as a group, "
+    "a council, or multiple experts, provide YOUR single best answer "
+    "as one unified voice. Do NOT simulate multiple personas or produce "
+    "a synthesis — that synthesis step will happen later in the pipeline. "
+    "Focus on giving the most thorough, accurate, and well-structured "
+    "answer you can from your own perspective."
+)
+
 
 async def stage1_collect_responses(
     user_query: str,
@@ -177,6 +196,10 @@ async def stage1_collect_responses(
 ) -> List[Dict[str, Any]]:
     """
     Stage 1: Collect individual responses from all council models.
+
+    Each model receives a system message framing it as an individual
+    contributor. This prevents prompts with council/group framing
+    from causing each model to produce a full synthesis.
 
     Args:
         user_query: The user's question
@@ -188,6 +211,9 @@ async def stage1_collect_responses(
     """
     council_models = get_council_models()
 
+    # System message to frame each model as individual contributor
+    system_msg = {"role": "system", "content": STAGE1_SYSTEM_MESSAGE}
+
     if vision_images:
         content = [{"type": "text", "text": user_query}]
         for img in vision_images:
@@ -197,9 +223,9 @@ async def stage1_collect_responses(
                     "url": f"data:image/png;base64,{img['base64_data']}"
                 }
             })
-        messages = [{"role": "user", "content": content}]
+        messages = [system_msg, {"role": "user", "content": content}]
     else:
-        messages = [{"role": "user", "content": user_query}]
+        messages = [system_msg, {"role": "user", "content": user_query}]
 
     responses = await query_models_parallel(
         council_models, messages, advanced_config=advanced_config
