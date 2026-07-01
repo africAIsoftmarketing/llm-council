@@ -28,7 +28,11 @@ Make the LLM Council app (repo `africAIsoftmarketing/llm-council`) deployable on
 
 ## Backlog / next
 - P1: pre-existing route-order bug for /api/documents/supported-types.
-- P2: ephemeral storage on Heroku (conversations/documents lost on restart) -> Postgres/S3.
+- P2 (DONE 2026-07-01): Postgres persistence — see below.
+
+## 2026-07-01 — Heroku Postgres persistence (conversations)
+`backend/storage.py` now auto-selects a backend: **PostgreSQL** when `DATABASE_URL` is set (Heroku Postgres add-on), else JSON files (local/ephemeral). Only the 5 primitives (create/get/save/list/delete_conversation) are backend-aware; table `conversations (id TEXT PK, data JSONB, created_at, updated_at)` is auto-created on first use (`_ensure_table`). Uses `psycopg2-binary` (added to pyproject + uv.lock), connection pool, `sslmode=require` (override via `DB_SSLMODE`). app.json adds `heroku-postgresql:essential-0`; README documents the addon command; .env.example documents DATABASE_URL/DB_SSLMODE.
+Validated with a real local Postgres 15: create/get/save/list(newest-first)/delete + incremental assistant updates all persist; data survives a fresh process (restart-safe); JSON fallback still works with no DATABASE_URL.
 
 ## 2026-06-30 — Resume-on-refresh for in-progress council runs
 Problem: refreshing mid-conversation lost all streaming progress (response only saved after Stage 3; client disconnect cancelled the run).

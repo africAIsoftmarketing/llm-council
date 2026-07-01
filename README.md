@@ -104,3 +104,30 @@ Benefits of local models:
 - **Cost**: No API fees for local inference
 - **Offline**: Works without internet connection
 - **Mixed mode**: Use local for some models, cloud for others
+
+
+## Déploiement Heroku (single dyno) — AfricAIsoft
+
+FastAPI sert l'API **et** le frontend React pré-buildé (`frontend/dist/`, committé). Un seul process `web`.
+
+### Étapes
+```bash
+heroku create mon-app
+# Buildpacks (ordre important)
+heroku buildpacks:clear
+heroku buildpacks:add --index 1 heroku/nodejs
+heroku buildpacks:add --index 2 heroku/python
+# Base de données persistante (conversations conservées entre les redémarrages)
+heroku addons:create heroku-postgresql:essential-0
+# Clé OpenRouter (optionnel, aussi configurable dans l'UI Settings)
+heroku config:set OPENROUTER_API_KEY=sk-or-v1-...
+git push heroku <branche>:main
+heroku open
+```
+
+### Stockage
+- **Avec l'add-on Heroku Postgres** : la variable `DATABASE_URL` est injectée automatiquement et les conversations sont stockées dans Postgres (**persistantes** aux redémarrages/redéploiements du dyno).
+- **Sans `DATABASE_URL`** : repli sur des fichiers JSON dans `DATA_DIR` (éphémères sur Heroku).
+
+Aucune migration manuelle : la table `conversations` est créée automatiquement au premier démarrage.
+
