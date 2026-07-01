@@ -107,7 +107,9 @@ DEFAULT_CONFIG = {
         "supported_extensions": [".pdf", ".docx", ".txt", ".rtf", ".pptx", ".png", ".jpg", ".jpeg", ".md"]
     },
     "storage_location": "data",
-    "theme": "light"
+    "theme": "light",
+    # User-added custom models (persisted so they survive restarts)
+    "custom_models": []
 }
 
 # Available models from OpenRouter (commonly used)
@@ -242,7 +244,7 @@ def update_config(updates: Dict[str, Any]) -> Dict[str, Any]:
         "openrouter_api_key", "council_models", "chairman_model",
         "lm_studio_urls", "advanced_config", "throttle", "backend_port", "frontend_port", "auto_credit_reminder",
         "credit_reminder_threshold", "document_settings",
-        "storage_location", "theme"
+        "storage_location", "theme", "custom_models"
     ]
     
     for key in allowed_keys:
@@ -381,21 +383,34 @@ async def validate_api_key(api_key: str) -> Dict[str, Any]:
 
 
 def get_available_models() -> List[Dict[str, str]]:
-    """Get list of available models."""
-    return AVAILABLE_MODELS
+    """Get list of available models (built-in + persisted custom models)."""
+    merged = list(AVAILABLE_MODELS)
+    seen = {m["id"] for m in merged}
+    for m in load_config().get("custom_models", []):
+        if m.get("id") and m["id"] not in seen:
+            merged.append(m)
+            seen.add(m["id"])
+    return merged
 
 
 def add_custom_model(model_id: str, model_name: str, provider: str) -> Dict[str, str]:
-    """Add a custom model to the available models list."""
-    global AVAILABLE_MODELS
+    """Add a custom model and PERSIST it so it survives restarts."""
     new_model = {"id": model_id, "name": model_name, "provider": provider}
-    
-    # Check if already exists
+
+    # Already a built-in model?
     for model in AVAILABLE_MODELS:
         if model["id"] == model_id:
             return model
-    
-    AVAILABLE_MODELS.append(new_model)
+
+    # Persist in config (Postgres or file, depending on backend).
+    config = load_config()
+    custom_models = config.get("custom_models", [])
+    for m in custom_models:
+        if m.get("id") == model_id:
+            return m
+    custom_models.append(new_model)
+    config["custom_models"] = custom_models
+    save_config(config)
     return new_model
 
 

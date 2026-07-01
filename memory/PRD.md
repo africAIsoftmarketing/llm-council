@@ -37,6 +37,9 @@ Validated with a real local Postgres 15: create/get/save/list(newest-first)/dele
 ## 2026-07-01 — App CONFIG persistence (fixes settings lost on restart)
 The in-app config (OpenRouter API key, council models, chairman, LM Studio URLs, advanced config, throttle, etc.) was stored in `data/config.json` on the ephemeral disk → lost on every dyno restart. Fixed by making `config_manager.load_config`/`save_config` backend-aware: when `DATABASE_URL` is set, config is stored as a single JSONB row in an `app_config` table (reusing storage's PG pool); else file fallback. `get_api_key`/`get_council_models`/`apply_config_to_env` all read through `load_config`, so the key flows to OpenRouter after restart. Validated with local Postgres: API key + models survive a fresh process.
 
+## 2026-07-01 — Custom models now persisted
+`config_manager.add_custom_model` previously appended only to the in-memory `AVAILABLE_MODELS` (lost on restart). Now custom models are stored in config under `custom_models` (persisted via Postgres/file); `get_available_models` merges built-ins + persisted customs (deduped); `custom_models` added to `DEFAULT_CONFIG` and `update_config` allowed keys. Validated with local Postgres: custom model + its selection in `council_models` survive a fresh process; no duplicate on re-add.
+
 ## 2026-06-30 — Resume-on-refresh for in-progress council runs
 Problem: refreshing mid-conversation lost all streaming progress (response only saved after Stage 3; client disconnect cancelled the run).
 Fix:
