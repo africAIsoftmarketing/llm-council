@@ -390,6 +390,31 @@ export const api = {
   },
 
   /**
+   * Start the council run as a detached background task (returns immediately).
+   * The UI then polls getConversation() to display each stage as it is
+   * persisted — robust to page refreshes and SSE/proxy buffering (Heroku).
+   */
+  async startRun(conversationId, content, includeDocuments = true, advancedSettings = null) {
+    const response = await fetch(
+      `${API_BASE}/api/conversations/${conversationId}/run`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content,
+          include_documents: includeDocuments,
+          advanced: advancedSettings,
+        }),
+      }
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to start council run');
+    }
+    return response.json();
+  },
+
+  /**
    * Reconnect to an in-progress council run (after a page refresh).
    * Streams replayed + live SSE events for the conversation.
    */

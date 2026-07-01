@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
 import Settings from './components/Settings';
@@ -58,12 +58,65 @@ function App() {
     }
   }, []);
 
+  // ===== Polling for in-progress council runs =====
+  // Robust on Heroku: reads the incrementally-persisted state, so it survives
+  // page refreshes AND SSE/proxy buffering. Stops when status != 'running'.
+  const pollRef = useRef(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const startPolling = useCallback((id) => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    setIsLoading(true);
+
+    const tick = async () => {
+      try {
+        const conv = await api.getConversation(id);
+        const l = conv.messages[conv.messages.length - 1];
+        const running = l && l.role === 'assistant' && l.status === 'running';
+        if (l && l.role === 'assistant') {
+          l.loading = {
+            stage1: running && !l.stage1,
+            stage2: running && !!l.stage1 && !l.stage2,
+            stage3: running && !!l.stage2 && !l.stage3,
+          };
+        }
+        setCurrentConversation((prev) => (prev && prev.id === id ? conv : prev));
+        if (!running) {
+          if (pollRef.current) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+          }
+          setIsLoading(false);
+          loadConversations();
+          if (l && l.status === 'error') {
+            showToast(l.error || 'The council run failed', 'error');
+          }
+        }
+      } catch (e) {
+        // keep polling through transient network errors
+      }
+    };
+
+    tick(); // fetch immediately, then every 2s
+    pollRef.current = setInterval(tick, 2000);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadConversations]);
+
   const loadConversation = useCallback(async (id) => {
     try {
       const conv = await api.getConversation(id);
       const last = conv.messages[conv.messages.length - 1];
-      // If the council is still running for this conversation, reconstruct the
-      // loading flags from the persisted partial stages and resume the live stream.
+      // If the council is still running, show partial stages + start polling
+      // to pick up the remaining stages as they are persisted.
       if (last && last.role === 'assistant' && last.status === 'running') {
         last.loading = {
           stage1: !last.stage1,
@@ -71,20 +124,15 @@ function App() {
           stage3: !!last.stage2 && !last.stage3,
         };
         setCurrentConversation(conv);
-        setIsLoading(true);
-        // Resume in the background (don't block the load).
-        api.resumeStream(id, makeEventHandler(id)).catch((err) => {
-          console.error('Resume stream failed:', err);
-          setIsLoading(false);
-        });
+        startPolling(id);
       } else {
+        stopPolling();
         setCurrentConversation(conv);
       }
     } catch (error) {
       console.error('Failed to load conversation:', error);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [startPolling, stopPolling]);
 
   const showToast = useCallback((message, type = 'info') => {
     setToast({ message, type });
@@ -144,6 +192,7 @@ function App() {
       await api.deleteConversation(id);
       setConversations(conversations.filter(c => c.id !== id));
       if (currentConversationId === id) {
+        stopPolling();
         setCurrentConversationId(null);
         setCurrentConversation(null);
       }
@@ -154,72 +203,8 @@ function App() {
     }
   };
 
-  // Builds an SSE event handler bound to a conversation id. Used both for the
-  // initial send and for resuming a running council after a page refresh.
-  function makeEventHandler(convId) {
-    const updateLast = (updater) => {
-      setCurrentConversation((prev) => {
-        if (!prev || prev.id !== convId) return prev;
-        const messages = [...prev.messages];
-        const lastMsg = messages[messages.length - 1];
-        if (!lastMsg || lastMsg.role !== 'assistant') return prev;
-        if (!lastMsg.loading) {
-          lastMsg.loading = { stage1: false, stage2: false, stage3: false };
-        }
-        updater(lastMsg);
-        return { ...prev, messages };
-      });
-    };
-
-    return (eventType, event) => {
-      switch (eventType) {
-        case 'stage1_start':
-          updateLast((m) => { m.loading.stage1 = true; });
-          break;
-        case 'stage1_complete':
-          updateLast((m) => { m.stage1 = event.data; m.loading.stage1 = false; });
-          break;
-        case 'stage2_start':
-          updateLast((m) => { m.loading.stage2 = true; });
-          break;
-        case 'stage2_complete':
-          updateLast((m) => {
-            m.stage2 = event.data;
-            m.metadata = event.metadata;
-            m.loading.stage2 = false;
-          });
-          break;
-        case 'stage3_start':
-          updateLast((m) => { m.loading.stage3 = true; });
-          break;
-        case 'stage3_complete':
-          updateLast((m) => { m.stage3 = event.data; m.loading.stage3 = false; });
-          break;
-        case 'title_complete':
-          loadConversations();
-          break;
-        case 'complete':
-          loadConversations();
-          setIsLoading(false);
-          // Sync the final persisted state (covers resume-after-finish races).
-          api.getConversation(convId)
-            .then((conv) => {
-              setCurrentConversation((prev) =>
-                prev && prev.id === convId ? conv : prev
-              );
-            })
-            .catch(() => {});
-          break;
-        case 'error':
-          console.error('Stream error:', event.message);
-          showToast(event.message || 'An error occurred', 'error');
-          setIsLoading(false);
-          break;
-        default:
-          break;
-      }
-    };
-  }
+  // Stop polling when the app unmounts
+  useEffect(() => stopPolling, [stopPolling]);
 
   const handleSendMessage = async (content, includeDocuments = true) => {
     if (!currentConversationId) return;
@@ -231,41 +216,32 @@ function App() {
 
     setIsLoading(true);
     try {
-      // Optimistically add user message to UI
-      const userMessage = { role: 'user', content };
+      // Optimistically add user message + a running assistant placeholder.
       setCurrentConversation((prev) => ({
         ...prev,
-        messages: [...prev.messages, userMessage],
+        messages: [
+          ...prev.messages,
+          { role: 'user', content },
+          {
+            role: 'assistant',
+            status: 'running',
+            stage1: null,
+            stage2: null,
+            stage3: null,
+            metadata: null,
+            loading: { stage1: true, stage2: false, stage3: false },
+          },
+        ],
       }));
 
-      // Create a partial assistant message that will be updated progressively
-      const assistantMessage = {
-        role: 'assistant',
-        stage1: null,
-        stage2: null,
-        stage3: null,
-        metadata: null,
-        loading: {
-          stage1: false,
-          stage2: false,
-          stage3: false,
-        },
-      };
-
-      // Add the partial assistant message
-      setCurrentConversation((prev) => ({
-        ...prev,
-        messages: [...prev.messages, assistantMessage],
-      }));
-
-      // Send message with streaming (include advanced settings)
-      await api.sendMessageStream(
+      // Start the detached council run, then poll persisted progress.
+      await api.startRun(
         currentConversationId,
         content,
-        makeEventHandler(currentConversationId),
         includeDocuments,
         advancedSettings
       );
+      startPolling(currentConversationId);
     } catch (error) {
       console.error('Failed to send message:', error);
       showToast(error.message || 'Failed to send message', 'error');

@@ -38,3 +38,9 @@ Fix:
 - `frontend/src/api.js`: `resumeStream()` (GET SSE reader).
 - `frontend/src/App.jsx`: extracted `makeEventHandler(convId)` (conversation-guarded); `loadConversation` detects a `running` assistant, reconstructs loading flags from saved stages, and resumes the live stream; `complete` re-syncs persisted state.
 Validated locally (dummy key): MAIN + RESUME streams both received replayed events; stage1 persisted incrementally; error path persisted+broadcast. Rebuilt & committed `frontend/dist`.
+
+## 2026-07-01 — Switched resume/progress to POLLING (Heroku-robust)
+SSE resume was unreliable on Heroku (router/proxy buffering delayed events; the run kept only stage1 visible after refresh). Replaced the client update mechanism with polling of the incrementally-persisted state:
+- Backend: new `POST /api/conversations/{id}/run` starts the detached council task and returns `{status:"started"}` immediately (no streaming). SSE endpoints kept for compatibility + added `X-Accel-Buffering: no`.
+- Frontend: `api.startRun()`; `App.jsx` polls `GET /api/conversations/{id}` every 2s (`startPolling`), rebuilding loading flags from saved stages and stopping when `status != running` (surfaces `error` via toast). `loadConversation` starts polling when a `running` assistant is detected → refresh-safe. Removed SSE `makeEventHandler`.
+Validated: `/run` returns instantly; polling shows stage1 persisted + status transitions (complete/error). UI renders (title/footer intact).

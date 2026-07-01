@@ -607,16 +607,8 @@ My question: {request.content}"""
     }
 
 
-@app.post("/api/conversations/{conversation_id}/message/stream")
-async def send_message_stream(conversation_id: str, request: SendMessageRequest):
-    """
-    Send a message and run the 3-stage council as a DETACHED background task.
-
-    The pipeline survives a client disconnect/refresh and persists each stage
-    incrementally. This endpoint streams live events; a refreshed tab can resume
-    via GET /api/conversations/{id}/stream.
-    """
-    # Check API key only if needed for the current mode
+def _ensure_run_started(conversation_id: str, request: SendMessageRequest):
+    """Start the detached council run for a conversation (idempotent)."""
     if requires_openrouter_key(request.advanced) and not get_api_key():
         raise HTTPException(
             status_code=400,
@@ -627,59 +619,87 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    # If a run is already in progress for this conversation, just attach to it.
-    if conversation_id not in _run_hub:
-        is_first_message = len(conversation["messages"]) == 0
+    # If a run is already in progress for this conversation, don't start another.
+    if conversation_id in _run_hub:
+        return
 
-        # Build query with document context if requested
-        query_content = request.content
-        vision_images = []
-        if request.include_documents:
-            doc_context = get_active_documents_context()
-            if doc_context:
-                query_content = f"""I have uploaded the following documents for reference:
+    is_first_message = len(conversation["messages"]) == 0
+
+    # Build query with document context if requested
+    query_content = request.content
+    vision_images = []
+    if request.include_documents:
+        doc_context = get_active_documents_context()
+        if doc_context:
+            query_content = f"""I have uploaded the following documents for reference:
 
 {doc_context}
 
 ---
 
 My question: {request.content}"""
-            vision_images = get_active_vision_images()
-            if vision_images:
-                query_content += f"\n\n[Note: {len(vision_images)} image(s) attached for visual analysis]"
+        vision_images = get_active_vision_images()
+        if vision_images:
+            query_content += f"\n\n[Note: {len(vision_images)} image(s) attached for visual analysis]"
 
-        # Persist the user message and a 'running' assistant placeholder.
-        storage.add_user_message(conversation_id, request.content)
-        storage.add_running_assistant_message(conversation_id)
+    # Persist the user message and a 'running' assistant placeholder.
+    storage.add_user_message(conversation_id, request.content)
+    storage.add_running_assistant_message(conversation_id)
 
-        # Create the hub and launch the detached task.
-        _run_hub[conversation_id] = {"events": [], "subscribers": set()}
-        task = asyncio.create_task(
-            _run_council_task(
-                conversation_id,
-                query_content,
-                vision_images if vision_images else None,
-                request.advanced,
-                is_first_message,
-                request.content,
-            )
+    # Create the hub and launch the detached task.
+    _run_hub[conversation_id] = {"events": [], "subscribers": set()}
+    task = asyncio.create_task(
+        _run_council_task(
+            conversation_id,
+            query_content,
+            vision_images if vision_images else None,
+            request.advanced,
+            is_first_message,
+            request.content,
         )
-        _run_hub[conversation_id]["task"] = task  # keep a reference
+    )
+    _run_hub[conversation_id]["task"] = task  # keep a reference
 
+
+@app.post("/api/conversations/{conversation_id}/run")
+async def start_run(conversation_id: str, request: SendMessageRequest):
+    """
+    Start the 3-stage council as a DETACHED background task and return immediately.
+
+    Progress is persisted incrementally; the frontend polls
+    GET /api/conversations/{id} to display each stage as it completes. This is
+    robust to page refreshes AND to SSE buffering on platforms like Heroku.
+    """
+    _ensure_run_started(conversation_id, request)
+    return {"status": "started"}
+
+
+@app.post("/api/conversations/{conversation_id}/message/stream")
+async def send_message_stream(conversation_id: str, request: SendMessageRequest):
+    """Start the run (detached) and stream live SSE events (kept for compatibility)."""
+    _ensure_run_started(conversation_id, request)
     return StreamingResponse(
         _stream_from_hub(conversation_id),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
 @app.get("/api/conversations/{conversation_id}/stream")
 async def resume_message_stream(conversation_id: str):
-    """Reconnect to an in-progress council run (used after a page refresh)."""
+    """Reconnect to an in-progress council run (SSE; kept for compatibility)."""
     return StreamingResponse(
         _stream_from_hub(conversation_id),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
