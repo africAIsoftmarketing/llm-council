@@ -34,6 +34,9 @@ Make the LLM Council app (repo `africAIsoftmarketing/llm-council`) deployable on
 `backend/storage.py` now auto-selects a backend: **PostgreSQL** when `DATABASE_URL` is set (Heroku Postgres add-on), else JSON files (local/ephemeral). Only the 5 primitives (create/get/save/list/delete_conversation) are backend-aware; table `conversations (id TEXT PK, data JSONB, created_at, updated_at)` is auto-created on first use (`_ensure_table`). Uses `psycopg2-binary` (added to pyproject + uv.lock), connection pool, `sslmode=require` (override via `DB_SSLMODE`). app.json adds `heroku-postgresql:essential-0`; README documents the addon command; .env.example documents DATABASE_URL/DB_SSLMODE.
 Validated with a real local Postgres 15: create/get/save/list(newest-first)/delete + incremental assistant updates all persist; data survives a fresh process (restart-safe); JSON fallback still works with no DATABASE_URL.
 
+## 2026-07-01 — App CONFIG persistence (fixes settings lost on restart)
+The in-app config (OpenRouter API key, council models, chairman, LM Studio URLs, advanced config, throttle, etc.) was stored in `data/config.json` on the ephemeral disk → lost on every dyno restart. Fixed by making `config_manager.load_config`/`save_config` backend-aware: when `DATABASE_URL` is set, config is stored as a single JSONB row in an `app_config` table (reusing storage's PG pool); else file fallback. `get_api_key`/`get_council_models`/`apply_config_to_env` all read through `load_config`, so the key flows to OpenRouter after restart. Validated with local Postgres: API key + models survive a fresh process.
+
 ## 2026-06-30 — Resume-on-refresh for in-progress council runs
 Problem: refreshing mid-conversation lost all streaming progress (response only saved after Stage 3; client disconnect cancelled the run).
 Fix:

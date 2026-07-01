@@ -30,6 +30,46 @@ BASE_DATA_DIR = get_base_data_dir()
 # Configuration file path
 CONFIG_FILE = os.path.join(BASE_DATA_DIR, "config.json")
 
+# When DATABASE_URL is set (Heroku Postgres), persist config in Postgres so it
+# survives dyno restarts. Otherwise fall back to the local config.json file.
+USE_PG = bool(os.environ.get("DATABASE_URL"))
+
+
+def _load_config_pg():
+    try:
+        from . import storage  # reuse the same connection pool
+    except ImportError:
+        import storage
+    with storage._pg() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS app_config (id INT PRIMARY KEY, data JSONB NOT NULL)"
+            )
+            cur.execute("SELECT data FROM app_config WHERE id = 1")
+            row = cur.fetchone()
+            return row[0] if row else None
+
+
+def _save_config_pg(config):
+    try:
+        from . import storage
+    except ImportError:
+        import storage
+    from psycopg2.extras import Json
+    with storage._pg() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS app_config (id INT PRIMARY KEY, data JSONB NOT NULL)"
+            )
+            cur.execute(
+                """
+                INSERT INTO app_config (id, data) VALUES (1, %s)
+                ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data
+                """,
+                (Json(config),),
+            )
+
+
 # Default configuration
 DEFAULT_CONFIG = {
     "openrouter_api_key": "",
@@ -128,7 +168,16 @@ def ensure_data_dir():
 
 
 def load_config() -> Dict[str, Any]:
-    """Load configuration from file, or return defaults."""
+    """Load configuration from Postgres (if DATABASE_URL) or file, merged with defaults."""
+    if USE_PG:
+        config = _load_config_pg()
+        if config is None:
+            return DEFAULT_CONFIG.copy()
+        for key, value in DEFAULT_CONFIG.items():
+            if key not in config:
+                config[key] = value
+        return config
+
     ensure_data_dir()
     if os.path.exists(CONFIG_FILE):
         try:
@@ -145,7 +194,11 @@ def load_config() -> Dict[str, Any]:
 
 
 def save_config(config: Dict[str, Any]):
-    """Save configuration to file."""
+    """Save configuration to Postgres (if DATABASE_URL) or file."""
+    if USE_PG:
+        _save_config_pg(config)
+        return
+
     ensure_data_dir()
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=2)
