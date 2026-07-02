@@ -170,10 +170,32 @@ def detect_output_mode(
 # Stage 1 — Collect individual responses (FIXED: individual framing)
 # ---------------------------------------------------------------------------
 
+def _sniff_image_media_type(b64: str) -> str:
+    """Detect image media type from base64 magic bytes.
+
+    Falls back to image/png if the format can't be determined.
+    """
+    if b64.startswith('/9j/'):
+        return 'image/jpeg'
+    if b64.startswith('iVBORw0KGgo'):
+        return 'image/png'
+    if b64.startswith('R0lGOD'):
+        return 'image/gif'
+    if b64.startswith('UklGR'):
+        return 'image/webp'
+    return 'image/png'
+
+
 # System message injected in Stage 1 to prevent each model from acting
 # as the entire "council". Without this, prompts like "You are a council
 # of 5 experts..." cause every model to produce a full synthesis instead
 # of its own individual perspective.
+#
+# NOTE: This is NOT injected when the user's prompt itself defines an
+# explicit multi-agent pipeline (e.g. AGENT 1, AGENT 2, ... with distinct
+# roles). In that case each model is SUPPOSED to run the full pipeline and
+# produce a complete multi-agent output, and the peers rank those complete
+# pipeline runs against each other.
 STAGE1_SYSTEM_MESSAGE = (
     "You are one individual AI model providing your own independent, "
     "comprehensive response to the user's question. "
@@ -187,6 +209,29 @@ STAGE1_SYSTEM_MESSAGE = (
     "Focus on giving the most thorough, accurate, and well-structured "
     "answer you can from your own perspective."
 )
+
+# Indicators that the user prompt defines an explicit multi-agent pipeline.
+# When detected, each model runs the full pipeline itself (no anti-persona
+# framing), because the pipeline IS the intended output.
+_AGENT_PIPELINE_INDICATORS = [
+    'AGENT 1', 'AGENT 2', 'AGENT 3', 'AGENT 4', 'AGENT 5',
+    'AGENT_1', 'AGENT_2',
+    'SENTIMENT_SYSTEM', 'SIGNAL_SYSTEM', 'RISK_SYSTEM',
+    'SUMMARY_SYSTEM', 'MM_SYSTEM',
+    'pipeline d\'agents', 'multi-agent pipeline',
+    'Agent 1', 'Agent 2', 'Agent 3',
+]
+
+
+def _user_prompt_defines_agent_pipeline(user_query: str) -> bool:
+    """Detect whether the user's prompt itself defines a distinct-role
+    agent pipeline that each model should execute in full.
+
+    Requires at least 2 distinct agent markers to avoid false positives
+    from a passing mention of the word "agent".
+    """
+    hits = sum(1 for ind in _AGENT_PIPELINE_INDICATORS if ind in user_query)
+    return hits >= 2
 
 
 async def stage1_collect_responses(
@@ -211,33 +256,88 @@ async def stage1_collect_responses(
     """
     council_models = get_council_models()
 
-    # System message to frame each model as individual contributor
-    system_msg = {"role": "system", "content": STAGE1_SYSTEM_MESSAGE}
+    # Only inject the anti-persona framing if the user prompt does NOT
+    # define its own multi-agent pipeline. When the prompt defines agents
+    # 1..N with distinct roles, each model must run the full pipeline.
+    pipeline_mode = _user_prompt_defines_agent_pipeline(user_query)
+    if pipeline_mode:
+        logger.info(
+            "Stage 1: user prompt defines an agent pipeline — each model "
+            "will execute the full pipeline (no anti-persona framing)."
+        )
+        base_messages = []
+    else:
+        base_messages = [{"role": "system", "content": STAGE1_SYSTEM_MESSAGE}]
 
     if vision_images:
         content = [{"type": "text", "text": user_query}]
         for img in vision_images:
+            # Robust base64 extraction: support multiple key conventions
+            b64 = (
+                img.get('base64_data')
+                or img.get('base64')
+                or img.get('data')
+                or img.get('content')
+            )
+            if not b64:
+                logger.warning(
+                    "Vision image skipped: no base64 data found. Keys present: %s",
+                    list(img.keys())
+                )
+                continue
+
+            # Detect media type: explicit field, data-URI prefix, or default
+            media_type = img.get('media_type') or img.get('mime_type')
+            if not media_type:
+                if b64.startswith('data:'):
+                    # Already a full data URI — use as-is
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {"url": b64}
+                    })
+                    continue
+                # Sniff from base64 magic bytes
+                media_type = _sniff_image_media_type(b64)
+
+            # Strip any accidental data-URI prefix before re-wrapping
+            if b64.startswith('data:'):
+                b64 = b64.split(',', 1)[-1]
+
             content.append({
                 "type": "image_url",
                 "image_url": {
-                    "url": f"data:image/png;base64,{img['base64_data']}"
+                    "url": f"data:{media_type};base64,{b64}"
                 }
             })
-        messages = [system_msg, {"role": "user", "content": content}]
+
+        logger.info(
+            "Stage 1: sending %d vision image(s) to %d models",
+            len(content) - 1, len(council_models)
+        )
+        messages = base_messages + [{"role": "user", "content": content}]
     else:
-        messages = [system_msg, {"role": "user", "content": user_query}]
+        messages = base_messages + [{"role": "user", "content": user_query}]
 
     responses = await query_models_parallel(
         council_models, messages, advanced_config=advanced_config
     )
 
     stage1_results = []
+    failed_models = []
     for model, response in responses.items():
         if response is not None:
             stage1_results.append({
                 "model": model,
                 "response": response.get('content', '')
             })
+        else:
+            failed_models.append(model)
+
+    if failed_models:
+        logger.warning(
+            "Stage 1: %d model(s) failed to respond: %s",
+            len(failed_models), ", ".join(failed_models)
+        )
 
     return stage1_results
 
