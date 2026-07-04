@@ -2,11 +2,17 @@
 
 Improvements over original:
 1. Aggregate rankings injected into chairman prompt (weighted synthesis)
-2. Adaptive output format: prose (default) vs structured JSON (trading/signal mode)
+2. ALL output is prose — trading queries get a structured consensus report
 3. Post-chairman validation guardrail (format-aware)
 4. Confluence extraction pre-processing for trading mode (Stage 2.5)
 5. Temperature parameter support for chairman
 6. Proper data flow: aggregate_rankings passed through to stage3
+
+v2.1 — Removed JSON output mode. The chairman now ALWAYS produces a
+structured prose consensus report, even for trading/signal queries.
+Trading queries get an enriched prompt with the confluence table and
+explicit sections (Entry, SL, TP, R:R, Dissent) but the output remains
+human-readable prose, not JSON.
 """
 
 from typing import List, Dict, Any, Tuple, Optional
@@ -25,15 +31,15 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
-# Output mode detection
+# Output mode detection → Trading query detection (boolean)
 # ---------------------------------------------------------------------------
 
 def _strip_json_blocks(text: str) -> str:
     """Strip JSON code blocks and bare JSON objects from a response.
 
-    Used in prose mode to prevent the chairman from mimicking JSON format
-    seen in Stage 1 responses. Replaces JSON with a prose summary of
-    key-value pairs extracted from the JSON.
+    Used to prevent the chairman from mimicking JSON format seen in
+    Stage 1 responses. Replaces JSON with a prose summary of key-value
+    pairs extracted from the JSON.
 
     Example:
         '```json\n{"sentiment": -1, "reason": "bearish"}\n```'
@@ -112,40 +118,45 @@ def _is_json_response(text: str) -> bool:
     except json.JSONDecodeError:
         return False
 
-# Trading-signal keywords that trigger structured JSON mode
+# Trading-signal keywords used to detect trading queries and enrich
+# the chairman prompt with confluence data. Does NOT change output format.
 _TRADING_SIGNAL_INDICATORS = [
     'fair_value_estimate', 'sentiment', 'bearish', 'bullish',
     'OB ', 'FVG', 'POC', 'VWAP', 'VAL', 'VAH',
     'BOS', 'CHOCH', 'MSS', 'OTE', 'ICT', 'SMC',
     'PDH', 'PDL', 'liquidity', 'Naked POC',
+    'stop loss', 'take profit', 'SL', 'TP',
+    'risk/reward', 'R:R', 'R/R',
+    'entry', 'exit', 'position',
 ]
 
 
-def detect_output_mode(
+def _is_trading_query(
     user_query: str,
     stage1_results: List[Dict[str, Any]],
     advanced_config: dict = None
-) -> str:
+) -> bool:
     """
-    Detect whether the chairman should output structured JSON or prose.
+    Detect whether the query is a trading/signal analysis.
+
+    When True, the chairman prompt will be enriched with a confluence
+    table extracted from Stage 1 responses. Output remains PROSE.
 
     Priority:
     1. Explicit override via advanced_config['chairman_output_mode']
-       → 'json' | 'prose'
-    2. Auto-detect from user query + Stage 1 responses:
-       - If trading/signal indicators are found → 'json'
-       - Otherwise → 'prose' (default, preserves user's format)
+       → 'json' still triggers trading enrichment (backwards compat)
+    2. Auto-detect from user query + Stage 1 responses
 
     Returns:
-        'json' or 'prose'
+        True if trading indicators are found, False otherwise
     """
-    # 1. Explicit override
+    # 1. Explicit override (backwards compatibility)
     if advanced_config:
         explicit = advanced_config.get('chairman_output_mode')
-        if explicit in ('json', 'prose'):
-            return explicit
+        if explicit == 'json':
+            return True
 
-    # 2. Auto-detect: check user query + first few responses for trading signals
+    # 2. Auto-detect: check user query + first few responses
     corpus = user_query.lower()
     for result in stage1_results[:3]:
         corpus += " " + result.get('response', '').lower()
@@ -155,15 +166,15 @@ def detect_output_mode(
         if indicator.lower() in corpus
     )
 
-    # Require at least 4 trading indicators to trigger JSON mode
+    # Require at least 4 trading indicators to trigger enrichment
     if hit_count >= 4:
         logger.info(
-            "Auto-detected trading/signal mode (%d indicators). "
-            "Chairman will output structured JSON.", hit_count
+            "Trading query detected (%d indicators). Chairman prompt "
+            "will include confluence table.", hit_count
         )
-        return 'json'
+        return True
 
-    return 'prose'
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -423,7 +434,7 @@ Now provide your evaluation and ranking:"""
 
 
 # ---------------------------------------------------------------------------
-# Stage 2.5 — Confluence extraction (trading mode only)
+# Stage 2.5 — Confluence extraction (trading enrichment)
 # ---------------------------------------------------------------------------
 
 def extract_key_levels(response_text: str) -> Dict[str, Any]:
@@ -476,7 +487,7 @@ def build_confluence_table(
 ) -> Tuple[str, List[Dict[str, Any]]]:
     """
     Build a structured confluence comparison table from Stage 1 responses.
-    Used only in trading/JSON mode.
+    Used in trading queries to enrich the chairman's prose prompt.
 
     Returns:
         Tuple of (formatted table string, list of per-model extracted levels)
@@ -529,17 +540,8 @@ def build_confluence_table(
 
 
 # ---------------------------------------------------------------------------
-# Stage 3 — Chairman synthesis (ADAPTIVE)
+# Stage 3 — Chairman synthesis (ALWAYS PROSE)
 # ---------------------------------------------------------------------------
-
-CHAIRMAN_JSON_SCHEMA = """{
-  "sentiment": <int, -1 or 0 or 1>,
-  "fair_value_estimate": <float, the synthesized target price>,
-  "confidence": <float 0.0-1.0, your confidence in this estimate>,
-  "reason": "<string, multi-sentence justification citing specific confluences>",
-  "dissenting_views": "<string or null, note any significant alternative targets proposed by minority models and why they were overridden or accepted>"
-}"""
-
 
 def _build_chairman_prompt_prose(
     user_query: str,
@@ -547,7 +549,7 @@ def _build_chairman_prompt_prose(
     stage2_text: str,
     rankings_text: str
 ) -> str:
-    """Build the chairman prompt for PROSE mode (default).
+    """Build the chairman prompt for general prose mode (default).
 
     The chairman produces a comprehensive, format-faithful synthesis that
     mirrors the structure and depth expected by the original question.
@@ -599,60 +601,102 @@ YOUR SYNTHESIS INSTRUCTIONS:
 Remember: your output is PROSE, not JSON. Write your synthesis now:"""
 
 
-def _build_chairman_prompt_json(
+def _build_chairman_prompt_trading_prose(
     user_query: str,
     stage1_text: str,
     stage2_text: str,
     rankings_text: str,
     confluence_table: str
 ) -> str:
-    """Build the chairman prompt for JSON/trading-signal mode.
+    """Build the chairman prompt for TRADING queries — prose consensus report.
 
-    The chairman produces a structured JSON output with sentiment, fair value,
-    confidence, reason, and dissenting views.
+    The chairman produces a structured prose trading consensus report with
+    clear sections for entry analysis, stop loss, take profit, risk/reward,
+    and dissenting views. Output is ALWAYS prose, never JSON.
     """
-    return f"""You are the Chairman of an LLM Council. Multiple AI models have provided trading signal responses to a user's question, and then ranked each other's responses. Your job is to synthesize the BEST possible signal by weighting higher-ranked responses more heavily.
-
-Original Question: {user_query}
+    return f"""You are the Chairman of an LLM Council specialized in trading analysis. Multiple AI models have independently analyzed a trading question, then evaluated and ranked each other's responses. Your job is to synthesize their work into a single, actionable CONSENSUS TRADING REPORT.
 
 ══════════════════════════════════════════
+ORIGINAL QUESTION:
+{user_query}
+══════════════════════════════════════════
+
 AGGREGATE PEER RANKINGS (lower avg = better):
 {rankings_text if rankings_text else "  (not available)"}
 
-IMPORTANT: Weight your synthesis toward the highest-ranked response(s). If you deviate from the top-ranked model's fair_value_estimate, you MUST justify why.
+IMPORTANT: Weight your synthesis toward the highest-ranked response(s). If you deviate from the top-ranked model's analysis, you MUST justify why.
 ══════════════════════════════════════════
 
-STRUCTURED CONFLUENCE TABLE (extracted key levels):
+STRUCTURED CONFLUENCE TABLE (key levels extracted from all models):
 {confluence_table}
-
 ══════════════════════════════════════════
 
-STAGE 1 — FULL INDIVIDUAL RESPONSES:
+STAGE 1 — FULL INDIVIDUAL MODEL RESPONSES:
 {stage1_text}
 
 ══════════════════════════════════════════
 
-STAGE 2 — PEER EVALUATIONS:
+STAGE 2 — PEER EVALUATIONS AND RANKINGS:
 {stage2_text}
 
 ══════════════════════════════════════════
 
-YOUR TASK:
-Synthesize all of the above into a single definitive trading signal. Consider:
-- The aggregate rankings: the top-ranked model's analysis should anchor your synthesis
-- The confluence table: identify where models agree and disagree on key levels
-- Any divergence in fair_value_estimate: analyze which target has stronger confluence support
-- The peer evaluations: what strengths and weaknesses did evaluators identify
+CRITICAL FORMAT RULES:
 
-You MUST respond with ONLY a valid JSON object matching this exact schema:
-{CHAIRMAN_JSON_SCHEMA}
+⛔ DO NOT respond with JSON. DO NOT output a JSON object. DO NOT wrap your answer in curly braces.
+⛔ Even if the Stage 1 responses contain JSON blocks (sentiment, fair_value_estimate, etc.), your report MUST be PROSE TEXT — structured paragraphs and sections, NOT JSON.
+✅ Your response must be a clear, structured, human-readable TRADING CONSENSUS REPORT.
 
-Rules:
-- fair_value_estimate must be justified by at least 2 confluent levels
-- reason must cite specific price levels (OB, FVG, POC, VWAP, etc.)
-- If models proposed different fair_value targets, dissenting_views must explain which alternatives were considered and why
-- Do NOT wrap the JSON in markdown code fences
-- Do NOT add any text before or after the JSON object"""
+YOUR REPORT MUST FOLLOW THIS EXACT STRUCTURE:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## CONSENSUS DU COUNCIL
+
+Write 2-3 sentences summarizing the overall consensus: what direction the council agrees on, the level of agreement, and the general sentiment (bullish/bearish/neutral). State how many models out of the total agree on the direction.
+
+## ANALYSE DE L'ENTRÉE
+
+Analyze the entry point from the original question. Cite the specific price levels (OB, FVG, POC, VWAP, etc.) that validate or invalidate the entry. Reference which models identified these levels and whether the confluence table confirms alignment.
+
+## STOP LOSS — RECOMMANDATION DU COUNCIL
+
+State the consensus Stop Loss level with a clear price. Explain why by citing the specific support levels, liquidity zones, or structural points (IBL, PDL, VAL, etc.) that multiple models identified. If models proposed different SL levels, state the range and explain which one the council recommends and why.
+
+## TAKE PROFIT — RECOMMANDATION DU COUNCIL
+
+State the consensus Take Profit target(s) with clear prices. For each target:
+- TP1 (primary): the level where the majority of models converge, with the confluence evidence (resistance zones, liquidity pools, Weak High, etc.)
+- TP2 (extended, if applicable): secondary target identified by at least 2 models
+- State the probability or confidence level if models provided one
+
+## RATIO RISQUE/RENDEMENT
+
+Calculate and state the R:R ratio based on the recommended SL and TP levels relative to the entry price. Comment on whether this ratio meets the council's threshold for a valid trade.
+
+## AVIS DIVERGENTS
+
+If any model proposed significantly different levels or a contrarian view, describe it here. Explain why the majority consensus prevailed over the dissenting opinion, or note if the dissenting view has merit worth monitoring.
+
+## RECOMMANDATION ACTIONABLE
+
+In 2-3 sentences, give the final clear recommendation: hold/close/trail/partial exit, with specific prices. This should be directly executable by the trader.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ADDITIONAL INSTRUCTIONS:
+
+1. ANCHOR on the top-ranked response(s) from the aggregate rankings. Their analysis should form the backbone of your report.
+
+2. USE THE CONFLUENCE TABLE to identify where models agree and disagree on key levels. Agreement = high confidence. Divergence = must be addressed.
+
+3. CITE SPECIFIC PRICE LEVELS throughout. Never say "around X" without giving the exact level identified by the models.
+
+4. Respond in the SAME LANGUAGE as the original question.
+
+5. QUALITY FLOOR: Your report must be at least as detailed as the best individual model response. You are synthesizing, not summarizing.
+
+Write your consensus trading report now:"""
 
 
 async def stage3_synthesize_final(
@@ -664,13 +708,10 @@ async def stage3_synthesize_final(
     chairman_temperature: float = None
 ) -> Dict[str, Any]:
     """
-    Stage 3: Chairman synthesizes final response.
+    Stage 3: Chairman synthesizes final response — ALWAYS PROSE.
 
-    Adaptive output mode:
-    - 'prose' (default): Full, structured synthesis mirroring the original
-      question's expected format. No format reduction.
-    - 'json' (auto-detected for trading/signal queries): Structured JSON
-      with sentiment, fair_value, confidence, dissenting_views.
+    For trading queries, the prompt is enriched with a confluence table
+    and structured report sections, but the output is still prose.
 
     Args:
         user_query: The original user query
@@ -681,13 +722,17 @@ async def stage3_synthesize_final(
         chairman_temperature: Optional temperature override
 
     Returns:
-        Dict with 'model', 'response', 'validation', and 'output_mode' keys
+        Dict with 'model', 'response', 'validation', 'output_mode',
+        and 'is_trading' keys
     """
     chairman_model = get_chairman_model()
 
-    # --- Detect output mode ---
-    output_mode = detect_output_mode(user_query, stage1_results, advanced_config)
-    logger.info("Chairman output mode: %s", output_mode)
+    # --- Detect if this is a trading query (enrichment only, NOT format change) ---
+    is_trading = _is_trading_query(user_query, stage1_results, advanced_config)
+    output_mode = 'prose'  # ALWAYS prose
+    logger.info(
+        "Chairman output mode: prose (trading enrichment: %s)", is_trading
+    )
 
     # --- Format aggregate rankings ---
     rankings_text = ""
@@ -700,19 +745,11 @@ async def stage3_synthesize_final(
             )
         rankings_text = "\n".join(rankings_lines)
 
-    # --- Stage 1 full text ---
-    if output_mode == 'prose':
-        # Strip JSON blocks from Stage 1 responses to prevent chairman
-        # from mimicking JSON format (the #1 cause of format contamination)
-        stage1_text = "\n\n".join([
-            f"Model: {result['model']}\nResponse: {_strip_json_blocks(result['response'])}"
-            for result in stage1_results
-        ])
-    else:
-        stage1_text = "\n\n".join([
-            f"Model: {result['model']}\nResponse: {result['response']}"
-            for result in stage1_results
-        ])
+    # --- Stage 1 full text (always strip JSON blocks in prose mode) ---
+    stage1_text = "\n\n".join([
+        f"Model: {result['model']}\nResponse: {_strip_json_blocks(result['response'])}"
+        for result in stage1_results
+    ])
 
     # --- Stage 2 evaluations ---
     stage2_text = "\n\n".join([
@@ -720,17 +757,15 @@ async def stage3_synthesize_final(
         for result in stage2_results
     ])
 
-    # --- Build mode-specific prompt ---
-    extracted_levels = []
-
-    if output_mode == 'json':
-        # Trading mode: build confluence table (Stage 2.5)
+    # --- Build prompt (trading-enriched or general) ---
+    if is_trading:
+        # Trading: build confluence table (Stage 2.5) and use trading prose prompt
         confluence_table, extracted_levels = build_confluence_table(stage1_results)
-        chairman_prompt = _build_chairman_prompt_json(
+        chairman_prompt = _build_chairman_prompt_trading_prose(
             user_query, stage1_text, stage2_text, rankings_text, confluence_table
         )
     else:
-        # Prose mode (default): no confluence table, format-faithful synthesis
+        # General: standard prose synthesis
         chairman_prompt = _build_chairman_prompt_prose(
             user_query, stage1_text, stage2_text, rankings_text
         )
@@ -757,27 +792,40 @@ async def stage3_synthesize_final(
             "model": chairman_model,
             "response": "Error: Unable to generate final synthesis.",
             "output_mode": output_mode,
+            "is_trading": is_trading,
             "validation": {"status": "error", "reason": "chairman_no_response"}
         }
 
     raw_content = response.get('content', '')
 
-    # --- Post-chairman validation ---
-    if output_mode == 'json':
-        validation = validate_chairman_json(
-            raw_content, extracted_levels, aggregate_rankings
-        )
-    else:
-        validation = validate_chairman_prose(
-            raw_content, stage1_results, aggregate_rankings
+    # --- Post-chairman validation (always prose) ---
+    validation = validate_chairman_prose(
+        raw_content, stage1_results, aggregate_rankings
+    )
+
+    # --- RETRY: if chairman returned JSON despite prose instructions ---
+    if _is_json_response(raw_content):
+        logger.warning(
+            "Chairman returned JSON despite prose instructions. "
+            "Retrying with correction prompt (attempt 2/2)."
         )
 
-        # --- RETRY: if chairman returned JSON in prose mode, re-query ---
-        if _is_json_response(raw_content):
-            logger.warning(
-                "Chairman returned JSON in prose mode. Retrying with "
-                "correction prompt (attempt 2/2)."
+        if is_trading:
+            correction_prompt = (
+                f"Your previous response was a JSON object, but the council "
+                f"requires a STRUCTURED PROSE TRADING CONSENSUS REPORT — "
+                f"with clear sections: Consensus du Council, Analyse de "
+                f"l'Entrée, Stop Loss, Take Profit, Ratio Risque/Rendement, "
+                f"Avis Divergents, Recommandation Actionable.\n\n"
+                f"Here is the original question again:\n\n{user_query}\n\n"
+                f"And here is your JSON response that must be rewritten as "
+                f"a detailed prose trading report:\n\n{raw_content}\n\n"
+                f"⛔ DO NOT output JSON. DO NOT wrap anything in curly braces.\n"
+                f"✅ Write a comprehensive, structured PROSE report with the "
+                f"sections listed above. Cite specific price levels throughout. "
+                f"Respond in the same language as the original question."
             )
+        else:
             correction_prompt = (
                 f"Your previous response was a JSON object, but the user "
                 f"expects a detailed PROSE answer — paragraphs, numbered "
@@ -789,127 +837,40 @@ async def stage3_synthesize_final(
                 f"follows the format requested in the original question. "
                 f"DO NOT output JSON. Write detailed paragraphs and sections."
             )
-            retry_messages = [{"role": "user", "content": correction_prompt}]
-            retry_response = await query_model(
-                chairman_model, retry_messages, **query_kwargs
-            )
 
-            if retry_response is not None:
-                retry_content = retry_response.get('content', '')
-                if not _is_json_response(retry_content) and len(retry_content) > len(raw_content):
-                    raw_content = retry_content
-                    validation = validate_chairman_prose(
-                        raw_content, stage1_results, aggregate_rankings
-                    )
-                    validation['retried'] = True
-                    logger.info("Chairman retry succeeded — prose response obtained.")
-                else:
-                    validation['warnings'].append(
-                        "Chairman retry also returned JSON or shorter response. "
-                        "Consider changing the chairman model."
-                    )
-                    validation['retried'] = True
-                    validation['retry_failed'] = True
+        retry_messages = [{"role": "user", "content": correction_prompt}]
+        retry_response = await query_model(
+            chairman_model, retry_messages, **query_kwargs
+        )
+
+        if retry_response is not None:
+            retry_content = retry_response.get('content', '')
+            if not _is_json_response(retry_content) and len(retry_content) > len(raw_content):
+                raw_content = retry_content
+                validation = validate_chairman_prose(
+                    raw_content, stage1_results, aggregate_rankings
+                )
+                validation['retried'] = True
+                logger.info("Chairman retry succeeded — prose response obtained.")
+            else:
+                validation['warnings'].append(
+                    "Chairman retry also returned JSON or shorter response. "
+                    "Consider changing the chairman model."
+                )
+                validation['retried'] = True
+                validation['retry_failed'] = True
 
     return {
         "model": chairman_model,
         "response": raw_content,
         "output_mode": output_mode,
+        "is_trading": is_trading,
         "validation": validation
     }
 
 
 # ---------------------------------------------------------------------------
-# Post-chairman validation — JSON mode (trading)
-# ---------------------------------------------------------------------------
-
-def validate_chairman_json(
-    chairman_response: str,
-    extracted_levels: List[Dict[str, Any]],
-    aggregate_rankings: List[Dict[str, Any]] = None
-) -> Dict[str, Any]:
-    """
-    Validate the chairman's JSON response for coherence with council data.
-
-    Checks:
-    1. Valid JSON with required fields
-    2. fair_value_estimate matches a model's proposed value
-    3. Alignment with top-ranked model (or justified deviation)
-    """
-    validation = {
-        "status": "ok",
-        "warnings": [],
-        "parsed_json": None
-    }
-
-    # Strip markdown fences if present
-    clean = chairman_response.strip()
-    clean = re.sub(r'^```(?:json)?\s*', '', clean)
-    clean = re.sub(r'\s*```$', '', clean)
-
-    try:
-        parsed = json.loads(clean)
-        validation['parsed_json'] = parsed
-    except json.JSONDecodeError as e:
-        validation['status'] = 'warning'
-        validation['warnings'].append(f"Chairman response is not valid JSON: {e}")
-        logger.warning("Chairman response failed JSON parse: %s", e)
-        return validation
-
-    # Check required fields
-    required_fields = ['sentiment', 'fair_value_estimate', 'reason']
-    for field in required_fields:
-        if field not in parsed:
-            validation['warnings'].append(f"Missing required field: {field}")
-            validation['status'] = 'warning'
-
-    chairman_fv = parsed.get('fair_value_estimate')
-    if chairman_fv is None:
-        return validation
-
-    # Check fair_value coherence
-    model_fair_values = {}
-    for level_data in extracted_levels:
-        model = level_data.get('model', 'unknown')
-        fv = level_data.get('fair_value_estimate')
-        if fv is not None:
-            model_fair_values[model] = fv
-
-    if model_fair_values:
-        all_fvs = set(model_fair_values.values())
-
-        if chairman_fv not in all_fvs:
-            validation['warnings'].append(
-                f"Chairman fair_value {chairman_fv} does not match any model's "
-                f"proposed values: {dict(model_fair_values)}"
-            )
-
-        if aggregate_rankings:
-            top_model = aggregate_rankings[0]['model']
-            top_fv = model_fair_values.get(top_model)
-            if top_fv is not None and chairman_fv != top_fv:
-                dissent = parsed.get('dissenting_views', '') or ''
-                if not dissent.strip():
-                    validation['status'] = 'warning'
-                    validation['warnings'].append(
-                        f"Chairman chose {chairman_fv} over top-ranked "
-                        f"{top_model}'s value {top_fv} without dissenting_views "
-                        f"explanation. Consider re-running Stage 3."
-                    )
-                    logger.warning(
-                        "Chairman FV %s deviates from top-ranked %s (%s) "
-                        "without justification.",
-                        chairman_fv, top_model, top_fv
-                    )
-
-    if validation['warnings']:
-        validation['status'] = 'warning'
-
-    return validation
-
-
-# ---------------------------------------------------------------------------
-# Post-chairman validation — Prose mode (general)
+# Post-chairman validation — Prose mode (all queries)
 # ---------------------------------------------------------------------------
 
 def validate_chairman_prose(
@@ -939,12 +900,11 @@ def validate_chairman_prose(
             json.loads(clean)
             validation['status'] = 'warning'
             validation['warnings'].append(
-                "Chairman returned JSON in prose mode. The synthesis should be "
-                "a comprehensive text response matching the original question's "
-                "expected format. Consider re-running Stage 3 or adjusting the "
-                "chairman model."
+                "Chairman returned JSON instead of prose. The synthesis "
+                "should be a comprehensive text response. Consider "
+                "re-running Stage 3 or adjusting the chairman model."
             )
-            logger.warning("Chairman produced JSON in prose mode — likely format mismatch.")
+            logger.warning("Chairman produced JSON instead of prose.")
             return validation
         except json.JSONDecodeError:
             pass  # Not valid JSON, that's fine for prose
@@ -1106,7 +1066,7 @@ Title:"""
 
 
 # ---------------------------------------------------------------------------
-# Full council orchestrator (IMPROVED)
+# Full council orchestrator (IMPROVED — always prose)
 # ---------------------------------------------------------------------------
 
 async def run_full_council(
@@ -1119,8 +1079,9 @@ async def run_full_council(
 
     Improvements:
     - aggregate_rankings passed to stage3_synthesize_final
-    - Adaptive output mode (prose vs JSON) auto-detected
-    - stage3_result includes validation + output_mode metadata
+    - Trading queries auto-detected and enriched with confluence data
+    - Output is ALWAYS prose — structured report for trading, synthesis for general
+    - stage3_result includes validation + is_trading metadata
 
     Returns:
         Tuple of (stage1_results, stage2_results, stage3_result, metadata)
@@ -1135,6 +1096,7 @@ async def run_full_council(
             "model": "error",
             "response": "All models failed to respond. Please check your API key and try again.",
             "output_mode": "prose",
+            "is_trading": False,
             "validation": {"status": "error", "reason": "no_stage1_responses"}
         }, {}
 
@@ -1148,7 +1110,7 @@ async def run_full_council(
         stage2_results, label_to_model
     )
 
-    # Stage 3: Synthesize final answer (with aggregate_rankings + adaptive mode)
+    # Stage 3: Synthesize final answer (always prose, with trading enrichment)
     stage3_result = await stage3_synthesize_final(
         user_query,
         stage1_results,
@@ -1161,7 +1123,8 @@ async def run_full_council(
     metadata = {
         "label_to_model": label_to_model,
         "aggregate_rankings": aggregate_rankings,
-        "chairman_output_mode": stage3_result.get('output_mode', 'prose'),
+        "chairman_output_mode": "prose",  # Always prose now
+        "is_trading_query": stage3_result.get('is_trading', False),
         "chairman_validation": stage3_result.get('validation', {})
     }
 
