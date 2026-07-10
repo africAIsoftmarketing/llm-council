@@ -120,14 +120,34 @@ def _is_json_response(text: str) -> bool:
 
 # Trading-signal keywords used to detect trading queries and enrich
 # the chairman prompt with confluence data. Does NOT change output format.
-_TRADING_SIGNAL_INDICATORS = [
-    'fair_value_estimate', 'sentiment', 'bearish', 'bullish',
-    'OB ', 'FVG', 'POC', 'VWAP', 'VAL', 'VAH',
-    'BOS', 'CHOCH', 'MSS', 'OTE', 'ICT', 'SMC',
-    'PDH', 'PDL', 'liquidity', 'Naked POC',
-    'stop loss', 'take profit', 'SL', 'TP',
+#
+# TWO-TIER DETECTION: The user's query is the PRIMARY signal. Stage 1
+# responses are only used as SECONDARY confirmation. This prevents false
+# positives when someone asks about trading tools/models and the responses
+# naturally mention trading concepts like SL, TP, OB, FVG, etc.
+
+# Tier 1 — Strong indicators: if found IN THE USER QUERY, each counts
+# as strong evidence of trading intent. These are terms a user would
+# only write if they're actually requesting a trade analysis.
+_TRADING_QUERY_INDICATORS = [
+    'stop loss', 'stop-loss', 'take profit', 'take-profit',
     'risk/reward', 'R:R', 'R/R',
-    'entry', 'exit', 'position',
+    'plan de trading', 'trading plan', 'exit plan',
+    'fair_value_estimate', 'fair value estimate',
+    'position size', 'taille de position',
+    'j\'ai acheté', 'j\'ai vendu', 'i bought', 'i sold',
+    'mon entrée', 'my entry', 'prix d\'entrée', 'entry price',
+    'OTE ', 'Naked POC',
+]
+
+# Tier 2 — Technical indicators: only meaningful when combined with
+# Tier 1 hits from the user query. These appear in both trading
+# analysis AND discussions ABOUT trading tools.
+_TRADING_TECHNICAL_INDICATORS = [
+    'OB ', 'FVG', 'POC', 'VWAP', 'VAL', 'VAH',
+    'BOS', 'CHOCH', 'MSS', 'ICT', 'SMC',
+    'PDH', 'PDL', 'liquidity',
+    'sentiment', 'bearish', 'bullish',
 ]
 
 
@@ -142,13 +162,18 @@ def _is_trading_query(
     When True, the chairman prompt will be enriched with a confluence
     table extracted from Stage 1 responses. Output remains PROSE.
 
-    Priority:
+    Detection logic (two-tier, query-first):
     1. Explicit override via advanced_config['chairman_output_mode']
-       → 'json' still triggers trading enrichment (backwards compat)
-    2. Auto-detect from user query + Stage 1 responses
+    2. Count Tier 1 hits in the USER QUERY ONLY (strong intent signals)
+       - 2+ Tier 1 hits → trading (high confidence, no confirmation needed)
+       - 1 Tier 1 hit  → check Tier 2 in responses for confirmation
+       - 0 Tier 1 hits → NOT trading (responses alone cannot trigger it)
+
+    This prevents false positives when asking about trading tools/models,
+    where Stage 1 responses naturally mention SL, TP, OB, FVG, etc.
 
     Returns:
-        True if trading indicators are found, False otherwise
+        True if trading intent is confirmed, False otherwise
     """
     # 1. Explicit override (backwards compatibility)
     if advanced_config:
@@ -156,24 +181,46 @@ def _is_trading_query(
         if explicit == 'json':
             return True
 
-    # 2. Auto-detect: check user query + first few responses
-    corpus = user_query.lower()
-    for result in stage1_results[:3]:
-        corpus += " " + result.get('response', '').lower()
-
-    hit_count = sum(
-        1 for indicator in _TRADING_SIGNAL_INDICATORS
-        if indicator.lower() in corpus
+    # 2. Tier 1 — scan USER QUERY ONLY for strong trading intent
+    query_lower = user_query.lower()
+    tier1_hits = sum(
+        1 for ind in _TRADING_QUERY_INDICATORS
+        if ind.lower() in query_lower
     )
 
-    # Require at least 4 trading indicators to trigger enrichment
-    if hit_count >= 4:
+    # 2+ strong signals in the query → definitely trading
+    if tier1_hits >= 2:
         logger.info(
-            "Trading query detected (%d indicators). Chairman prompt "
-            "will include confluence table.", hit_count
+            "Trading query detected: %d Tier-1 indicators in user query.",
+            tier1_hits
         )
         return True
 
+    # 0 strong signals → NOT trading, regardless of what responses contain
+    if tier1_hits == 0:
+        return False
+
+    # Exactly 1 strong signal → confirm with Tier 2 from responses
+    response_corpus = ""
+    for result in stage1_results[:3]:
+        response_corpus += " " + result.get('response', '').lower()
+
+    tier2_hits = sum(
+        1 for ind in _TRADING_TECHNICAL_INDICATORS
+        if ind.lower() in response_corpus
+    )
+
+    if tier2_hits >= 3:
+        logger.info(
+            "Trading query detected: %d Tier-1 in query + %d Tier-2 "
+            "in responses (confirmed).", tier1_hits, tier2_hits
+        )
+        return True
+
+    logger.debug(
+        "Trading detection: %d Tier-1, %d Tier-2 — below threshold, "
+        "treating as general query.", tier1_hits, tier2_hits
+    )
     return False
 
 
