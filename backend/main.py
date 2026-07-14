@@ -173,7 +173,10 @@ async def _run_council_task(
 
         _publish(conversation_id, {"type": "stage3_start"})
         stage3_result = await stage3_synthesize_final(
-            query_content, stage1_results, stage2_results, advanced_config=advanced_config
+            query_content, stage1_results, stage2_results,
+            aggregate_rankings=aggregate_rankings,
+            advanced_config=advanced_config,
+            vision_images=vision_images
         )
         storage.update_last_assistant_message(conversation_id, stage3=stage3_result, status="complete")
         _publish(conversation_id, {"type": "stage3_complete", "data": stage3_result})
