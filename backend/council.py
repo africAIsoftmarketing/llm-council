@@ -13,6 +13,9 @@ structured prose consensus report, even for trading/signal queries.
 Trading queries get an enriched prompt with the confluence table and
 explicit sections (Entry, SL, TP, R:R, Dissent) but the output remains
 human-readable prose, not JSON.
+
+v2.2 — Added web_search tool support. Stage 1 models and the chairman
+can now search the web when their reasoning requires up-to-date data.
 """
 
 from typing import List, Dict, Any, Tuple, Optional
@@ -31,23 +34,25 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
+# Web search tool descriptor
+# ---------------------------------------------------------------------------
+
+def _build_web_search_tool() -> dict:
+    """Return the web_search tool descriptor for the OpenRouter/Anthropic API."""
+    return {
+        "type": "web_search_20250305",
+        "name": "web_search"
+    }
+
+
+# ---------------------------------------------------------------------------
 # Output mode detection → Trading query detection (boolean)
 # ---------------------------------------------------------------------------
 
 def _strip_json_blocks(text: str) -> str:
-    """Strip JSON code blocks and bare JSON objects from a response.
-
-    Used to prevent the chairman from mimicking JSON format seen in
-    Stage 1 responses. Replaces JSON with a prose summary of key-value
-    pairs extracted from the JSON.
-
-    Example:
-        '```json\n{"sentiment": -1, "reason": "bearish"}\n```'
-        → '[Extracted data: sentiment = -1, reason = bearish]'
-    """
+    """Strip JSON code blocks and bare JSON objects from a response."""
     def _json_to_prose(match: re.Match) -> str:
         raw = match.group(0)
-        # Strip fences
         clean = re.sub(r'^```(?:json)?\s*', '', raw.strip())
         clean = re.sub(r'\s*```$', '', clean)
         try:
@@ -59,7 +64,6 @@ def _strip_json_blocks(text: str) -> str:
             pass
         return raw
 
-    # Replace fenced JSON blocks: ```json ... ```
     result = re.sub(
         r'```json\s*\{.*?\}\s*```',
         _json_to_prose,
@@ -67,8 +71,6 @@ def _strip_json_blocks(text: str) -> str:
         flags=re.DOTALL
     )
 
-    # Replace bare JSON objects that look like full responses
-    # (starts at line beginning, has "sentiment" or "fair_value" keys)
     def _bare_json_to_prose(match: re.Match) -> str:
         raw = match.group(0)
         try:
@@ -91,12 +93,7 @@ def _strip_json_blocks(text: str) -> str:
 
 
 def _is_json_response(text: str) -> bool:
-    """Check if a response is primarily a JSON object (not prose).
-
-    Returns True if the entire response (after stripping whitespace and
-    markdown fences) is a single JSON object. A response that contains
-    JSON embedded within prose paragraphs returns False.
-    """
+    """Check if a response is primarily a JSON object (not prose)."""
     clean = text.strip()
     clean = re.sub(r'^```(?:json)?\s*', '', clean)
     clean = re.sub(r'\s*```$', '', clean)
@@ -107,28 +104,15 @@ def _is_json_response(text: str) -> bool:
 
     try:
         json.loads(clean)
-        # It's valid JSON — but is the ENTIRE response just this JSON?
-        # Check if there's meaningful prose around the JSON block
         non_json = text.strip()
         non_json = re.sub(r'```json\s*\{.*?\}\s*```', '', non_json, flags=re.DOTALL)
         non_json = re.sub(r'\{[^{}]*\}', '', non_json)
         non_json = non_json.strip()
-        # If less than 100 chars of non-JSON content, it's a JSON response
         return len(non_json) < 100
     except json.JSONDecodeError:
         return False
 
-# Trading-signal keywords used to detect trading queries and enrich
-# the chairman prompt with confluence data. Does NOT change output format.
-#
-# TWO-TIER DETECTION: The user's query is the PRIMARY signal. Stage 1
-# responses are only used as SECONDARY confirmation. This prevents false
-# positives when someone asks about trading tools/models and the responses
-# naturally mention trading concepts like SL, TP, OB, FVG, etc.
 
-# Tier 1 — Strong indicators: if found IN THE USER QUERY, each counts
-# as strong evidence of trading intent. These are terms a user would
-# only write if they're actually requesting a trade analysis.
 _TRADING_QUERY_INDICATORS = [
     'stop loss', 'stop-loss', 'take profit', 'take-profit',
     'risk/reward', 'R:R', 'R/R',
@@ -140,9 +124,6 @@ _TRADING_QUERY_INDICATORS = [
     'OTE ', 'Naked POC',
 ]
 
-# Tier 2 — Technical indicators: only meaningful when combined with
-# Tier 1 hits from the user query. These appear in both trading
-# analysis AND discussions ABOUT trading tools.
 _TRADING_TECHNICAL_INDICATORS = [
     'OB ', 'FVG', 'POC', 'VWAP', 'VAL', 'VAH',
     'BOS', 'CHOCH', 'MSS', 'ICT', 'SMC',
@@ -156,39 +137,18 @@ def _is_trading_query(
     stage1_results: List[Dict[str, Any]],
     advanced_config: dict = None
 ) -> bool:
-    """
-    Detect whether the query is a trading/signal analysis.
-
-    When True, the chairman prompt will be enriched with a confluence
-    table extracted from Stage 1 responses. Output remains PROSE.
-
-    Detection logic (two-tier, query-first):
-    1. Explicit override via advanced_config['chairman_output_mode']
-    2. Count Tier 1 hits in the USER QUERY ONLY (strong intent signals)
-       - 2+ Tier 1 hits → trading (high confidence, no confirmation needed)
-       - 1 Tier 1 hit  → check Tier 2 in responses for confirmation
-       - 0 Tier 1 hits → NOT trading (responses alone cannot trigger it)
-
-    This prevents false positives when asking about trading tools/models,
-    where Stage 1 responses naturally mention SL, TP, OB, FVG, etc.
-
-    Returns:
-        True if trading intent is confirmed, False otherwise
-    """
-    # 1. Explicit override (backwards compatibility)
+    """Detect whether the query is a trading/signal analysis."""
     if advanced_config:
         explicit = advanced_config.get('chairman_output_mode')
         if explicit == 'json':
             return True
 
-    # 2. Tier 1 — scan USER QUERY ONLY for strong trading intent
     query_lower = user_query.lower()
     tier1_hits = sum(
         1 for ind in _TRADING_QUERY_INDICATORS
         if ind.lower() in query_lower
     )
 
-    # 2+ strong signals in the query → definitely trading
     if tier1_hits >= 2:
         logger.info(
             "Trading query detected: %d Tier-1 indicators in user query.",
@@ -196,11 +156,9 @@ def _is_trading_query(
         )
         return True
 
-    # 0 strong signals → NOT trading, regardless of what responses contain
     if tier1_hits == 0:
         return False
 
-    # Exactly 1 strong signal → confirm with Tier 2 from responses
     response_corpus = ""
     for result in stage1_results[:3]:
         response_corpus += " " + result.get('response', '').lower()
@@ -225,14 +183,11 @@ def _is_trading_query(
 
 
 # ---------------------------------------------------------------------------
-# Stage 1 — Collect individual responses (FIXED: individual framing)
+# Stage 1 — Collect individual responses
 # ---------------------------------------------------------------------------
 
 def _sniff_image_media_type(b64: str) -> str:
-    """Detect image media type from base64 magic bytes.
-
-    Falls back to image/png if the format can't be determined.
-    """
+    """Detect image media type from base64 magic bytes."""
     if b64.startswith('/9j/'):
         return 'image/jpeg'
     if b64.startswith('iVBORw0KGgo'):
@@ -244,16 +199,6 @@ def _sniff_image_media_type(b64: str) -> str:
     return 'image/png'
 
 
-# System message injected in Stage 1 to prevent each model from acting
-# as the entire "council". Without this, prompts like "You are a council
-# of 5 experts..." cause every model to produce a full synthesis instead
-# of its own individual perspective.
-#
-# NOTE: This is NOT injected when the user's prompt itself defines an
-# explicit multi-agent pipeline (e.g. AGENT 1, AGENT 2, ... with distinct
-# roles). In that case each model is SUPPOSED to run the full pipeline and
-# produce a complete multi-agent output, and the peers rank those complete
-# pipeline runs against each other.
 STAGE1_SYSTEM_MESSAGE = (
     "You are one individual AI model providing your own independent, "
     "comprehensive response to the user's question. "
@@ -268,9 +213,6 @@ STAGE1_SYSTEM_MESSAGE = (
     "answer you can from your own perspective."
 )
 
-# Indicators that the user prompt defines an explicit multi-agent pipeline.
-# When detected, each model runs the full pipeline itself (no anti-persona
-# framing), because the pipeline IS the intended output.
 _AGENT_PIPELINE_INDICATORS = [
     'AGENT 1', 'AGENT 2', 'AGENT 3', 'AGENT 4', 'AGENT 5',
     'AGENT_1', 'AGENT_2',
@@ -283,11 +225,7 @@ _AGENT_PIPELINE_INDICATORS = [
 
 def _user_prompt_defines_agent_pipeline(user_query: str) -> bool:
     """Detect whether the user's prompt itself defines a distinct-role
-    agent pipeline that each model should execute in full.
-
-    Requires at least 2 distinct agent markers to avoid false positives
-    from a passing mention of the word "agent".
-    """
+    agent pipeline that each model should execute in full."""
     hits = sum(1 for ind in _AGENT_PIPELINE_INDICATORS if ind in user_query)
     return hits >= 2
 
@@ -300,23 +238,11 @@ async def stage1_collect_responses(
     """
     Stage 1: Collect individual responses from all council models.
 
-    Each model receives a system message framing it as an individual
-    contributor. This prevents prompts with council/group framing
-    from causing each model to produce a full synthesis.
-
-    Args:
-        user_query: The user's question
-        vision_images: Optional list of vision images with base64 data
-        advanced_config: Advanced configuration from frontend
-
-    Returns:
-        List of dicts with 'model' and 'response' keys
+    Web search is enabled for all models so they can retrieve
+    up-to-date information when needed.
     """
     council_models = get_council_models()
 
-    # Only inject the anti-persona framing if the user prompt does NOT
-    # define its own multi-agent pipeline. When the prompt defines agents
-    # 1..N with distinct roles, each model must run the full pipeline.
     pipeline_mode = _user_prompt_defines_agent_pipeline(user_query)
     if pipeline_mode:
         logger.info(
@@ -330,7 +256,6 @@ async def stage1_collect_responses(
     if vision_images:
         content = [{"type": "text", "text": user_query}]
         for img in vision_images:
-            # Robust base64 extraction: support multiple key conventions
             b64 = (
                 img.get('base64_data')
                 or img.get('base64')
@@ -344,20 +269,16 @@ async def stage1_collect_responses(
                 )
                 continue
 
-            # Detect media type: explicit field, data-URI prefix, or default
             media_type = img.get('media_type') or img.get('mime_type')
             if not media_type:
                 if b64.startswith('data:'):
-                    # Already a full data URI — use as-is
                     content.append({
                         "type": "image_url",
                         "image_url": {"url": b64}
                     })
                     continue
-                # Sniff from base64 magic bytes
                 media_type = _sniff_image_media_type(b64)
 
-            # Strip any accidental data-URI prefix before re-wrapping
             if b64.startswith('data:'):
                 b64 = b64.split(',', 1)[-1]
 
@@ -376,8 +297,12 @@ async def stage1_collect_responses(
     else:
         messages = base_messages + [{"role": "user", "content": user_query}]
 
+    # Pass web_search tool so models can fetch live data when needed
     responses = await query_models_parallel(
-        council_models, messages, advanced_config=advanced_config
+        council_models,
+        messages,
+        advanced_config=advanced_config,
+        tools=[_build_web_search_tool()]
     )
 
     stage1_results = []
@@ -409,12 +334,7 @@ async def stage2_collect_rankings(
     stage1_results: List[Dict[str, Any]],
     advanced_config: dict = None
 ) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
-    """
-    Stage 2: Each model ranks the anonymized responses.
-
-    Returns:
-        Tuple of (rankings list, label_to_model mapping)
-    """
+    """Stage 2: Each model ranks the anonymized responses."""
     council_models = get_council_models()
 
     labels = [chr(65 + i) for i in range(len(stage1_results))]
@@ -485,19 +405,9 @@ Now provide your evaluation and ranking:"""
 # ---------------------------------------------------------------------------
 
 def extract_key_levels(response_text: str) -> Dict[str, Any]:
-    """
-    Extract structured SMC/ICT key levels from a model's response text.
-
-    Parses JSON blocks and known patterns to surface:
-    - fair_value_estimate, sentiment
-    - Named levels: OB, FVG, POC, VAL, VWAP, PDH, PDL, etc.
-
-    Returns:
-        Dict of extracted levels and metadata
-    """
+    """Extract structured SMC/ICT key levels from a model's response text."""
     levels = {}
 
-    # --- Try to extract JSON block first ---
     json_match = re.search(r'\{[^{}]*"sentiment"[^{}]*\}', response_text, re.DOTALL)
     if json_match:
         try:
@@ -508,7 +418,6 @@ def extract_key_levels(response_text: str) -> Dict[str, Any]:
         except json.JSONDecodeError:
             pass
 
-    # --- Extract named price levels via regex ---
     level_patterns = {
         'OB_high':    r'(?:bearish\s+)?OB\s*(?:at|:)?\s*(\d+\.\d+)\s*[-–]\s*(\d+\.\d+)',
         'FVG':        r'FVG\s*(?:bearish\s+)?(?:at|:)?\s*(\d+\.\d+)\s*[-–]\s*(\d+\.\d+)',
@@ -532,13 +441,7 @@ def extract_key_levels(response_text: str) -> Dict[str, Any]:
 def build_confluence_table(
     stage1_results: List[Dict[str, Any]]
 ) -> Tuple[str, List[Dict[str, Any]]]:
-    """
-    Build a structured confluence comparison table from Stage 1 responses.
-    Used in trading queries to enrich the chairman's prose prompt.
-
-    Returns:
-        Tuple of (formatted table string, list of per-model extracted levels)
-    """
+    """Build a structured confluence comparison table from Stage 1 responses."""
     all_levels = []
     rows = []
 
@@ -568,7 +471,6 @@ def build_confluence_table(
 
     table = "\n\n".join(rows)
 
-    # --- Detect divergences ---
     fair_values = [
         (l['model'], l['fair_value_estimate'])
         for l in all_levels if l.get('fair_value_estimate') is not None
@@ -596,11 +498,7 @@ def _build_chairman_prompt_prose(
     stage2_text: str,
     rankings_text: str
 ) -> str:
-    """Build the chairman prompt for general prose mode (default).
-
-    The chairman produces a comprehensive, format-faithful synthesis that
-    mirrors the structure and depth expected by the original question.
-    """
+    """Build the chairman prompt for general prose mode (default)."""
     return f"""You are the Chairman of an LLM Council. Multiple AI models have independently answered a user's question, then evaluated and ranked each other's responses. Your job is to synthesize their work into the single best possible answer.
 
 ══════════════════════════════════════════
@@ -657,12 +555,7 @@ def _build_chairman_prompt_trading_prose(
     rankings_text: str,
     confluence_table: str
 ) -> str:
-    """Build the chairman prompt for TRADING queries — prose consensus report.
-
-    The chairman produces a structured prose trading consensus report with
-    clear sections for entry analysis, stop loss, take profit, risk/reward,
-    and dissenting views. Output is ALWAYS prose, never JSON.
-    """
+    """Build the chairman prompt for TRADING queries — prose consensus report."""
     return f"""You are the Chairman of an LLM Council specialized in trading analysis. Multiple AI models have independently analyzed a trading question, then evaluated and ranked each other's responses. Your job is to synthesize their work into a single, actionable CONSENSUS TRADING REPORT.
 
 ══════════════════════════════════════════
@@ -762,36 +655,17 @@ async def stage3_synthesize_final(
     """
     Stage 3: Chairman synthesizes final response — ALWAYS PROSE.
 
-    For trading queries, the prompt is enriched with a confluence table
-    and structured report sections, but the output is still prose.
-
-    When vision_images are provided (e.g. TradingView charts), they are
-    included in the chairman's message so the chairman can cross-verify
-    council members' claims against the actual charts.
-
-    Args:
-        user_query: The original user query
-        stage1_results: Individual model responses from Stage 1
-        stage2_results: Rankings from Stage 2
-        aggregate_rankings: Pre-calculated aggregate rankings (best → worst)
-        advanced_config: Advanced configuration from frontend
-        chairman_temperature: Optional temperature override
-        vision_images: Optional list of vision images (same format as Stage 1)
-
-    Returns:
-        Dict with 'model', 'response', 'validation', 'output_mode',
-        and 'is_trading' keys
+    Web search is enabled for the chairman so it can verify or
+    supplement council data with live information when needed.
     """
     chairman_model = get_chairman_model()
 
-    # --- Detect if this is a trading query (enrichment only, NOT format change) ---
     is_trading = _is_trading_query(user_query, stage1_results, advanced_config)
-    output_mode = 'prose'  # ALWAYS prose
+    output_mode = 'prose'
     logger.info(
         "Chairman output mode: prose (trading enrichment: %s)", is_trading
     )
 
-    # --- Format aggregate rankings ---
     rankings_text = ""
     if aggregate_rankings:
         rankings_lines = []
@@ -802,35 +676,27 @@ async def stage3_synthesize_final(
             )
         rankings_text = "\n".join(rankings_lines)
 
-    # --- Stage 1 full text (always strip JSON blocks in prose mode) ---
     stage1_text = "\n\n".join([
         f"Model: {result['model']}\nResponse: {_strip_json_blocks(result['response'])}"
         for result in stage1_results
     ])
 
-    # --- Stage 2 evaluations ---
     stage2_text = "\n\n".join([
         f"Evaluator: {result['model']}\nEvaluation: {result['ranking']}"
         for result in stage2_results
     ])
 
-    # --- Build prompt (trading-enriched or general) ---
     if is_trading:
-        # Trading: build confluence table (Stage 2.5) and use trading prose prompt
         confluence_table, extracted_levels = build_confluence_table(stage1_results)
         chairman_prompt = _build_chairman_prompt_trading_prose(
             user_query, stage1_text, stage2_text, rankings_text, confluence_table
         )
     else:
-        # General: standard prose synthesis
         chairman_prompt = _build_chairman_prompt_prose(
             user_query, stage1_text, stage2_text, rankings_text
         )
 
-    # --- Build chairman messages (multimodal if vision images present) ---
     if vision_images:
-        # Include original charts so the chairman can cross-verify
-        # council members' claims against the actual images
         chairman_content = [{"type": "text", "text": chairman_prompt}]
         for img in vision_images:
             b64 = (
@@ -870,15 +736,15 @@ async def stage3_synthesize_final(
     else:
         messages = [{"role": "user", "content": chairman_prompt}]
 
-    # --- Determine temperature ---
     temperature = chairman_temperature
     if temperature is None and advanced_config:
         temperature = advanced_config.get('chairman_temperature')
 
-    # Query the chairman model
+    # Pass web_search tool so the chairman can verify live data when needed
     query_kwargs = dict(
         advanced_config=advanced_config,
-        is_chairman=True
+        is_chairman=True,
+        tools=[_build_web_search_tool()]
     )
     if temperature is not None:
         query_kwargs['temperature'] = temperature
@@ -896,12 +762,10 @@ async def stage3_synthesize_final(
 
     raw_content = response.get('content', '')
 
-    # --- Post-chairman validation (always prose) ---
     validation = validate_chairman_prose(
         raw_content, stage1_results, aggregate_rankings
     )
 
-    # --- RETRY: if chairman returned JSON despite prose instructions ---
     if _is_json_response(raw_content):
         logger.warning(
             "Chairman returned JSON despite prose instructions. "
@@ -976,14 +840,7 @@ def validate_chairman_prose(
     stage1_results: List[Dict[str, Any]],
     aggregate_rankings: List[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
-    """
-    Validate the chairman's prose response for quality and completeness.
-
-    Checks:
-    1. Response is not trivially short (quality floor)
-    2. Response is at least as long as the longest Stage 1 response
-    3. Response is not accidentally JSON-only when prose was expected
-    """
+    """Validate the chairman's prose response for quality and completeness."""
     validation = {
         "status": "ok",
         "warnings": []
@@ -991,7 +848,6 @@ def validate_chairman_prose(
 
     response_len = len(chairman_response.strip())
 
-    # Check if chairman returned JSON when prose was expected
     clean = chairman_response.strip()
     if clean.startswith('{') and clean.endswith('}'):
         try:
@@ -1005,14 +861,10 @@ def validate_chairman_prose(
             logger.warning("Chairman produced JSON instead of prose.")
             return validation
         except json.JSONDecodeError:
-            pass  # Not valid JSON, that's fine for prose
+            pass
 
-    # Quality floor: chairman synthesis should be at least as detailed as the
-    # best individual response
     if stage1_results:
         longest_stage1 = max(len(r['response']) for r in stage1_results)
-        # Allow some slack (80% of longest) since synthesis can be more
-        # efficient than raw responses
         quality_floor = int(longest_stage1 * 0.8)
 
         if response_len < quality_floor:
@@ -1028,7 +880,6 @@ def validate_chairman_prose(
                 response_len, quality_floor
             )
 
-    # Minimum absolute length
     if response_len < 200:
         validation['status'] = 'warning'
         validation['warnings'].append(
@@ -1044,12 +895,7 @@ def validate_chairman_prose(
 # ---------------------------------------------------------------------------
 
 def parse_ranking_from_text(ranking_text: str) -> List[str]:
-    """
-    Parse the FINAL RANKING section from the model's response.
-
-    Returns:
-        List of response labels in ranked order
-    """
+    """Parse the FINAL RANKING section from the model's response."""
     if "FINAL RANKING:" in ranking_text:
         parts = ranking_text.split("FINAL RANKING:")
         if len(parts) >= 2:
@@ -1077,12 +923,7 @@ def calculate_aggregate_rankings(
     stage2_results: List[Dict[str, Any]],
     label_to_model: Dict[str, str]
 ) -> List[Dict[str, Any]]:
-    """
-    Calculate aggregate rankings across all models.
-
-    Returns:
-        List of dicts with model name and average rank, sorted best to worst
-    """
+    """Calculate aggregate rankings across all models."""
     from collections import defaultdict
 
     model_positions = defaultdict(list)
@@ -1118,12 +959,7 @@ async def generate_conversation_title(
     user_query: str,
     advanced_config: dict = None
 ) -> str:
-    """
-    Generate a short title for a conversation based on the first user message.
-
-    Returns:
-        A short title (3-5 words)
-    """
+    """Generate a short title for a conversation based on the first user message."""
     title_prompt = f"""Generate a very short title (3-5 words maximum) that summarizes the following question.
 The title should be concise and descriptive. Do not use quotes or punctuation in the title.
 
@@ -1164,7 +1000,7 @@ Title:"""
 
 
 # ---------------------------------------------------------------------------
-# Full council orchestrator (IMPROVED — always prose)
+# Full council orchestrator (unchanged)
 # ---------------------------------------------------------------------------
 
 async def run_full_council(
@@ -1172,19 +1008,7 @@ async def run_full_council(
     vision_images: list = None,
     advanced_config: dict = None
 ) -> Tuple[List, List, Dict, Dict]:
-    """
-    Run the complete 3-stage council process.
-
-    Improvements:
-    - aggregate_rankings passed to stage3_synthesize_final
-    - Trading queries auto-detected and enriched with confluence data
-    - Output is ALWAYS prose — structured report for trading, synthesis for general
-    - stage3_result includes validation + is_trading metadata
-
-    Returns:
-        Tuple of (stage1_results, stage2_results, stage3_result, metadata)
-    """
-    # Stage 1: Collect individual responses
+    """Run the complete 3-stage council process."""
     stage1_results = await stage1_collect_responses(
         user_query, vision_images=vision_images, advanced_config=advanced_config
     )
@@ -1198,18 +1022,14 @@ async def run_full_council(
             "validation": {"status": "error", "reason": "no_stage1_responses"}
         }, {}
 
-    # Stage 2: Collect rankings
     stage2_results, label_to_model = await stage2_collect_rankings(
         user_query, stage1_results, advanced_config=advanced_config
     )
 
-    # Calculate aggregate rankings
     aggregate_rankings = calculate_aggregate_rankings(
         stage2_results, label_to_model
     )
 
-    # Stage 3: Synthesize final answer (always prose, with trading enrichment)
-    # Pass vision_images so the chairman can cross-verify chart claims
     stage3_result = await stage3_synthesize_final(
         user_query,
         stage1_results,
@@ -1219,11 +1039,10 @@ async def run_full_council(
         vision_images=vision_images
     )
 
-    # Prepare metadata
     metadata = {
         "label_to_model": label_to_model,
         "aggregate_rankings": aggregate_rankings,
-        "chairman_output_mode": "prose",  # Always prose now
+        "chairman_output_mode": "prose",
         "is_trading_query": stage3_result.get('is_trading', False),
         "chairman_validation": stage3_result.get('validation', {})
     }
