@@ -51,7 +51,6 @@ def get_model_source(model: str, advanced_config: Optional[Dict] = None) -> tupl
     openrouter_config = advanced_config.get('openrouter', {})
     
     if mode == 'openrouter':
-        # All models go to OpenRouter unless model has source='lmstudio' explicitly
         if model_cfg.get('source') == 'lmstudio':
             url = model_cfg.get('endpointUrl') or DEFAULT_LMSTUDIO_URL
             name = model_cfg.get('localModelName') or model.split('/')[-1]
@@ -59,7 +58,6 @@ def get_model_source(model: str, advanced_config: Optional[Dict] = None) -> tupl
         return ('openrouter', openrouter_config, None)
     
     elif mode == 'lmstudio':
-        # All models go to LM Studio with their own URL
         url = model_cfg.get('endpointUrl') or DEFAULT_LMSTUDIO_URL
         name = model_cfg.get('localModelName') or model.split('/')[-1]
         return ('lmstudio', url, name)
@@ -90,7 +88,6 @@ def get_chairman_source(advanced_config: Optional[Dict] = None) -> tuple:
     openrouter_config = advanced_config.get('openrouter', {})
     source = chairman_cfg.get('source', 'openrouter')
     
-    # In lmstudio mode, chairman always uses lmstudio
     mode = advanced_config.get('mode', 'openrouter')
     if mode == 'lmstudio':
         url = chairman_cfg.get('endpointUrl') or DEFAULT_LMSTUDIO_URL
@@ -109,40 +106,28 @@ async def query_lm_studio(
     base_url: str,
     model: str,
     messages: List[Dict[str, str]],
-    timeout: float = 300.0    # 5 minutes for local models (they can be slow)
+    timeout: float = 300.0
 ) -> Optional[Dict[str, Any]]:
     """
     Query an LM Studio server directly using OpenAI-compatible API.
     
-    Args:
-        base_url: LM Studio server URL (e.g., http://localhost:1234/v1 or http://localhost:1234)
-        model: Model name/identifier to use (can be empty for auto-select)
-        messages: List of message dicts with 'role' and 'content'
-        timeout: Request timeout in seconds
-    
-    Returns:
-        Response dict with 'content', or None if failed
+    Note: tools parameter is intentionally not supported — LM Studio
+    local models don't expose a web_search capability.
     """
-    # Normalize URL - remove trailing slash
     base_url = base_url.rstrip('/')
     
-    # Build the API URL - check if /v1 is already present
     if base_url.endswith('/v1'):
         api_url = f"{base_url}/chat/completions"
     elif '/v1' in base_url:
-        # URL like http://localhost:1234/v1/something - use as-is + /chat/completions
         api_url = f"{base_url}/chat/completions"
     else:
-        # No /v1 in URL, add it
         api_url = f"{base_url}/v1/chat/completions"
     
     headers = {
         "Content-Type": "application/json",
     }
     
-    # Use model name as-is, or extract from path if it looks like provider/model
     model_name = model.split('/')[-1] if '/' in model else model
-    # If model is empty, 'default', or 'local', use empty string for LM Studio auto-select
     if not model_name or model_name in ('default', 'local'):
         model_name = ''
     
@@ -166,7 +151,6 @@ async def query_lm_studio(
             data = response.json()
             message = data['choices'][0]['message']
             
-            # LM Studio uses 'reasoning_content' not 'reasoning_details'
             reasoning = message.get('reasoning_content') or message.get('reasoning_details')
             
             content = message.get('content', '')
@@ -196,7 +180,8 @@ async def query_model(
     messages: List[Dict[str, str]],
     timeout: float = 120.0,
     advanced_config: Optional[Dict] = None,
-    is_chairman: bool = False
+    is_chairman: bool = False,
+    tools: Optional[List[Dict]] = None
 ) -> Optional[Dict[str, Any]]:
     """
     Query a single model via OpenRouter API or LM Studio based on configuration.
@@ -207,32 +192,31 @@ async def query_model(
         timeout: Request timeout in seconds
         advanced_config: Advanced configuration from frontend
         is_chairman: Whether this is a chairman query
+        tools: Optional list of tool descriptors (e.g. web_search).
+               Passed to OpenRouter only — ignored for LM Studio.
 
     Returns:
         Response dict with 'content' and optional 'reasoning_details', or None if failed
     """
-    # Determine which source to use based on advanced config
     if is_chairman:
         source_type, source_data, lmstudio_model_name = get_chairman_source(advanced_config)
     else:
         source_type, source_data, lmstudio_model_name = get_model_source(model, advanced_config)
     
-    # Use LM Studio if configured
+    # LM Studio — tools not supported, silently ignored
     if source_type == 'lmstudio':
         base_url = source_data if isinstance(source_data, str) else DEFAULT_LMSTUDIO_URL
         actual_model = lmstudio_model_name or 'default'
         print(f"Using LM Studio at {base_url} for model '{model}' -> LM Studio model: '{actual_model}'")
         return await query_lm_studio(base_url, actual_model, messages, timeout)
     
-    # Check if this model has an LM Studio URL configured in settings (legacy support)
     if not advanced_config:
         lm_studio_url = get_lm_studio_url_for_model(model)
         if lm_studio_url:
             print(f"Using LM Studio at {lm_studio_url} for model {model} (from legacy settings)")
             return await query_lm_studio(lm_studio_url, model, messages, timeout)
     
-    # Otherwise, use OpenRouter
-    # Try to get API key from advanced config first, then fall back to env
+    # OpenRouter
     api_key = None
     if isinstance(source_data, dict) and source_data.get('apiKey'):
         api_key = source_data.get('apiKey')
@@ -253,6 +237,10 @@ async def query_model(
         "model": model,
         "messages": messages,
     }
+
+    # Inject tools only for OpenRouter (web_search, etc.)
+    if tools:
+        payload["tools"] = tools
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -280,24 +268,21 @@ async def query_model(
 async def query_models_parallel(
     models: List[str],
     messages: List[Dict[str, str]],
-    advanced_config: Optional[Dict] = None
+    advanced_config: Optional[Dict] = None,
+    tools: Optional[List[Dict]] = None
 ) -> Dict[str, Optional[Dict[str, Any]]]:
     """
     Query multiple models with throttle-aware concurrency control.
-    
-    Uses sequential execution with delays for local LM Studio models
-    to prevent laptop freeze. Uses parallel execution for OpenRouter
-    cloud models.
 
     Args:
         models: List of OpenRouter model identifiers
         messages: List of message dicts to send to each model
         advanced_config: Advanced configuration from frontend
+        tools: Optional list of tool descriptors forwarded to each query_model call.
 
     Returns:
         Dict mapping model identifier to response dict (or None if failed)
     """
-    # Get throttle configuration based on mode
     throttle = get_throttle_config(advanced_config)
     
     mode = advanced_config.get('mode', 'openrouter') if advanced_config else 'openrouter'
@@ -305,17 +290,18 @@ async def query_models_parallel(
         print(f"[LoadBalancer] Using throttled execution: max_concurrent={throttle.max_concurrent}, "
               f"delay={throttle.delay_between_requests}s, timeout={throttle.request_timeout}s")
     
-    # Extract timeout from throttle config to pass to query_model
     request_timeout = throttle.request_timeout
     
-    # Create a factory function that returns a coroutine when called
-    # This ensures coroutines are created lazily inside execute_with_throttle
     async def make_query(model_id: str):
-        return await query_model(model_id, messages, timeout=request_timeout, advanced_config=advanced_config)
+        return await query_model(
+            model_id,
+            messages,
+            timeout=request_timeout,
+            advanced_config=advanced_config,
+            tools=tools
+        )
     
-    # Build (model_id, coroutine) pairs - coroutines created here
     tasks = [(model, make_query(model)) for model in models]
     
-    # Execute with throttling (asyncio.wait_for timeout is a safety net, httpx timeout does the real work)
     results = await execute_with_throttle(tasks, throttle)
     return results
