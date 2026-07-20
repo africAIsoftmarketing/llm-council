@@ -22,7 +22,31 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-export default function Stage3({ finalResponse }) {
+/** Short display name: "openai/gpt-4o" -> "gpt-4o" */
+function shortName(model) {
+  return model && model.includes('/') ? model.split('/')[1] : model;
+}
+
+/**
+ * Build the ordered list of council members (excluding none — the chairman
+ * may also be a member). Prefers aggregate rankings (ranked order with avg
+ * rank); falls back to the raw Stage 1 responder list.
+ */
+function buildMembers(stage1Responses, aggregateRankings) {
+  if (aggregateRankings && aggregateRankings.length > 0) {
+    return aggregateRankings.map((entry, i) => ({
+      model: entry.model,
+      rank: i + 1,
+      avgRank: entry.average_rank,
+    }));
+  }
+  if (stage1Responses && stage1Responses.length > 0) {
+    return stage1Responses.map((r) => ({ model: r.model, rank: null, avgRank: null }));
+  }
+  return [];
+}
+
+export default function Stage3({ finalResponse, stage1Responses, aggregateRankings }) {
   const [copyStatus, setCopyStatus] = useState('');
   const renderedRef = useRef(null);
 
@@ -30,7 +54,19 @@ export default function Stage3({ finalResponse }) {
     return null;
   }
 
-  const chairmanName = finalResponse.model.split('/')[1] || finalResponse.model;
+  const chairmanName = shortName(finalResponse.model);
+  const members = buildMembers(stage1Responses, aggregateRankings);
+
+  // Plain-text list of members for TXT export
+  const membersText = members.length
+    ? members
+        .map((m) =>
+          m.rank
+            ? `  #${m.rank} ${m.model} (avg rank ${m.avgRank})`
+            : `  - ${m.model}`
+        )
+        .join('\n')
+    : '  (not available)';
 
   // --- Copy raw markdown text to clipboard ---
   const handleCopy = async () => {
@@ -59,7 +95,11 @@ export default function Stage3({ finalResponse }) {
 
   // --- Export raw text as .txt ---
   const handleExportTxt = () => {
-    const header = `Final Council Answer — Chairman: ${chairmanName}\nDate: ${new Date().toLocaleString()}\n${'='.repeat(60)}\n\n`;
+    const header =
+      `Final Council Answer — Chairman: ${chairmanName}\n` +
+      `Date: ${new Date().toLocaleString()}\n` +
+      `Council members:\n${membersText}\n` +
+      `${'='.repeat(60)}\n\n`;
     const blob = new Blob([header + finalResponse.response], {
       type: 'text/plain;charset=utf-8',
     });
@@ -69,6 +109,15 @@ export default function Stage3({ finalResponse }) {
   // --- Export as PDF via a styled print window (preserves tables) ---
   const handleExportPdf = () => {
     const renderedHtml = renderedRef.current ? renderedRef.current.innerHTML : '';
+    const membersHtml = members.length
+      ? members
+          .map((m) =>
+            m.rank
+              ? `<span class="member">#${m.rank} ${shortName(m.model)}</span>`
+              : `<span class="member">${shortName(m.model)}</span>`
+          )
+          .join(' ')
+      : '';
     const printWindow = window.open('', '_blank', 'width=900,height=700');
     if (!printWindow) {
       alert("Popup bloquée — autorisez les popups pour exporter en PDF.");
@@ -96,6 +145,16 @@ export default function Stage3({ finalResponse }) {
   }
   .pdf-header h1 { font-size: 18px; margin: 0 0 4px 0; color: #2d8a2d; }
   .pdf-header .meta { font-size: 11px; color: #666; font-family: monospace; }
+  .pdf-header .members-line { font-size: 11px; color: #444; margin-top: 6px; }
+  .pdf-header .member {
+    display: inline-block;
+    background: #f0f7f0;
+    border: 1px solid #c8e6c8;
+    border-radius: 10px;
+    padding: 1px 8px;
+    margin: 2px 2px 0 0;
+    font-family: monospace;
+  }
   h1, h2, h3, h4 { margin: 16px 0 8px 0; page-break-after: avoid; }
   p { margin: 0 0 10px 0; }
   ul, ol { margin: 0 0 10px 0; padding-left: 22px; }
@@ -137,6 +196,7 @@ export default function Stage3({ finalResponse }) {
   <div class="pdf-header">
     <h1>Final Council Answer</h1>
     <div class="meta">Chairman: ${chairmanName} — ${new Date().toLocaleString()}</div>
+    ${membersHtml ? `<div class="members-line">Council members: ${membersHtml}</div>` : ''}
   </div>
   ${renderedHtml}
 </body>
@@ -190,6 +250,20 @@ export default function Stage3({ finalResponse }) {
         <div className="chairman-label">
           Chairman: {chairmanName}
         </div>
+        {members.length > 0 && (
+          <div className="council-members">
+            <span className="members-title">Council members:</span>
+            {members.map((m) => (
+              <span
+                key={m.model}
+                className="member-chip"
+                title={m.avgRank != null ? `${m.model} — avg rank ${m.avgRank}` : m.model}
+              >
+                {m.rank ? `#${m.rank} ` : ''}{shortName(m.model)}
+              </span>
+            ))}
+          </div>
+        )}
         <div className="final-text markdown-content" ref={renderedRef}>
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{finalResponse.response}</ReactMarkdown>
         </div>
