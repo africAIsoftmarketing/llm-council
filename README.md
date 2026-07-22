@@ -104,3 +104,34 @@ Benefits of local models:
 - **Cost**: No API fees for local inference
 - **Offline**: Works without internet connection
 - **Mixed mode**: Use local for some models, cloud for others
+
+---
+
+## v9 — Monétisation (SSO Google + Crédits PayPal + Admin)
+
+### Configuration Google OAuth 2.0
+1. Aller sur https://console.cloud.google.com → **APIs & Services → OAuth consent screen** (type External).
+2. **Credentials → Create credentials → OAuth client ID → Web application**.
+3. **Authorized redirect URIs** — ajouter :
+   - `https://<votre-app>.herokuapp.com/api/auth/callback` (production)
+   - `https://<votre-preview>.preview.emergentagent.com/api/auth/callback` (aperçu)
+4. Copier le Client ID / Secret dans les variables d'env `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
+5. Définir `ADMIN_EMAILS` (séparés par virgules) — ces emails deviennent admin à la connexion.
+
+### Variables d'environnement (voir backend/.env.example)
+`DATABASE_URL`, `DB_SSLMODE`, `JWT_SECRET`, `ADMIN_EMAILS`, `GOOGLE_CLIENT_ID`,
+`GOOGLE_CLIENT_SECRET`, `COOKIE_SECURE`, `DEV_AUTH`, `PAYPAL_MODE`, `PAYPAL_CLIENT_ID`,
+`PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`, `OPENROUTER_API_KEY`.
+
+- **DEV_AUTH** : mettre `1` uniquement en aperçu pour tester sans Google (endpoint
+  `/api/auth/dev-login`). **Doit être `0` en production.**
+- **PAYPAL_MODE** : `sandbox` par défaut ; passer `live` + nouvelles clés pour la production.
+
+### Base de données
+Migrations Alembic : `alembic upgrade head` (exécuté automatiquement en phase `release`
+du Procfile sur Heroku). Tables : users, credit_transactions, app_settings, conversations.
+
+### Modèle de crédits
+Chaque requête au council débite des crédits (barème configurable dans Admin → Tarification).
+Achat de packs via PayPal (transaction unique). Débit atomique + remboursement automatique
+si le pipeline échoue.

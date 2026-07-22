@@ -544,6 +544,13 @@ My question: {request.content}"""
             vision_images=vision_images if vision_images else None,
             advanced_config=request.advanced
         )
+        # run_full_council returns a soft-error stub (no exception) when all models
+        # fail. Treat that as a pipeline failure so credits are refunded.
+        pipeline_failed = (not stage1_results) or (
+            isinstance(stage3_result, dict) and stage3_result.get("model") == "error"
+        )
+        if pipeline_failed:
+            raise RuntimeError("Aucun modèle n'a répondu (clé OpenRouter manquante/invalide).")
     except Exception as e:
         # Pipeline failed after debit -> automatic refund
         await _refund(user.id, cost, conversation_id)
@@ -616,11 +623,13 @@ My question: {request.content}"""
             # Stage 1
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
             stage1_results = await stage1_collect_responses(query_content, vision_images=vision_images if vision_images else None, advanced_config=request.advanced)
+            if not stage1_results:
+                raise RuntimeError("Le pipeline du council a échoué : aucun modèle n'a répondu (clé OpenRouter manquante/invalide).")
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
 
             # Stage 2
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
-            stage2_results, label_to_model = await stage2_collect_rankings(query_content, stage1_results, advanced_config=request.advanced)
+            stage2_results, label_to_model = await stage2_collect_rankings(query_content, stage1_results)
             aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
             yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
 
