@@ -207,13 +207,27 @@ def get_api_key() -> str:
 
 
 def get_council_models() -> List[str]:
-    """Get the list of council model IDs."""
+    """Get the list of council model IDs (from app_settings via settings_store)."""
+    try:
+        from . import settings_store
+    except ImportError:
+        import settings_store
+    models = settings_store.get_setting_sync("council_models", None)
+    if models:
+        return models
     config = load_config()
     return config.get("council_models", DEFAULT_CONFIG["council_models"])
 
 
 def get_chairman_model() -> str:
-    """Get the chairman model ID."""
+    """Get the chairman model ID (from app_settings via settings_store)."""
+    try:
+        from . import settings_store
+    except ImportError:
+        import settings_store
+    chairman = settings_store.get_setting_sync("chairman_model", None)
+    if chairman:
+        return chairman
     config = load_config()
     return config.get("chairman_model", DEFAULT_CONFIG["chairman_model"])
 

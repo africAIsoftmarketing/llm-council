@@ -353,6 +353,7 @@ export const api = {
       `${API_BASE}/api/conversations/${conversationId}/message/stream`,
       {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -361,8 +362,12 @@ export const api = {
     );
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to send message');
+      let detail;
+      try { detail = (await response.json()).detail; } catch { /* noop */ }
+      const err = new Error(typeof detail === 'string' ? detail : 'request_failed');
+      err.status = response.status;
+      err.detail = detail;
+      throw err;
     }
 
     const reader = response.body.getReader();
@@ -405,4 +410,52 @@ export const api = {
       return { status: 'error', configured: false, error: error.message };
     }
   },
+};
+
+const API_ROOT = import.meta.env.VITE_BACKEND_URL || import.meta.env.REACT_APP_BACKEND_URL || '';
+
+async function jreq(path, options = {}) {
+  const res = await fetch(`${API_ROOT}${path}`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options,
+  });
+  if (!res.ok) {
+    let detail;
+    try { detail = (await res.json()).detail; } catch { /* noop */ }
+    const err = new Error(typeof detail === 'string' ? detail : `HTTP ${res.status}`);
+    err.status = res.status;
+    err.detail = detail;
+    throw err;
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+export const authApi = {
+  me: () => jreq('/api/auth/me'),
+  devLogin: (email, name) => jreq('/api/auth/dev-login', { method: 'POST', body: JSON.stringify({ email, name }) }),
+  loginUrl: () => `${API_ROOT}/api/auth/login`,
+  logout: () => jreq('/api/auth/logout', { method: 'POST' }),
+};
+
+export const paymentsApi = {
+  config: () => jreq('/api/payments/config'),
+  packs: () => jreq('/api/payments/packs'),
+  transactions: () => jreq('/api/payments/transactions'),
+  createOrder: (packId) => jreq('/api/payments/orders', { method: 'POST', body: JSON.stringify({ pack_id: packId }) }),
+  captureOrder: (orderId) => jreq(`/api/payments/orders/${orderId}/capture`, { method: 'POST' }),
+};
+
+export const adminApi = {
+  getModels: () => jreq('/api/admin/models'),
+  addModel: (modelId) => jreq('/api/admin/models', { method: 'POST', body: JSON.stringify({ model_id: modelId }) }),
+  deleteModel: (modelId) => jreq(`/api/admin/models/${encodeURIComponent(modelId)}`, { method: 'DELETE' }),
+  setChairman: (modelId) => jreq('/api/admin/chairman', { method: 'PUT', body: JSON.stringify({ model_id: modelId }) }),
+  listUsers: (search = '', page = 1) => jreq(`/api/admin/users?search=${encodeURIComponent(search)}&page=${page}`),
+  updateUser: (id, patch) => jreq(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  adjustCredits: (id, amount, reason) => jreq(`/api/admin/users/${id}/credits`, { method: 'POST', body: JSON.stringify({ amount, reason }) }),
+  getSettings: () => jreq('/api/admin/settings'),
+  updateSetting: (key, value) => jreq(`/api/admin/settings/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
+  stats: () => jreq('/api/admin/stats'),
 };

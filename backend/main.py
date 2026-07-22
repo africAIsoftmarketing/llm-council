@@ -54,6 +54,61 @@ except ImportError:
 
 app = FastAPI(title="LLM Council API")
 
+# ===== Monetization layer (v9): auth, payments, admin, credits =====
+import os as _os
+from fastapi import Depends
+from starlette.middleware.sessions import SessionMiddleware
+
+try:
+    from . import db as _db
+    from . import settings_store
+    from .auth import router as auth_router, get_current_user, get_current_admin
+    from .payments import router as payments_router
+    from .admin import router as admin_router
+    from .db import SessionLocal, debit_user, credit_user
+except ImportError:
+    import db as _db
+    import settings_store
+    from auth import router as auth_router, get_current_user, get_current_admin
+    from payments import router as payments_router
+    from admin import router as admin_router
+    from db import SessionLocal, debit_user, credit_user
+
+# SessionMiddleware is required by authlib for OAuth state (CSRF) handling.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=_os.environ.get("JWT_SECRET", "dev-secret"),
+    same_site="lax",
+    https_only=_os.environ.get("COOKIE_SECURE", "1") == "1",
+)
+
+
+async def _request_cost(has_vision: bool) -> int:
+    cost = await settings_store.get_setting("request_cost", {"standard": 10, "vision": 15})
+    return int(cost.get("vision", 15) if has_vision else cost.get("standard", 10))
+
+
+async def _debit_or_402(user, cost: int, conversation_id: str) -> int:
+    """Atomic debit; raise HTTP 402 with balance info if insufficient."""
+    async with SessionLocal() as session:
+        new_balance = await debit_user(session, user.id, cost, conversation_id=conversation_id)
+        if new_balance is None:
+            fresh = await session.get(_db.User, user.id)
+            balance = fresh.credits if fresh else 0
+            raise HTTPException(
+                status_code=402,
+                detail={"error": "insufficient_credits", "required": cost, "balance": balance},
+            )
+        await session.commit()
+        return new_balance
+
+
+async def _refund(user_id, cost: int, conversation_id: str):
+    async with SessionLocal() as session:
+        await credit_user(session, user_id, cost, "refund", conversation_id=conversation_id,
+                          reason="Remboursement échec pipeline")
+        await session.commit()
+
 
 # ===== Helper Functions =====
 
@@ -124,10 +179,18 @@ FRONTEND_PATH = get_frontend_path()
 @app.on_event("startup")
 async def startup_event():
     apply_config_to_env()
+    await _db.init_db()
+    await settings_store.seed_defaults()
     if FRONTEND_PATH:
         print(f"Frontend path: {FRONTEND_PATH}")
     else:
         print("Frontend not found - API-only mode")
+
+
+# Register monetization routers
+app.include_router(auth_router)
+app.include_router(payments_router)
+app.include_router(admin_router)
 
 
 # ===== Request/Response Models =====
@@ -394,52 +457,46 @@ async def get_document_status(doc_id: str):
 # ===== Conversation Endpoints =====
 
 @app.get("/api/conversations", response_model=List[ConversationMetadata])
-async def list_conversations():
-    """List all conversations (metadata only)."""
-    return storage.list_conversations()
+async def list_conversations(user=Depends(get_current_user)):
+    """List all conversations for the current user (metadata only)."""
+    return storage.list_conversations(str(user.id))
 
 
 @app.post("/api/conversations", response_model=Conversation)
-async def create_conversation(request: CreateConversationRequest):
-    """Create a new conversation."""
+async def create_conversation(request: CreateConversationRequest, user=Depends(get_current_user)):
+    """Create a new conversation owned by the current user."""
     conversation_id = str(uuid.uuid4())
-    conversation = storage.create_conversation(conversation_id)
+    conversation = storage.create_conversation(conversation_id, str(user.id))
     return conversation
 
 
 @app.get("/api/conversations/{conversation_id}", response_model=Conversation)
-async def get_conversation(conversation_id: str):
+async def get_conversation(conversation_id: str, user=Depends(get_current_user)):
     """Get a specific conversation with all its messages."""
-    conversation = storage.get_conversation(conversation_id)
+    conversation = storage.get_conversation(conversation_id, str(user.id))
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
 
 
 @app.delete("/api/conversations/{conversation_id}")
-async def delete_conversation(conversation_id: str):
+async def delete_conversation(conversation_id: str, user=Depends(get_current_user)):
     """Delete a conversation."""
-    success = storage.delete_conversation(conversation_id)
+    success = storage.delete_conversation(conversation_id, str(user.id))
     if not success:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return {"success": True}
 
 
 @app.post("/api/conversations/{conversation_id}/message")
-async def send_message(conversation_id: str, request: SendMessageRequest):
+async def send_message(conversation_id: str, request: SendMessageRequest, user=Depends(get_current_user)):
     """
     Send a message and run the 3-stage council process.
-    Returns the complete response with all stages.
+    Debits credits atomically BEFORE running; refunds automatically if the
+    pipeline fails after the debit. Returns the complete response.
     """
-    # Check API key only if needed for the current mode
-    if requires_openrouter_key(request.advanced) and not get_api_key():
-        raise HTTPException(
-            status_code=400, 
-            detail="OpenRouter API key not configured. Please go to Settings to add your API key."
-        )
-    
-    # Check if conversation exists
-    conversation = storage.get_conversation(conversation_id)
+    # Check if conversation exists and belongs to the user
+    conversation = storage.get_conversation(conversation_id, str(user.id))
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
@@ -468,6 +525,10 @@ My question: {request.content}"""
             image_note = f"\n\n[Note: {len(vision_images)} image(s) attached for visual analysis]"
             query_content += image_note
 
+    # ===== Credit debit (atomic, server-priced) BEFORE running =====
+    cost = await _request_cost(bool(vision_images))
+    await _debit_or_402(user, cost, conversation_id)
+
     # Add user message
     storage.add_user_message(conversation_id, request.content)
 
@@ -476,12 +537,17 @@ My question: {request.content}"""
         title = await generate_conversation_title(request.content, advanced_config=request.advanced)
         storage.update_conversation_title(conversation_id, title)
 
-    # Run the 3-stage council process (pass vision images and advanced config if available)
-    stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
-        query_content,
-        vision_images=vision_images if vision_images else None,
-        advanced_config=request.advanced
-    )
+    try:
+        # Run the 3-stage council process
+        stage1_results, stage2_results, stage3_result, metadata = await run_full_council(
+            query_content,
+            vision_images=vision_images if vision_images else None,
+            advanced_config=request.advanced
+        )
+    except Exception as e:
+        # Pipeline failed after debit -> automatic refund
+        await _refund(user.id, cost, conversation_id)
+        raise HTTPException(status_code=502, detail=f"Council pipeline failed (crédits remboursés): {e}")
 
     # Add assistant message with all stages
     storage.add_assistant_message(
@@ -501,50 +567,42 @@ My question: {request.content}"""
 
 
 @app.post("/api/conversations/{conversation_id}/message/stream")
-async def send_message_stream(conversation_id: str, request: SendMessageRequest):
+async def send_message_stream(conversation_id: str, request: SendMessageRequest, user=Depends(get_current_user)):
     """
-    Send a message and stream the 3-stage council process.
-    Returns Server-Sent Events as each stage completes.
+    Send a message and stream the 3-stage council process (SSE).
+    Debits credits atomically before running; refunds on pipeline failure.
     """
-    # Check API key only if needed for the current mode
-    if requires_openrouter_key(request.advanced) and not get_api_key():
-        raise HTTPException(
-            status_code=400, 
-            detail="OpenRouter API key not configured. Please go to Settings to add your API key."
-        )
-    
-    # Check if conversation exists
-    conversation = storage.get_conversation(conversation_id)
+    # Check if conversation exists and belongs to the user
+    conversation = storage.get_conversation(conversation_id, str(user.id))
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    # Check if this is the first message
     is_first_message = len(conversation["messages"]) == 0
 
-    async def event_generator():
-        try:
-            # Build query with document context if requested
-            query_content = request.content
-            vision_images = []
-            
-            if request.include_documents:
-                # Get text document context
-                doc_context = get_active_documents_context()
-                if doc_context:
-                    query_content = f"""I have uploaded the following documents for reference:
+    # Build query with document context / vision images (needed to price request)
+    query_content = request.content
+    vision_images = []
+    if request.include_documents:
+        doc_context = get_active_documents_context()
+        if doc_context:
+            query_content = f"""I have uploaded the following documents for reference:
 
 {doc_context}
 
 ---
 
 My question: {request.content}"""
-                
-                # Get vision images for analysis
-                vision_images = get_active_vision_images()
-                if vision_images:
-                    image_note = f"\n\n[Note: {len(vision_images)} image(s) attached for visual analysis]"
-                    query_content += image_note
+        vision_images = get_active_vision_images()
+        if vision_images:
+            query_content += f"\n\n[Note: {len(vision_images)} image(s) attached for visual analysis]"
 
+    # ===== Credit debit (atomic, server-priced) BEFORE running =====
+    cost = await _request_cost(bool(vision_images))
+    await _debit_or_402(user, cost, conversation_id)
+
+    async def event_generator():
+        refunded = False
+        try:
             # Add user message
             storage.add_user_message(conversation_id, request.content)
 
@@ -555,24 +613,23 @@ My question: {request.content}"""
                     generate_conversation_title(request.content, advanced_config=request.advanced)
                 )
 
-            # Stage 1: Collect responses (with vision images and advanced config if available)
+            # Stage 1
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
             stage1_results = await stage1_collect_responses(query_content, vision_images=vision_images if vision_images else None, advanced_config=request.advanced)
-            print(f"[Stage1] Completed with {len(stage1_results)} responses")
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
 
-            # Stage 2: Collect rankings
+            # Stage 2
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
             stage2_results, label_to_model = await stage2_collect_rankings(query_content, stage1_results, advanced_config=request.advanced)
             aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
             yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
 
-            # Stage 3: Synthesize final answer
+            # Stage 3
             yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
             stage3_result = await stage3_synthesize_final(query_content, stage1_results, stage2_results, advanced_config=request.advanced)
             yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
 
-            # Wait for title generation if it was started
+            # Title
             if title_task:
                 try:
                     title = await title_task
@@ -580,25 +637,21 @@ My question: {request.content}"""
                     yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': title}})}\n\n"
                 except Exception as title_err:
                     print(f"Title generation failed (non-fatal): {title_err}")
-                    # Use query as fallback title
                     fallback = request.content[:47] + "..." if len(request.content) > 50 else request.content
                     storage.update_conversation_title(conversation_id, fallback)
                     yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': fallback}})}\n\n"
 
-            # Save complete assistant message
-            storage.add_assistant_message(
-                conversation_id,
-                stage1_results,
-                stage2_results,
-                stage3_result
-            )
-
-            # Send completion event
+            storage.add_assistant_message(conversation_id, stage1_results, stage2_results, stage3_result)
             yield f"data: {json.dumps({'type': 'complete'})}\n\n"
 
         except Exception as e:
-            # Send error event
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            # Pipeline failed after debit -> automatic refund
+            if not refunded:
+                try:
+                    await _refund(user.id, cost, conversation_id)
+                except Exception:
+                    pass
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e), 'refunded': True})}\n\n"
 
     return StreamingResponse(
         event_generator(),

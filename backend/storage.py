@@ -1,195 +1,166 @@
-"""JSON-based storage for conversations."""
+"""Conversation storage on PostgreSQL (psycopg2), scoped by user.
 
-import json
+Table: conversations(id TEXT PK, user_id TEXT, data JSONB, created_at, updated_at).
+Kept sync + psycopg2 so it does not interfere with the asyncpg engine loop.
+Conversations survive dyno/pod restarts.
+"""
+
 import os
-from datetime import datetime
+from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
-from pathlib import Path
 
-try:
-    from .config import DATA_DIR
-except ImportError:
-    from config import DATA_DIR
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+DB_SSLMODE = os.getenv("DB_SSLMODE", "disable")
 
-
-def ensure_data_dir():
-    """Ensure the data directory exists."""
-    Path(DATA_DIR).mkdir(parents=True, exist_ok=True)
+_POOL = None
 
 
-def get_conversation_path(conversation_id: str) -> str:
-    """Get the file path for a conversation."""
-    return os.path.join(DATA_DIR, f"{conversation_id}.json")
+def _get_pool():
+    global _POOL, DATABASE_URL, DB_SSLMODE
+    if _POOL is None:
+        # Read env lazily: storage is imported before config.py runs load_dotenv().
+        DATABASE_URL = os.getenv("DATABASE_URL", "") or DATABASE_URL
+        DB_SSLMODE = os.getenv("DB_SSLMODE", "disable")
+        from psycopg2 import pool as pgpool
+        _POOL = pgpool.ThreadedConnectionPool(1, 8, dsn=DATABASE_URL, sslmode=DB_SSLMODE)
+        _ensure_table()
+    return _POOL
 
 
-def create_conversation(conversation_id: str) -> Dict[str, Any]:
-    """
-    Create a new conversation.
+def _ensure_table():
+    conn = _POOL.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS conversations (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT,
+                    data JSONB NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                );
+                """
+            )
+        conn.commit()
+    finally:
+        _POOL.putconn(conn)
 
-    Args:
-        conversation_id: Unique identifier for the conversation
 
-    Returns:
-        New conversation dict
-    """
-    ensure_data_dir()
+@contextmanager
+def _pg():
+    pool = _get_pool()
+    conn = pool.getconn()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        pool.putconn(conn)
 
+
+def create_conversation(conversation_id: str, user_id: Optional[str] = None) -> Dict[str, Any]:
     conversation = {
         "id": conversation_id,
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
         "title": "New Conversation",
-        "messages": []
+        "messages": [],
     }
-
-    # Save to file
-    path = get_conversation_path(conversation_id)
-    with open(path, 'w') as f:
-        json.dump(conversation, f, indent=2)
-
+    from psycopg2.extras import Json
+    with _pg() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO conversations (id, user_id, data) VALUES (%s, %s, %s)",
+                (conversation_id, user_id, Json(conversation)),
+            )
     return conversation
 
 
-def get_conversation(conversation_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Load a conversation from storage.
-
-    Args:
-        conversation_id: Unique identifier for the conversation
-
-    Returns:
-        Conversation dict or None if not found
-    """
-    path = get_conversation_path(conversation_id)
-
-    if not os.path.exists(path):
-        return None
-
-    with open(path, 'r') as f:
-        return json.load(f)
+def get_conversation(conversation_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    with _pg() as conn:
+        with conn.cursor() as cur:
+            if user_id is not None:
+                cur.execute(
+                    "SELECT data FROM conversations WHERE id = %s AND user_id = %s",
+                    (conversation_id, user_id),
+                )
+            else:
+                cur.execute("SELECT data FROM conversations WHERE id = %s", (conversation_id,))
+            row = cur.fetchone()
+            return row[0] if row else None
 
 
 def save_conversation(conversation: Dict[str, Any]):
-    """
-    Save a conversation to storage.
-
-    Args:
-        conversation: Conversation dict to save
-    """
-    ensure_data_dir()
-
-    path = get_conversation_path(conversation['id'])
-    with open(path, 'w') as f:
-        json.dump(conversation, f, indent=2)
+    from psycopg2.extras import Json
+    with _pg() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE conversations SET data = %s, updated_at = now() WHERE id = %s",
+                (Json(conversation), conversation["id"]),
+            )
 
 
-def list_conversations() -> List[Dict[str, Any]]:
-    """
-    List all conversations (metadata only).
-
-    Returns:
-        List of conversation metadata dicts
-    """
-    ensure_data_dir()
-
-    conversations = []
-    for filename in os.listdir(DATA_DIR):
-        if filename.endswith('.json'):
-            path = os.path.join(DATA_DIR, filename)
-            with open(path, 'r') as f:
-                data = json.load(f)
-                # Return metadata only
-                conversations.append({
-                    "id": data["id"],
-                    "created_at": data["created_at"],
-                    "title": data.get("title", "New Conversation"),
-                    "message_count": len(data["messages"])
-                })
-
-    # Sort by creation time, newest first
-    conversations.sort(key=lambda x: x["created_at"], reverse=True)
-
-    return conversations
+def list_conversations(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    with _pg() as conn:
+        with conn.cursor() as cur:
+            if user_id is not None:
+                cur.execute(
+                    "SELECT data FROM conversations WHERE user_id = %s ORDER BY created_at DESC",
+                    (user_id,),
+                )
+            else:
+                cur.execute("SELECT data FROM conversations ORDER BY created_at DESC")
+            rows = cur.fetchall()
+    return [
+        {
+            "id": data["id"],
+            "created_at": data["created_at"],
+            "title": data.get("title", "New Conversation"),
+            "message_count": len(data.get("messages", [])),
+        }
+        for (data,) in rows
+    ]
 
 
-def delete_conversation(conversation_id: str) -> bool:
-    """
-    Delete a conversation.
+def delete_conversation(conversation_id: str, user_id: Optional[str] = None) -> bool:
+    with _pg() as conn:
+        with conn.cursor() as cur:
+            if user_id is not None:
+                cur.execute(
+                    "DELETE FROM conversations WHERE id = %s AND user_id = %s",
+                    (conversation_id, user_id),
+                )
+            else:
+                cur.execute("DELETE FROM conversations WHERE id = %s", (conversation_id,))
+            return cur.rowcount > 0
 
-    Args:
-        conversation_id: Unique identifier for the conversation
 
-    Returns:
-        True if deleted, False if not found
-    """
-    path = get_conversation_path(conversation_id)
-    
-    if not os.path.exists(path):
-        return False
-    
-    os.remove(path)
-    return True
-
+# ===================== Higher-level helpers =====================
 
 def add_user_message(conversation_id: str, content: str):
-    """
-    Add a user message to a conversation.
-
-    Args:
-        conversation_id: Conversation identifier
-        content: User message content
-    """
     conversation = get_conversation(conversation_id)
     if conversation is None:
         raise ValueError(f"Conversation {conversation_id} not found")
-
-    conversation["messages"].append({
-        "role": "user",
-        "content": content
-    })
-
+    conversation["messages"].append({"role": "user", "content": content})
     save_conversation(conversation)
 
 
-def add_assistant_message(
-    conversation_id: str,
-    stage1: List[Dict[str, Any]],
-    stage2: List[Dict[str, Any]],
-    stage3: Dict[str, Any]
-):
-    """
-    Add an assistant message with all 3 stages to a conversation.
-
-    Args:
-        conversation_id: Conversation identifier
-        stage1: List of individual model responses
-        stage2: List of model rankings
-        stage3: Final synthesized response
-    """
+def add_assistant_message(conversation_id, stage1, stage2, stage3):
     conversation = get_conversation(conversation_id)
     if conversation is None:
         raise ValueError(f"Conversation {conversation_id} not found")
-
-    conversation["messages"].append({
-        "role": "assistant",
-        "stage1": stage1,
-        "stage2": stage2,
-        "stage3": stage3
-    })
-
+    conversation["messages"].append(
+        {"role": "assistant", "stage1": stage1, "stage2": stage2, "stage3": stage3}
+    )
     save_conversation(conversation)
 
 
 def update_conversation_title(conversation_id: str, title: str):
-    """
-    Update the title of a conversation.
-
-    Args:
-        conversation_id: Conversation identifier
-        title: New title for the conversation
-    """
     conversation = get_conversation(conversation_id)
     if conversation is None:
         raise ValueError(f"Conversation {conversation_id} not found")
-
     conversation["title"] = title
     save_conversation(conversation)

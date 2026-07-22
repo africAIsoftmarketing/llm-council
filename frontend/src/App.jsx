@@ -1,12 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
 import Settings from './components/Settings';
 import AdvancedPanel, { getAdvancedSettings } from './components/AdvancedPanel';
+import AppHeader from './components/AppHeader';
+import { useAuth } from './auth/AuthContext';
 import { api } from './api';
 import './App.css';
+import './components/AppHeader.css';
 
 function App() {
+  const { refresh } = useAuth();
+  const navigate = useNavigate();
+  const [creditsModal, setCreditsModal] = useState(null);
   const [conversations, setConversations] = useState([]);
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [currentConversation, setCurrentConversation] = useState(null);
@@ -21,13 +28,14 @@ function App() {
   const [chairmanModel, setChairmanModel] = useState('');
 
   const checkConfiguration = useCallback(async () => {
+    // The OpenRouter key is a deployment/admin concern; the end-user gate is now
+    // the credit balance. Keep the chat UI available so credits/402 flow works.
     try {
-      const health = await api.healthCheck();
-      setIsConfigured(health.configured || false);
+      await api.healthCheck();
     } catch (error) {
       console.error('Failed to check configuration:', error);
-      setIsConfigured(false);
     }
+    setIsConfigured(true);
   }, []);
 
   const loadDocuments = useCallback(async () => {
@@ -96,11 +104,6 @@ function App() {
   }, [currentConversationId, loadConversation]);
 
   const handleNewConversation = async () => {
-    if (!isConfigured) {
-      showToast('Please configure your OpenRouter API key in Settings first', 'warning');
-      setCurrentView('settings');
-      return;
-    }
     try {
       const newConv = await api.createConversation();
       setConversations([
@@ -137,11 +140,6 @@ function App() {
 
   const handleSendMessage = async (content, includeDocuments = true) => {
     if (!currentConversationId) return;
-    if (!isConfigured) {
-      showToast('Please configure your OpenRouter API key in Settings first', 'warning');
-      setCurrentView('settings');
-      return;
-    }
 
     setIsLoading(true);
     try {
@@ -239,14 +237,16 @@ function App() {
             break;
 
           case 'complete':
-            // Stream complete, reload conversations list
+            // Stream complete, reload conversations list + refresh credit balance
             loadConversations();
+            refresh();
             setIsLoading(false);
             break;
 
           case 'error':
             console.error('Stream error:', event.message);
             showToast(event.message || 'An error occurred', 'error');
+            if (event.refunded) refresh();
             setIsLoading(false);
             break;
 
@@ -256,13 +256,18 @@ function App() {
       }, includeDocuments, advancedSettings);
     } catch (error) {
       console.error('Failed to send message:', error);
-      showToast(error.message || 'Failed to send message', 'error');
       // Remove optimistic messages on error
       setCurrentConversation((prev) => ({
         ...prev,
         messages: prev.messages.slice(0, -2),
       }));
       setIsLoading(false);
+      if (error.status === 402) {
+        const d = error.detail || {};
+        setCreditsModal({ required: d.required, balance: d.balance });
+      } else {
+        showToast(error.message || 'Failed to send message', 'error');
+      }
     }
   };
 
@@ -307,7 +312,9 @@ function App() {
   };
 
   return (
-    <div className="app">
+    <div className="app-shell">
+      <AppHeader />
+      <div className="app">
       <Sidebar
         conversations={conversations}
         currentConversationId={currentConversationId}
@@ -357,6 +364,24 @@ function App() {
           {toast.message}
         </div>
       )}
+
+      {/* Insufficient credits modal */}
+      {creditsModal && (
+        <div className="credits-modal-overlay" data-testid="insufficient-credits-modal">
+          <div className="credits-modal">
+            <h3>Crédits insuffisants</h3>
+            <p>
+              Cette requête nécessite <strong>{creditsModal.required}</strong> crédits, mais votre
+              solde est de <strong>{creditsModal.balance}</strong>.
+            </p>
+            <div className="credits-modal-actions">
+              <button className="cm-secondary" onClick={() => setCreditsModal(null)} data-testid="credits-modal-cancel">Annuler</button>
+              <button className="cm-primary" onClick={() => navigate('/credits')} data-testid="credits-modal-buy">Acheter des crédits</button>
+            </div>
+          </div>
+        </div>
+      )}
+      </div>
     </div>
   );
 }

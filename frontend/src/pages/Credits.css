@@ -1,0 +1,32 @@
+.page-shell { display: flex; flex-direction: column; height: 100vh; width: 100vw; overflow: hidden; background: #f1f5f9; }
+.credits-main { flex: 1; overflow-y: auto; padding: 40px; max-width: 1100px; margin: 0 auto; width: 100%; }
+.credits-header h1 { font-size: 28px; font-weight: 800; color: #0f172a; margin: 0; }
+.credits-header p { color: #64748b; margin: 8px 0 32px; }
+.credits-loading, .credits-warning, .tx-empty { color: #64748b; padding: 24px; }
+.credits-warning { background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; border-radius: 10px; }
+
+.packs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+.pack-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.pack-card:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(15, 23, 42, 0.1); }
+.pack-name { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #0e7490; }
+.pack-credits { margin: 12px 0 4px; color: #475569; }
+.pack-credits span { font-size: 34px; font-weight: 800; color: #0f172a; }
+.pack-price { font-size: 20px; font-weight: 700; color: #0f172a; margin-bottom: 18px; }
+.pack-paypal { min-height: 50px; }
+
+.tx-section { margin-top: 48px; }
+.tx-section h2 { font-size: 18px; font-weight: 700; color: #0f172a; margin-bottom: 16px; }
+.tx-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05); }
+.tx-table th { text-align: left; font-size: 12px; text-transform: uppercase; color: #94a3b8; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; }
+.tx-table td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 14px; color: #334155; }
+.tx-badge { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+.tx-purchase { background: #dcfce7; color: #166534; }
+.tx-usage { background: #e0f2fe; color: #075985; }
+.tx-admin_grant { background: #fef9c3; color: #854d0e; }
+.tx-refund { background: #fae8ff; color: #86198f; }
+.amt-pos { color: #16a34a; font-weight: 700; }
+.amt-neg { color: #dc2626; font-weight: 700; }

@@ -11,7 +11,7 @@ import time
 from datetime import datetime
 
 class TimeoutFixTester:
-    def __init__(self, base_url="https://llm-consensus-hub-1.preview.emergentagent.com"):
+    def __init__(self, base_url="https://council-monetize.preview.emergentagent.com"):
         self.base_url = base_url
         self.tests_run = 0
         self.tests_passed = 0
