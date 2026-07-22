@@ -1,0 +1,16 @@
+{
+  "summary": "Validated Heroku DEPLOYMENT bug fix. Ran `alembic upgrade head` on a fresh throwaway Postgres DB from /app — exit 0, all expected tables created, alembic_version='0001_initial', partial unique index uq_credit_tx_paypal_order present. pyproject.toml + uv.lock both contain all 13 required runtime deps (alembic, sqlalchemy, asyncpg, authlib, pyjwt, itsdangerous, psycopg2-binary, python-multipart, pypdf2, python-docx, python-pptx, pillow). Regression: 22/22 tests in test_monetization.py PASSED. Backend /api/health OK on external HTTPS URL; dev-login + /api/auth/me works; council_session cookie is HttpOnly + Secure.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_monetization.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "skipped"},
+  "test_credentials": "dev-login admin: somecedric@gmail.com",
+  "seed_data_creation": "Throwaway DB tmp_alembic_test_7018 created and dropped for migration verification.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Deployment/dependency fix verified end-to-end. Heroku `release: alembic upgrade head` should now succeed since uv buildpack will install alembic from root pyproject.toml/uv.lock. All 22 monetization regression tests still green.",
+  "rca of the issue": "Root cause was Heroku's uv buildpack resolving deps only from /app/pyproject.toml (which was missing runtime deps present in backend/requirements.txt). Fix: added all runtime deps to root pyproject.toml + regenerated uv.lock. Verified by running alembic on a fresh DB using the venv installed via that same lock file."
+}
