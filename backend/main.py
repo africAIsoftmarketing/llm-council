@@ -290,10 +290,19 @@ async def get_configuration():
 
 @app.put("/api/config")
 async def update_configuration(request: ConfigUpdateRequest):
-    """Update configuration."""
+    """Update configuration.
+
+    council_models / chairman_model are ALSO mirrored into app_settings, which is
+    the live source of truth read by the council pipeline (settings_store), so
+    edits from the Council Models UI take effect immediately without redeploy.
+    """
     updates = request.model_dump(exclude_none=True)
     updated_config = update_config(updates)
     apply_config_to_env()
+    if updates.get("council_models"):
+        await settings_store.set_setting("council_models", updates["council_models"])
+    if updates.get("chairman_model"):
+        await settings_store.set_setting("chairman_model", updates["chairman_model"])
     return updated_config
 
 

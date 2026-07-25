@@ -36,6 +36,8 @@ export default function Settings({ onConfigUpdate, showToast }) {
   const [activeProvider, setActiveProvider] = useState('All');
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editValue, setEditValue] = useState('');
   const dragNode = useRef(null);
 
   const loadConfiguration = useCallback(async () => {
@@ -102,6 +104,28 @@ export default function Settings({ onConfigUpdate, showToast }) {
   const handleRemoveModel = (modelId) => {
     setSelectedModels(prev => prev.filter(id => id !== modelId));
     if (chairmanModel === modelId) setChairmanModel('');
+    if (editingId === modelId) { setEditingId(null); setEditValue(''); }
+  };
+
+  /* ── Edit an OpenRouter model id inline ── */
+  const startEditModel = (modelId) => {
+    setEditingId(modelId);
+    setEditValue(modelId);
+  };
+  const cancelEditModel = () => {
+    setEditingId(null);
+    setEditValue('');
+  };
+  const confirmEditModel = (oldId) => {
+    const newId = editValue.trim();
+    if (!newId) { showToast("L'identifiant OpenRouter ne peut pas être vide", 'warning'); return; }
+    if (newId === oldId) { cancelEditModel(); return; }
+    if (selectedModels.includes(newId)) { showToast('Ce modèle est déjà dans le council', 'warning'); return; }
+    setSelectedModels(prev => prev.map(id => (id === oldId ? newId : id)));
+    if (chairmanModel === oldId) setChairmanModel(newId);
+    setEditingId(null);
+    setEditValue('');
+    showToast("Identifiant modifié — cliquez « Save Council » pour appliquer", 'info');
   };
 
   const handleSaveModels = async () => {
@@ -349,7 +373,7 @@ export default function Settings({ onConfigUpdate, showToast }) {
                       return (
                         <div key={modelId}
                           className={`council-item ${isDragging ? 'dragging' : ''} ${isDragOver ? 'drag-over' : ''}`}
-                          draggable
+                          draggable={editingId !== modelId}
                           onDragStart={e => handleDragStart(e, idx)}
                           onDragEnter={() => handleDragEnter(idx)}
                           onDragOver={e => e.preventDefault()}
@@ -358,13 +382,43 @@ export default function Settings({ onConfigUpdate, showToast }) {
                           <div className="ci-rank" style={{ background: meta.color }}>
                             {idx + 1}
                           </div>
-                          <div className="ci-body">
-                            <span className="ci-name">{model?.name || modelId}</span>
-                            <span className="ci-provider">{model?.provider || ''}</span>
-                          </div>
-                          <button className="ci-remove"
-                            onClick={() => handleRemoveModel(modelId)}
-                            title="Remove from council">✕</button>
+                          {editingId === modelId ? (
+                            <div className="ci-edit" data-testid={`edit-model-${modelId}`}>
+                              <input
+                                className="ci-edit-input"
+                                value={editValue}
+                                onChange={e => setEditValue(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') confirmEditModel(modelId);
+                                  if (e.key === 'Escape') cancelEditModel();
+                                }}
+                                placeholder="provider/model-id (lien OpenRouter)"
+                                autoFocus
+                                data-testid="edit-model-input"
+                              />
+                              <button className="ci-edit-save" title="Enregistrer l'identifiant"
+                                onClick={() => confirmEditModel(modelId)}
+                                data-testid={`confirm-edit-${modelId}`}>✓</button>
+                              <button className="ci-edit-cancel" title="Annuler"
+                                onClick={cancelEditModel}
+                                data-testid={`cancel-edit-${modelId}`}>✕</button>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="ci-body">
+                                <span className="ci-name">{model?.name || modelId}</span>
+                                <span className="ci-provider">{modelId}</span>
+                              </div>
+                              <button className="ci-edit-btn"
+                                onClick={() => startEditModel(modelId)}
+                                title="Modifier le lien OpenRouter"
+                                data-testid={`edit-model-btn-${modelId}`}>✎</button>
+                              <button className="ci-remove"
+                                onClick={() => handleRemoveModel(modelId)}
+                                title="Supprimer le modèle"
+                                data-testid={`remove-model-btn-${modelId}`}>🗑</button>
+                            </>
+                          )}
                         </div>
                       );
                     })}

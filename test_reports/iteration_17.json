@@ -1,0 +1,33 @@
+{
+  "summary": "Verified new Council Models edit/delete feature. Added 6 new backend tests (test_council_models_edit.py) covering PUT /api/config -> app_settings mirror for both council_models and chairman_model, plus GET /api/admin/models reflection and delete persistence. All 28 backend tests pass (6 new + 22 regression). Frontend UI verified end-to-end: per-model edit (data-testid=edit-model-btn-<id>) opens inline editor (edit-model-input + confirm/cancel), Save Council persists across reload; delete (remove-model-btn-<id>) removes from 'Your Council' and persists after reload (verified via UI + backend). Original council_models state restored after tests.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_council_models_edit.py",
+    "/app/backend/tests/test_monetization.py",
+    "/app/test_reports/pytest/iter17.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PUT /api/config correctly mirrors council_models + chairman_model into settings_store, so config_manager.get_council_models/get_chairman_model (which read app_settings first) see the update immediately -- live council pipeline uses edited ids without redeploy.",
+    "Frontend Settings.jsx edit flow correctly reassigns chairmanModel when the edited id was previously the chairman (line 125) -- no orphan chairman after rename.",
+    "Note: the frontend Save Council path allows saving 1 model, but the admin DELETE endpoint enforces >=2. This is documented; not a bug for the Settings flow which uses PUT /api/config."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_council_models_edit.py"
+  ],
+  "success_rate": {"backend": "100% (28/28)", "frontend": "100%"},
+  "seed_data_creation": "None persistent. app_settings.council_models restored to original [openai/gpt-4o, google/gemini-2.0-flash-exp, anthropic/claude-3.5-sonnet, x-ai/grok-2] and chairman_model=google/gemini-2.0-flash-exp after test run.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Admin: somecedric@gmail.com via POST /api/auth/dev-login (DEV_AUTH=1).",
+  "context_for_next_testing_agent": "Feature verified. Backend: PUT /api/config with {council_models, chairman_model} mirrors to app_settings; GET /api/admin/models is the live source of truth (reads app_settings). Frontend testids: edit-model-btn-<id>, remove-model-btn-<id>, edit-model-input, confirm-edit-<id>, cancel-edit-<id>, btn-save-models. UI test caveat: model ids appear both in left picker (available models) and right council list -- to check deletion, count only in council list scope (locator '.council-list') not page-wide.",
+  "rca_of_the_issue": "N/A -- feature works as designed."
+}

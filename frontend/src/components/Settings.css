@@ -1045,6 +1045,56 @@
   background: #fff5f5;
 }
 
+/* Edit OpenRouter model id */
+.ci-edit-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #b8c0cc;
+  font-size: 14px;
+  padding: 3px 5px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+.ci-edit-btn:hover {
+  color: #0e7490;
+  background: #ecfeff;
+}
+
+.ci-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.ci-edit-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid #38bdf8;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  outline: none;
+}
+.ci-edit-save, .ci-edit-cancel {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.ci-edit-save { color: #16a34a; }
+.ci-edit-save:hover { background: #f0fdf4; }
+.ci-edit-cancel { color: #94a3b8; }
+.ci-edit-cancel:hover { color: #e74c3c; background: #fff5f5; }
+
 /* Chairman quick-set inside council panel */
 .council-chairman-pick {
   padding: 12px 12px 14px;
