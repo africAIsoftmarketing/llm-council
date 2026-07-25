@@ -38,6 +38,11 @@ export default function Settings({ onConfigUpdate, showToast }) {
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState('');
+  // Catalogue (left picker) inline edit state
+  const [catEditingId, setCatEditingId] = useState(null);
+  const [catEditId, setCatEditId] = useState('');
+  const [catEditName, setCatEditName] = useState('');
+  const [catEditProvider, setCatEditProvider] = useState('');
   const dragNode = useRef(null);
 
   const loadConfiguration = useCallback(async () => {
@@ -126,6 +131,49 @@ export default function Settings({ onConfigUpdate, showToast }) {
     setEditingId(null);
     setEditValue('');
     showToast("Identifiant modifié — cliquez « Save Council » pour appliquer", 'info');
+  };
+
+  /* ── Catalogue (left picker) edit / delete ── */
+  const startCatEdit = (e, model) => {
+    e.stopPropagation();
+    setCatEditingId(model.id);
+    setCatEditId(model.id);
+    setCatEditName(model.name || '');
+    setCatEditProvider(model.provider || '');
+  };
+  const cancelCatEdit = (e) => {
+    if (e) e.stopPropagation();
+    setCatEditingId(null);
+  };
+  const saveCatEdit = async (e, oldId) => {
+    e.stopPropagation();
+    const newId = catEditId.trim();
+    if (!newId) { showToast("L'identifiant OpenRouter ne peut pas être vide", 'warning'); return; }
+    try {
+      await api.updateCatalogModel(oldId, {
+        new_id: newId,
+        model_name: catEditName.trim() || undefined,
+        provider: catEditProvider.trim() || undefined,
+      });
+      setCatEditingId(null);
+      await loadAvailableModels();
+      await loadConfiguration();
+      showToast('Modèle du catalogue mis à jour', 'success');
+    } catch (err) {
+      showToast(err.message || 'Échec de la mise à jour', 'error');
+    }
+  };
+  const deleteCatModel = async (e, model) => {
+    e.stopPropagation();
+    if (!window.confirm(`Supprimer « ${model.name || model.id} » du catalogue ?`)) return;
+    try {
+      await api.deleteCatalogModel(model.id);
+      await loadAvailableModels();
+      await loadConfiguration();
+      showToast('Modèle supprimé du catalogue', 'success');
+    } catch (err) {
+      showToast(err.message || 'Échec de la suppression', 'error');
+    }
   };
 
   const handleSaveModels = async () => {
@@ -326,23 +374,60 @@ export default function Settings({ onConfigUpdate, showToast }) {
                   {filteredModels.map(model => {
                     const meta = providerMeta(model.provider);
                     const isSelected = selectedModels.includes(model.id);
+                    const isEditing = catEditingId === model.id;
                     return (
                       <div key={model.id}
-                        className={`picker-model-card ${isSelected ? 'selected' : ''}`}
-                        style={isSelected
+                        className={`picker-model-card ${isSelected ? 'selected' : ''} ${isEditing ? 'editing' : ''}`}
+                        style={isSelected && !isEditing
                           ? { borderColor: meta.color, background: meta.bg }
                           : {}}
-                        onClick={() => handleToggleModel(model.id)}
+                        onClick={() => { if (!isEditing) handleToggleModel(model.id); }}
                         data-testid={`model-${model.id}`}>
                         <div className="pmc-icon" style={{ color: meta.color }}>{meta.icon}</div>
-                        <div className="pmc-body">
-                          <span className="pmc-name">{model.name}</span>
-                          <span className="pmc-id">{model.id}</span>
-                        </div>
-                        <div className={`pmc-check ${isSelected ? 'checked' : ''}`}
-                          style={isSelected ? { background: meta.color } : {}}>
-                          {isSelected && '✓'}
-                        </div>
+                        {isEditing ? (
+                          <div className="pmc-edit" onClick={e => e.stopPropagation()}>
+                            <input className="pmc-edit-input" value={catEditId}
+                              onChange={e => setCatEditId(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') saveCatEdit(e, model.id); if (e.key === 'Escape') cancelCatEdit(e); }}
+                              placeholder="provider/model-id (lien OpenRouter)" autoFocus
+                              data-testid="catalog-edit-id-input" />
+                            <div className="pmc-edit-meta">
+                              <input className="pmc-edit-input sm" value={catEditName}
+                                onChange={e => setCatEditName(e.target.value)} placeholder="Nom"
+                                data-testid="catalog-edit-name-input" />
+                              <input className="pmc-edit-input sm" value={catEditProvider}
+                                onChange={e => setCatEditProvider(e.target.value)} placeholder="Provider"
+                                data-testid="catalog-edit-provider-input" />
+                            </div>
+                            <div className="pmc-edit-actions">
+                              <button className="pmc-save" onClick={e => saveCatEdit(e, model.id)}
+                                data-testid={`catalog-save-${model.id}`}>Save</button>
+                              <button className="pmc-cancel" onClick={cancelCatEdit}
+                                data-testid={`catalog-cancel-${model.id}`}>Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="pmc-body">
+                              <span className="pmc-name">{model.name}</span>
+                              <span className="pmc-id">{model.id}</span>
+                            </div>
+                            <div className="pmc-actions">
+                              <button className="pmc-edit-btn"
+                                onClick={e => startCatEdit(e, model)}
+                                title="Modifier le lien OpenRouter"
+                                data-testid={`catalog-edit-btn-${model.id}`}>✎</button>
+                              <button className="pmc-delete-btn"
+                                onClick={e => deleteCatModel(e, model)}
+                                title="Supprimer du catalogue"
+                                data-testid={`catalog-delete-btn-${model.id}`}>🗑</button>
+                            </div>
+                            <div className={`pmc-check ${isSelected ? 'checked' : ''}`}
+                              style={isSelected ? { background: meta.color } : {}}>
+                              {isSelected && '✓'}
+                            </div>
+                          </>
+                        )}
                       </div>
                     );
                   })}

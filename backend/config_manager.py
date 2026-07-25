@@ -71,7 +71,7 @@ DEFAULT_CONFIG = {
 }
 
 # Available models from OpenRouter (commonly used)
-AVAILABLE_MODELS = [
+DEFAULT_AVAILABLE_MODELS = [
     # OpenAI
     {"id": "openai/gpt-4o", "name": "GPT-4o", "provider": "OpenAI"},
     {"id": "openai/gpt-4o-mini", "name": "GPT-4o Mini", "provider": "OpenAI"},
@@ -342,22 +342,18 @@ async def validate_api_key(api_key: str) -> Dict[str, Any]:
 
 
 def get_available_models() -> List[Dict[str, str]]:
-    """Get list of available models."""
-    return AVAILABLE_MODELS
+    """Get list of available catalogue models.
 
-
-def add_custom_model(model_id: str, model_name: str, provider: str) -> Dict[str, str]:
-    """Add a custom model to the available models list."""
-    global AVAILABLE_MODELS
-    new_model = {"id": model_id, "name": model_name, "provider": provider}
-    
-    # Check if already exists
-    for model in AVAILABLE_MODELS:
-        if model["id"] == model_id:
-            return model
-    
-    AVAILABLE_MODELS.append(new_model)
-    return new_model
+    Reads a persisted override from settings_store (key 'available_models') if
+    present, otherwise falls back to the hardcoded defaults. This survives dyno
+    restarts (the previous in-memory list did not).
+    """
+    try:
+        from . import settings_store
+    except ImportError:
+        import settings_store
+    models = settings_store.get_setting_sync("available_models", None)
+    return models if models else DEFAULT_AVAILABLE_MODELS
 
 
 def apply_config_to_env():

@@ -886,6 +886,75 @@
   border-color: transparent;
 }
 
+/* Catalogue row actions (hover-reveal edit/delete) */
+.pmc-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+.picker-model-card:hover .pmc-actions {
+  opacity: 1;
+}
+.pmc-edit-btn, .pmc-delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 5px;
+  border-radius: 5px;
+  line-height: 1;
+  color: #98a2b3;
+  transition: color 0.15s, background 0.15s;
+}
+.pmc-edit-btn:hover { color: #0e7490; background: #ecfeff; }
+.pmc-delete-btn:hover { color: #e74c3c; background: #fff5f5; }
+
+/* Catalogue inline editor */
+.picker-model-card.editing {
+  cursor: default;
+  border-color: #38bdf8;
+  background: #f0f9ff;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+.pmc-edit {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pmc-edit-input {
+  width: 100%;
+  padding: 6px 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  outline: none;
+  box-sizing: border-box;
+}
+.pmc-edit-input:focus { border-color: #38bdf8; }
+.pmc-edit-meta { display: flex; gap: 6px; }
+.pmc-edit-input.sm { font-family: inherit; }
+.pmc-edit-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.pmc-save, .pmc-cancel {
+  border: none;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pmc-save { background: #0e7490; color: #fff; }
+.pmc-save:hover { background: #0c6079; }
+.pmc-cancel { background: #eef1f5; color: #475569; }
+.pmc-cancel:hover { background: #e2e8f0; }
+
+
 /* ── Right: your council ── */
 .picker-right {
   display: flex;

@@ -84,6 +84,40 @@ export const api = {
     return response.json();
   },
 
+  /**
+   * Edit a catalogue model (OpenRouter id, optional name/provider).
+   */
+  async updateCatalogModel(modelId, payload) {
+    const response = await fetch(`${API_BASE}/api/models/custom/${encodeURIComponent(modelId)}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      let detail;
+      try { detail = (await response.json()).detail; } catch { /* noop */ }
+      throw new Error(typeof detail === 'string' ? detail : 'Failed to update model');
+    }
+    return response.json();
+  },
+
+  /**
+   * Delete a catalogue model.
+   */
+  async deleteCatalogModel(modelId) {
+    const response = await fetch(`${API_BASE}/api/models/custom/${encodeURIComponent(modelId)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      let detail;
+      try { detail = (await response.json()).detail; } catch { /* noop */ }
+      throw new Error(typeof detail === 'string' ? detail : 'Failed to delete model');
+    }
+    return response.json();
+  },
+
   // ===== LM Studio APIs =====
 
   /**

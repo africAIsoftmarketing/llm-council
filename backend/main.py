@@ -23,7 +23,7 @@ try:
     )
     from .config_manager import (
         get_config, update_config, validate_api_key, get_available_models,
-        add_custom_model, load_config, get_api_key, apply_config_to_env,
+        DEFAULT_AVAILABLE_MODELS, load_config, get_api_key, apply_config_to_env,
         test_lm_studio_connection, get_lm_studio_urls,
         get_advanced_config, save_advanced_config
     )
@@ -41,7 +41,7 @@ except ImportError:
     )
     from config_manager import (
         get_config, update_config, validate_api_key, get_available_models,
-        add_custom_model, load_config, get_api_key, apply_config_to_env,
+        DEFAULT_AVAILABLE_MODELS, load_config, get_api_key, apply_config_to_env,
         test_lm_studio_connection, get_lm_studio_urls,
         get_advanced_config, save_advanced_config
     )
@@ -65,6 +65,7 @@ try:
     from .auth import router as auth_router, get_current_user, get_current_admin
     from .payments import router as payments_router
     from .admin import router as admin_router
+    from .admin import _openrouter_model_ids
     from .db import SessionLocal, debit_user, credit_user
 except ImportError:
     import db as _db
@@ -72,6 +73,7 @@ except ImportError:
     from auth import router as auth_router, get_current_user, get_current_admin
     from payments import router as payments_router
     from admin import router as admin_router
+    from admin import _openrouter_model_ids
     from db import SessionLocal, debit_user, credit_user
 
 # SessionMiddleware is required by authlib for OAuth state (CSRF) handling.
@@ -108,6 +110,15 @@ async def _refund(user_id, cost: int, conversation_id: str):
         await credit_user(session, user_id, cost, "refund", conversation_id=conversation_id,
                           reason="Remboursement échec pipeline")
         await session.commit()
+
+
+async def _get_catalogue():
+    """Load the model catalogue from app_settings, seeding from defaults if absent."""
+    models = await settings_store.get_setting("available_models", None)
+    if not models:
+        models = [dict(m) for m in DEFAULT_AVAILABLE_MODELS]
+    return [dict(m) for m in models]
+
 
 
 # ===== Helper Functions =====
@@ -252,6 +263,13 @@ class CustomModelRequest(BaseModel):
     provider: str
 
 
+class UpdateCatalogModelRequest(BaseModel):
+    """Request to edit a catalogue model's OpenRouter id (and optional name/provider)."""
+    new_id: str
+    model_name: Optional[str] = None
+    provider: Optional[str] = None
+
+
 class TestLmStudioRequest(BaseModel):
     """Request to test LM Studio connection."""
     url: str
@@ -320,10 +338,98 @@ async def get_models():
 
 
 @app.post("/api/models/custom")
-async def add_custom_model_endpoint(request: CustomModelRequest):
-    """Add a custom model."""
-    model = add_custom_model(request.model_id, request.model_name, request.provider)
-    return {"model": model}
+async def add_custom_model_endpoint(request: CustomModelRequest, user=Depends(get_current_user)):
+    """Add a custom model to the catalogue (persisted in app_settings)."""
+    catalogue = await _get_catalogue()
+    existing = next((m for m in catalogue if m["id"] == request.model_id), None)
+    if existing:
+        return {"model": existing}
+    new_model = {"id": request.model_id, "name": request.model_name, "provider": request.provider}
+    catalogue.append(new_model)
+    await settings_store.set_setting("available_models", catalogue)
+    return {"model": new_model}
+
+
+@app.put("/api/models/custom/{model_id:path}")
+async def update_catalog_model(model_id: str, request: UpdateCatalogModelRequest, user=Depends(get_current_user)):
+    """Edit a catalogue model's OpenRouter id (and optionally name/provider).
+
+    Validates a changed id against the public OpenRouter catalogue and cascades
+    the rename into council_models / chairman_model.
+    """
+    catalogue = await _get_catalogue()
+    idx = next((i for i, m in enumerate(catalogue) if m["id"] == model_id), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail="model_not_found")
+
+    new_id = (request.new_id or "").strip()
+    if not new_id:
+        raise HTTPException(status_code=400, detail="L'identifiant OpenRouter ne peut pas être vide")
+
+    if new_id != model_id:
+        if any(m["id"] == new_id for m in catalogue):
+            raise HTTPException(status_code=400, detail=f"'{new_id}' existe déjà dans le catalogue")
+        ids = await _openrouter_model_ids()
+        if ids is not None and new_id not in ids:
+            raise HTTPException(status_code=400, detail=f"Modèle invalide : '{new_id}' introuvable sur OpenRouter")
+
+    old = catalogue[idx]
+    updated = {
+        "id": new_id,
+        "name": (request.model_name or old.get("name") or new_id),
+        "provider": (request.provider or old.get("provider") or ""),
+    }
+    catalogue[idx] = updated
+    await settings_store.set_setting("available_models", catalogue)
+
+    # Cascade the rename into council_models / chairman_model.
+    if new_id != model_id:
+        council = list(await settings_store.get_setting("council_models", []))
+        if model_id in council:
+            await settings_store.set_setting("council_models", [new_id if c == model_id else c for c in council])
+        chairman = await settings_store.get_setting("chairman_model", "")
+        if chairman == model_id:
+            await settings_store.set_setting("chairman_model", new_id)
+
+    # Keep config.json (read by the Settings UI via GET /api/config) in sync.
+    update_config({
+        "council_models": await settings_store.get_setting("council_models", []),
+        "chairman_model": await settings_store.get_setting("chairman_model", ""),
+    })
+    return {"model": updated}
+
+
+@app.delete("/api/models/custom/{model_id:path}")
+async def delete_catalog_model(model_id: str, user=Depends(get_current_user)):
+    """Remove a model from the catalogue, cascading to council_models/chairman.
+
+    Refuses if the model is in the council and removing it would leave < 2
+    council models.
+    """
+    catalogue = await _get_catalogue()
+    if not any(m["id"] == model_id for m in catalogue):
+        raise HTTPException(status_code=404, detail="model_not_found")
+
+    council = list(await settings_store.get_setting("council_models", []))
+    if model_id in council and len(council) <= 2:
+        raise HTTPException(status_code=400, detail="Suppression refusée : le council doit conserver au moins 2 modèles")
+
+    catalogue = [m for m in catalogue if m["id"] != model_id]
+    await settings_store.set_setting("available_models", catalogue)
+
+    if model_id in council:
+        council = [c for c in council if c != model_id]
+        await settings_store.set_setting("council_models", council)
+        chairman = await settings_store.get_setting("chairman_model", "")
+        if chairman == model_id:
+            await settings_store.set_setting("chairman_model", council[0] if council else "")
+
+    # Keep config.json (read by the Settings UI via GET /api/config) in sync.
+    update_config({
+        "council_models": await settings_store.get_setting("council_models", []),
+        "chairman_model": await settings_store.get_setting("chairman_model", ""),
+    })
+    return {"ok": True, "council_models": council}
 
 
 @app.post("/api/lm-studio/test")

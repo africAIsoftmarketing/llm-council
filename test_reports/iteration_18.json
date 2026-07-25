@@ -1,0 +1,26 @@
+{
+  "summary": "Verified new picker-model edit/delete feature (Council Models > left catalogue). Backend: all 6 test_catalog_models.py pass (invalid-id 400, valid edit cascades council + chairman, delete cascades, refuses <2 council members, requires auth, persists in app_settings). Regression: test_monetization.py (22) + test_council_models_edit.py (6) all pass -- 34/34 backend. Frontend end-to-end verified via Playwright against public HTTPS URL: hover reveals catalog-edit-btn-<id> and catalog-delete-btn-<id>; edit-click does NOT toggle row selection (stopPropagation OK); inline editor exposes catalog-edit-id-input / -name-input / -provider-input plus catalog-save-<id> / catalog-cancel-<id>; invalid id produces 400 + toast containing 'OpenRouter'; valid id (anthropic/claude-opus-5-fast) saves, row replaced; delete triggers window.confirm and removes row with 'Modèle supprimé du catalogue' toast. Catalogue restored (added openai/gpt-4o-mini back).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_catalog_models.py",
+    "/app/backend/tests/test_council_models_edit.py",
+    "/app/backend/tests/test_monetization.py",
+    "/app/test_reports/pytest/iter18_catalog.xml",
+    "/app/test_reports/pytest/iter18_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Row testid is 'model-<id>' rather than the 'picker-model-<id>' referenced in the request; consider aligning naming for clarity (functionality unaffected).",
+    "PUT/DELETE /api/models/custom/{model_id:path} correctly validate against public OpenRouter catalogue, cascade renames/removes into council_models + chairman_model, and enforce >=2-council rule -- catalogue now persisted in app_settings so restart-safe.",
+    "Frontend deleteCatModel uses window.confirm (auto-accepted in Playwright via page.on('dialog')); success/error toasts wired in."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (34/34)", "frontend": "100%"},
+  "seed_data_creation": "During UI test, briefly renamed openai/gpt-4o-mini -> anthropic/claude-opus-5-fast then deleted it; restored openai/gpt-4o-mini via POST /api/models/custom. Council/chairman untouched.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Admin: somecedric@gmail.com via POST /api/auth/dev-login (DEV_AUTH=1).",
+  "context_for_next_testing_agent": "Testids for the LEFT catalogue picker: row 'model-<id>' (NOT 'picker-model-<id>'); hover buttons 'catalog-edit-btn-<id>' & 'catalog-delete-btn-<id>' (always in DOM, revealed on hover via CSS); inline editor 'catalog-edit-id-input', 'catalog-edit-name-input', 'catalog-edit-provider-input', 'catalog-save-<id>', 'catalog-cancel-<id>'. Backend catalogue is now persisted in app_settings['available_models'] (Postgres) -- survives restart. window.confirm must be auto-accepted.",
+  "rca_of_the_issue": "N/A -- feature works as designed."
+}
