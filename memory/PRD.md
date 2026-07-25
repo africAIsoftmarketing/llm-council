@@ -55,6 +55,9 @@ PayPal Checkout (Orders v2), React + Vite + react-router. French-first UI.
   stay deleted in the GitHub repo, else the buildpack reverts to `uv sync --locked`.
 
 ## Next action items / backlog
+- 2026-06 Feature: Council Models UI (Settings) — per-model ✎ edit (change OpenRouter id
+  inline) + 🗑 delete buttons; Save Council now mirrors council_models & chairman_model into
+  app_settings (PUT /api/config -> settings_store) so edits hit the live pipeline. Verified 28/28.
 - P0: Provide GOOGLE_CLIENT_ID/SECRET; add redirect URI `https://<host>/api/auth/callback`
   in Google Console; then set DEV_AUTH=0 in prod.
 - P0: Provide OPENROUTER_API_KEY so the council actually runs.
