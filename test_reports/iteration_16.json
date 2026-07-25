@@ -1,0 +1,31 @@
+{
+  "summary": "Verified Heroku 'multiple package manager files' fix. Git tracking now shows exactly one root package-manager file (requirements.txt); uv.lock is staged for deletion (D  uv.lock) and no longer tracked in the working tree. pip dry-run resolves cleanly in a throwaway venv. Regression suite: 22/22 tests pass in test_monetization.py. /api/health=200 and anonymous /api/auth/me=401 as expected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_monetization.py",
+    "/app/test_reports/pytest/iter16.xml"
+  ],
+  "action_items": [
+    "Commit the staged deletion of uv.lock (git commit -m 'chore: remove uv.lock from tracking') and push to Heroku; this should resolve the 'Multiple Python package manager files were found' build error."
+  ],
+  "critical_code_review_comments": [
+    "Root now has requirements.txt (pip) + pyproject.toml (metadata only, not a package-manager marker for heroku/python) — compliant with Heroku's single-manager rule.",
+    "Procfile: release runs 'alembic upgrade head' and web boots 'uvicorn backend.main:app' — correct."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "N/A (skipped per request)"},
+  "seed_data_creation": "Ephemeral TEST_* users created via dev-login during pytest run (self-contained; no cleanup impact).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Admin: somecedric@gmail.com via POST /api/auth/dev-login (DEV_AUTH=1). Session cookie: council_session.",
+  "context_for_next_testing_agent": "Verification results for iteration 16: (1) `git ls-files | grep -E '^(uv\\.lock|poetry\\.lock|Pipfile|Pipfile\\.lock|setup\\.py)$'` returns empty; only 'pyproject.toml' and 'requirements.txt' from the manager-relevant set are tracked at root. (2) `git status --short` shows 'D  uv.lock' (staged deletion) and only an untracked frontend/yarn.lock (unrelated). (3) Working tree ls -la confirms uv.lock is absent; requirements.txt, pyproject.toml, and Procfile present. (4) pip install --dry-run against a fresh venv exits 0, resolving all direct deps (fastapi 0.121.3, uvicorn 0.38.0, sqlalchemy 2.0.51, asyncpg 0.31.0, alembic 1.18.5, authlib 1.7.2, pyjwt 2.13.0, itsdangerous 2.2.0, psycopg2-binary 2.9.12, python-multipart 0.0.32, pypdf2 3.0.1, python-docx 1.2.0, python-pptx 1.0.2, pillow 12.3.0). (5) test_monetization.py: 22 passed in 5.89s. Read-only git commands only were used, per request.",
+  "rca_of_the_issue": "uv.lock was previously deleted from the working tree but remained tracked in git, so each deploy still shipped uv.lock alongside requirements.txt to Heroku, tripping heroku/python's dual-manager guard. Running `git rm --cached uv.lock` staged the removal (now visible as 'D  uv.lock' in `git status --short`); once committed and pushed, Heroku will see only requirements.txt as the root package-manager file."
+}
