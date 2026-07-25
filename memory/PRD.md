@@ -37,6 +37,16 @@ PayPal Checkout (Orders v2), React + Vite + react-router. French-first UI.
 - Admin models/users/pricing/stats — verified. PayPal order creation (real sandbox id) — verified.
 - Conversations persist per-user in Postgres. 22/22 pytest pass.
 
+## Deployment fixes (post-launch)
+- 2026-06 Heroku `alembic: not found`: added all runtime deps to root pyproject.toml + uv.lock.
+- 2026-06 Heroku "no paywall gate": frontend/dist was gitignored -> Heroku served a stale/dev
+  build. Fix: committed a fresh auth-gated `frontend/dist` (un-ignored), hardened
+  `get_frontend_path()` to only serve a real build (index.html + assets/, never the Vite dev
+  entry), added root `package.json` (heroku-postbuild) + `app.json` (heroku/nodejs then
+  heroku/python). Verified 100% (anon -> /login on / /credits /admin; 22/22 backend tests).
+  NOTE: for an existing Heroku app, set buildpack order: `heroku buildpacks:clear` then add
+  heroku/nodejs then heroku/python. Committed dist also works with Python-only buildpack.
+
 ## Next action items / backlog
 - P0: Provide GOOGLE_CLIENT_ID/SECRET; add redirect URI `https://<host>/api/auth/callback`
   in Google Console; then set DEV_AUTH=0 in prod.
