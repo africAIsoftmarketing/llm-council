@@ -47,6 +47,13 @@ PayPal Checkout (Orders v2), React + Vite + react-router. French-first UI.
   NOTE: for an existing Heroku app, set buildpack order: `heroku buildpacks:clear` then add
   heroku/nodejs then heroku/python. Committed dist also works with Python-only buildpack.
 
+- 2026-06 Heroku `uv.lock needs to be updated (--locked)`: the committed uv.lock kept
+  drifting from pyproject.toml. Final fix = switch Heroku Python build from uv to **pip**:
+  deleted `uv.lock`, added root `requirements.txt` with all runtime deps. heroku/python
+  selects pip when no uv.lock/poetry.lock and a requirements.txt exists. Verified: pip
+  resolves clean, alembic release migrates a fresh DB, 22/22 tests. IMPORTANT: uv.lock must
+  stay deleted in the GitHub repo, else the buildpack reverts to `uv sync --locked`.
+
 ## Next action items / backlog
 - P0: Provide GOOGLE_CLIENT_ID/SECRET; add redirect URI `https://<host>/api/auth/callback`
   in Google Console; then set DEV_AUTH=0 in prod.
