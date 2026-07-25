@@ -150,27 +150,28 @@ app.add_middleware(
 
 # Determine frontend path
 def get_frontend_path():
-    """Get the path to frontend dist folder."""
-    # Get the directory where this file is located
+    """Get the path to the built frontend (Vite dist) folder.
+
+    Only a real production build (index.html + assets/) is accepted. The Vite
+    DEV entry at frontend/index.html (which loads /src/main.jsx) must never be
+    served in production, otherwise the SPA — including the auth gate — breaks.
+    """
     backend_dir = Path(__file__).parent.resolve()
-    
-    # Check various possible locations
+
     possible_paths = [
-        # Production: frontend dist is sibling to backend
         backend_dir.parent / "frontend" / "dist",
-        backend_dir.parent / "frontend",
-        # Development: frontend/dist relative to backend parent
         Path(os.getcwd()) / "frontend" / "dist",
-        Path(os.getcwd()) / "frontend",
     ]
-    
+
     for p in possible_paths:
         index_file = p / "index.html"
-        if index_file.exists():
-            print(f"Found frontend at: {p}")
+        assets_dir = p / "assets"
+        if index_file.exists() and assets_dir.is_dir():
+            print(f"Found built frontend at: {p}")
             return p
-    
-    print("Frontend not found in any expected location")
+
+    print("Built frontend (frontend/dist) not found — running API-only. "
+          "Run `npm run build` in frontend/ and redeploy.")
     return None
 
 FRONTEND_PATH = get_frontend_path()

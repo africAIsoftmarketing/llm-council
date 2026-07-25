@@ -1,0 +1,16 @@
+{
+  "summary": "Validated Heroku paywall-gate deployment fix end-to-end. (1) Anonymous visits to /, /credits, /admin all redirect to /login on the external HTTPS URL — the SPA no longer renders council UI without a session. (2) Production build serving verified on backend localhost:8001: GET / returns index.html referencing /assets/index-CWwykVm1.js (real Vite build), GET /login returns 200 (SPA fallback), GET /api/auth/me without cookie returns 401, and the referenced bundle loads with HTTP 200 and contains the string 'Se connecter avec Google'. (3) Auth regression: dev-login admin somecedric@gmail.com renders credits-balance ('0 crédits') + buy-credits-button + Administration nav. (4) RBAC: bob@example.com redirected away from /admin back to /. (5) 402 flow: bob with 0 credits sending a message triggers backend 402 and the frontend shows insufficient-credits-modal with text 'Crédits insuffisants — Cette requête nécessite 10 crédits, mais votre solde est de 0' and 'Acheter des crédits' CTA. (6) frontend/dist/index.html + frontend/dist/assets/ (index-CWwykVm1.js, index-BqJJBbfU.css) are present and served. Regression: 22/22 backend monetization tests PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_monetization.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (22/22)", "frontend": "100% (6/6 scenarios)"},
+  "test_credentials": "dev-login admin: somecedric@gmail.com ; user: bob@example.com",
+  "seed_data_creation": "Auto-created test users during pytest (TEST_* emails); frontend used bob@example.com (0 credits) for 402 modal check.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Paywall gate + production-build serving fix fully verified. External URL (Vite dev in preview) and localhost:8001 (FastAPI-served committed dist) both gate anonymous users to /login. The committed dist bundle references /assets/index-CWwykVm1.js which contains the auth text 'Se connecter avec Google'. All 22 monetization regression tests continue to pass.",
+  "rca_of_the_issue": "Previous Heroku deploy served a stale/dev Vite entry with no auth gate because frontend/dist was gitignored. Fix committed the auth-gated dist and hardened get_frontend_path() to require both index.html AND assets/ (rejecting Vite dev entry). Verified on backend port 8001: GET / returns the real build; assets are served with 200; and RequireAuth in the bundle redirects anon users to /login."
+}

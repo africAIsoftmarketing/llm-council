@@ -1,0 +1,8 @@
+{
+  "name": "LLM Council",
+  "description": "Multi-LLM deliberation SaaS with Google SSO, prepaid PayPal credits and an admin panel.",
+  "buildpacks": [
+    { "url": "heroku/nodejs" },
+    { "url": "heroku/python" }
+  ]
+}
