@@ -1,0 +1,16 @@
+{
+  "summary": "Verified Heroku pip-based deploy fix (switch from uv to pip). (a) /app has NO uv.lock and NO poetry.lock; /app/requirements.txt EXISTS — heroku/python buildpack will select pip. (b) Fresh throwaway venv `pip install --dry-run -r /app/requirements.txt` exits 0; resolver produced a full plan (Would install ... fastapi 0.121.3, uvicorn 0.38.0, sqlalchemy 2.0.51, asyncpg 0.31.0, alembic 1.18.5, Authlib 1.7.2, PyJWT 2.13.0, itsdangerous 2.2.0, psycopg2-binary 2.9.12, python-multipart 0.0.32, PyPDF2 3.0.1, python-docx 1.2.0, python-pptx 1.0.2, pillow 12.3.0 + transitives incl. starlette, pydantic 2.13.4, cryptography, lxml, uvloop, httptools, watchfiles, websockets, Mako, MarkupSafe) — no dependency conflicts. (c) Every third-party top-level import in /app/backend/*.py maps to a requirements.txt entry (PIL->pillow, PyPDF2->pypdf2, docx->python-docx, pptx->python-pptx, dotenv->python-dotenv, jwt->pyjwt, authlib, fastapi, starlette via fastapi, sqlalchemy, httpx, pydantic; asyncpg/psycopg2-binary/alembic/itsdangerous/python-multipart/uvicorn also listed). (d) Release step verified on fresh throwaway Postgres DB test_llm_council_alembic: `alembic upgrade head` exit 0, upgrade 0001_initial applied; \\dt shows tables users, credit_transactions, app_settings, conversations, alembic_version; partial unique index uq_credit_tx_paypal_order present on credit_transactions. DB dropped after. (e) Regression: 22/22 tests in backend/tests/test_monetization.py PASS. GET /api/health returns 200 {status:ok}. Anonymous GET /api/auth/me returns 401 (paywall gate intact).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_monetization.py", "/app/test_reports/pytest/iter15.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "N/A (skipped per request)"},
+  "seed_data_creation": "Throwaway Postgres DB test_llm_council_alembic created for alembic upgrade verification, then dropped. Throwaway venv /tmp/pipdryrun_venv created for pip dry-run, then removed.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": false,
+  "test_credentials": "Dev-login admin: somecedric@gmail.com (DEV_AUTH=1). Local Postgres: postgres:postgres@localhost:5432.",
+  "context_for_next_testing_agent": "Heroku deploy switched from uv to pip. requirements.txt is the source of truth for Heroku's build. Do not reintroduce uv.lock/poetry.lock or the buildpack will switch package managers. pyproject.toml remains but is harmless (no lockfile => pip path).",
+  "rca_of_the_issue": "Previously `uv sync --locked` kept failing on Heroku because the committed uv.lock drifted from pyproject.toml resolution. Root cause bypassed by deleting uv.lock and adding a root requirements.txt: heroku/python selects pip when uv.lock and poetry.lock are absent and requirements.txt exists, avoiding the --locked drift check entirely. Verified pip resolves clean and alembic release migrates a fresh DB successfully."
+}
