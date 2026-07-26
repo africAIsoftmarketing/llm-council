@@ -105,7 +105,7 @@ def get_setting_sync(key: str, default: Any = None) -> Any:
     if dsn:
         try:
             import psycopg2
-            conn = psycopg2.connect(dsn, sslmode=os.environ.get("DB_SSLMODE", "disable"))
+            conn = psycopg2.connect(dsn, sslmode=os.environ.get("DB_SSLMODE", "require"))
             try:
                 with conn.cursor() as cur:
                     cur.execute("SELECT value FROM app_settings WHERE key = %s", (key,))

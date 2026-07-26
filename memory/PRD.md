@@ -63,3 +63,13 @@ PayPal Checkout (Orders v2), React + Vite + react-router. French-first UI.
 - P0: Provide OPENROUTER_API_KEY so the council actually runs.
 - P1: Complete a full PayPal sandbox purchase in a real browser (capture + credit).
 - P2: i18n EN toggle; per-user document scoping (documents currently global).
+
+## Bugfix (2026-07-26): Heroku 500 on POST /api/conversations
+- Cause: psycopg2 (storage.py, settings_store.py) defaulted DB_SSLMODE to "disable".
+  Heroku Postgres requires SSL -> "no pg_hba.conf entry ... no encryption" FATAL.
+  db.py (asyncpg) worked because asyncpg negotiates SSL automatically.
+- Fix: default DB_SSLMODE changed "disable" -> "require" in storage.py & settings_store.py.
+  Local backend/.env keeps DB_SSLMODE=disable explicitly (local PG has no SSL).
+- Action for prod: redeploy, OR immediate `heroku config:set DB_SSLMODE=require`.
+- Note: local Postgres (postgres user + /var/lib/postgresql) was missing in this fork;
+  reinstalled postgresql-15, recreated role postgres/postgres and db llm_council.

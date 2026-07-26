@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
 DATABASE_URL = os.getenv("DATABASE_URL", "")
-DB_SSLMODE = os.getenv("DB_SSLMODE", "disable")
+DB_SSLMODE = os.getenv("DB_SSLMODE", "require")
 
 _POOL = None
 
@@ -21,7 +21,7 @@ def _get_pool():
     if _POOL is None:
         # Read env lazily: storage is imported before config.py runs load_dotenv().
         DATABASE_URL = os.getenv("DATABASE_URL", "") or DATABASE_URL
-        DB_SSLMODE = os.getenv("DB_SSLMODE", "disable")
+        DB_SSLMODE = os.getenv("DB_SSLMODE", "require")
         from psycopg2 import pool as pgpool
         _POOL = pgpool.ThreadedConnectionPool(1, 8, dsn=DATABASE_URL, sslmode=DB_SSLMODE)
         _ensure_table()
