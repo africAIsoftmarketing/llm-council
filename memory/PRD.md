@@ -73,3 +73,11 @@ PayPal Checkout (Orders v2), React + Vite + react-router. French-first UI.
 - Action for prod: redeploy, OR immediate `heroku config:set DB_SSLMODE=require`.
 - Note: local Postgres (postgres user + /var/lib/postgresql) was missing in this fork;
   reinstalled postgresql-15, recreated role postgres/postgres and db llm_council.
+
+## Bugfix (2026-07-27): Heroku 500 - column "user_id" does not exist
+- SSL fix worked; next error: conversations table on Heroku predates the user_id column.
+  CREATE TABLE IF NOT EXISTS never alters an existing table.
+- Fix: storage._ensure_table() now runs idempotent ALTER TABLE ADD COLUMN IF NOT EXISTS
+  for user_id, created_at, updated_at. Runs lazily on first psycopg2 pool init.
+- Validated locally by dropping user_id (simulating old schema) -> restart -> create conv 200.
+- Action: user must redeploy to Heroku for this code to run.

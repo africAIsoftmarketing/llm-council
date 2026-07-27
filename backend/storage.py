@@ -43,6 +43,10 @@ def _ensure_table():
                 );
                 """
             )
+            # Idempotent migrations for tables created by older code versions.
+            cur.execute("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS user_id TEXT;")
+            cur.execute("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();")
+            cur.execute("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();")
         conn.commit()
     finally:
         _POOL.putconn(conn)
