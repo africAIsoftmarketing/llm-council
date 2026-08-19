@@ -114,7 +114,7 @@ Benefits of local models:
 2. **Credentials → Create credentials → OAuth client ID → Web application**.
 3. **Authorized redirect URIs** — ajouter :
    - `https://<votre-app>.herokuapp.com/api/auth/callback` (production)
-   - `https://<votre-preview>.preview.emergentagent.com/api/auth/callback` (aperçu)
+   - `https://streaming-parser-fix.preview.emergentagent.com/api/auth/callback` (aperçu)
 4. Copier le Client ID / Secret dans les variables d'env `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
 5. Définir `ADMIN_EMAILS` (séparés par virgules) — ces emails deviennent admin à la connexion.
 

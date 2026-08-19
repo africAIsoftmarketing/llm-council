@@ -725,7 +725,27 @@ My question: {request.content}"""
 
     async def event_generator():
         refunded = False
+
+        # Heroku's router terminates a request if no bytes are sent within 30s and
+        # closes idle connections after 55s. Some proxies also buffer the stream.
+        # This helper awaits a coroutine while emitting SSE keep-alive comments
+        # (`: keep-alive\n\n`, ignored by the frontend parser) so the connection
+        # stays open and the stream is flushed during long Stage 1 waits.
+        async def run_with_heartbeat(coro, interval=10.0):
+            """Async generator: yields keep-alive SSE lines, then finally the result
+            wrapped as ('__result__', value)."""
+            task = asyncio.ensure_future(coro)
+            while not task.done():
+                done, _ = await asyncio.wait({task}, timeout=interval)
+                if not done:
+                    yield ": keep-alive\n\n"
+            yield ("__result__", task.result())
+
         try:
+            # Force the stream open immediately (before any long work) so proxies
+            # flush headers and the client starts reading right away.
+            yield ": ping\n\n"
+
             # Add user message
             storage.add_user_message(conversation_id, request.content)
 
@@ -736,9 +756,20 @@ My question: {request.content}"""
                     generate_conversation_title(request.content, advanced_config=request.advanced)
                 )
 
-            # Stage 1
+            # Stage 1 (long-running: emit heartbeats while models respond)
             yield f"data: {json.dumps({'type': 'stage1_start'})}\n\n"
-            stage1_results = await stage1_collect_responses(query_content, vision_images=vision_images if vision_images else None, advanced_config=request.advanced)
+            stage1_results = None
+            async for item in run_with_heartbeat(
+                stage1_collect_responses(
+                    query_content,
+                    vision_images=vision_images if vision_images else None,
+                    advanced_config=request.advanced,
+                )
+            ):
+                if isinstance(item, tuple) and item[0] == "__result__":
+                    stage1_results = item[1]
+                else:
+                    yield item
             if not stage1_results:
                 raise RuntimeError("Le pipeline du council a échoué : aucun modèle n'a répondu (clé OpenRouter manquante/invalide).")
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
@@ -782,9 +813,12 @@ My question: {request.content}"""
         event_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            # Anti-buffering: ensure Heroku's router / any proxy / uvicorn flush
+            # SSE events to the client immediately instead of buffering them.
+            "Cache-Control": "no-cache, no-transform",
             "Connection": "keep-alive",
-        }
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

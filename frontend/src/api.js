@@ -407,25 +407,57 @@ export const api = {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
+    // Robust SSE parsing with a persistent buffer.
+    // On Heroku, SSE events (especially the large `stage1_complete` payload) can be
+    // split across multiple TCP chunks. We must never JSON.parse a partial line, so
+    // we accumulate decoded text and only process complete events separated by a
+    // blank line (\n\n), keeping any trailing partial data in `buffer`.
+    let buffer = '';
+
+    const dispatchEvent = (rawEvent) => {
+      // An SSE event may span several `data:` lines; concatenate their payloads.
+      // Lines starting with `:` are comments/heartbeats and are ignored.
+      const dataLines = [];
+      for (const line of rawEvent.split('\n')) {
+        if (line.startsWith('data:')) {
+          // Strip the leading "data:" and an optional single space.
+          dataLines.push(line.slice(line.startsWith('data: ') ? 6 : 5));
+        }
+      }
+      if (dataLines.length === 0) return; // heartbeat / comment-only event
+      const data = dataLines.join('\n');
+      if (!data.trim()) return;
+      try {
+        const event = JSON.parse(data);
+        onEvent(event.type, event);
+      } catch (e) {
+        console.error('Failed to parse SSE event:', e, data);
+      }
+    };
+
+    const processBuffer = () => {
+      // Normalize CRLF and process every complete event (terminated by a blank line).
+      buffer = buffer.replace(/\r\n/g, '\n');
+      let sepIndex;
+      while ((sepIndex = buffer.indexOf('\n\n')) !== -1) {
+        const rawEvent = buffer.slice(0, sepIndex);
+        buffer = buffer.slice(sepIndex + 2);
+        if (rawEvent.trim()) dispatchEvent(rawEvent);
+      }
+    };
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-
-      const chunk = decoder.decode(value);
-      const lines = chunk.split('\n');
-
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6);
-          try {
-            const event = JSON.parse(data);
-            onEvent(event.type, event);
-          } catch (e) {
-            console.error('Failed to parse SSE event:', e);
-          }
-        }
-      }
+      // stream: true keeps multi-byte UTF-8 sequences intact across chunk boundaries.
+      buffer += decoder.decode(value, { stream: true });
+      processBuffer();
     }
+
+    // Flush any remaining bytes and process a trailing event without a final blank line.
+    buffer += decoder.decode();
+    processBuffer();
+    if (buffer.trim()) dispatchEvent(buffer);
   },
 
   // ===== Health Check =====

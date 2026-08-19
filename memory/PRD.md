@@ -81,3 +81,25 @@ PayPal Checkout (Orders v2), React + Vite + react-router. French-first UI.
   for user_id, created_at, updated_at. Runs lazily on first psycopg2 pool init.
 - Validated locally by dropping user_id (simulating old schema) -> restart -> create conv 200.
 - Action: user must redeploy to Heroku for this code to run.
+
+---
+## SSE Streaming Fix (Heroku) — 2026
+Problem: On Heroku the 3-stage SSE pipeline hung on Stage 1 (backend generated
+responses, frontend spinner never resolved).
+
+Root causes:
+1. Fragile frontend SSE parsing in api.js sendMessageStream (chunk.split('\n'),
+   no buffer) — Heroku splits large stage1_complete across TCP chunks, truncated
+   data: lines failed JSON.parse (silently) and events were lost.
+2. SSE buffering by Heroku router/uvicorn; no early flush/heartbeat.
+
+Fixes:
+- frontend/src/api.js: buffered SSE parser (decode {stream:true}, split on \n\n,
+  keep partial remainder, ignore ':' comments, never parse partial lines).
+- backend/main.py send_message_stream: headers Cache-Control no-cache,no-transform +
+  Connection keep-alive + X-Accel-Buffering:no; immediate ': ping'; 10s heartbeat
+  during Stage 1 via run_with_heartbeat. SSE event format & credit logic unchanged.
+- Rebuilt frontend/dist.
+
+Verification: raw curl (ping first, correct framing) + node fragmentation test pass.
+Full 3-stage happy path not run live (no OpenRouter key in preview).
