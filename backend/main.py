@@ -774,15 +774,30 @@ My question: {request.content}"""
                 raise RuntimeError("Le pipeline du council a échoué : aucun modèle n'a répondu (clé OpenRouter manquante/invalide).")
             yield f"data: {json.dumps({'type': 'stage1_complete', 'data': stage1_results})}\n\n"
 
-            # Stage 2
+            # Stage 2 (long-running: emit heartbeats while models rank)
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
-            stage2_results, label_to_model = await stage2_collect_rankings(query_content, stage1_results)
+            stage2_pair = None
+            async for item in run_with_heartbeat(
+                stage2_collect_rankings(query_content, stage1_results)
+            ):
+                if isinstance(item, tuple) and item[0] == "__result__":
+                    stage2_pair = item[1]
+                else:
+                    yield item
+            stage2_results, label_to_model = stage2_pair
             aggregate_rankings = calculate_aggregate_rankings(stage2_results, label_to_model)
             yield f"data: {json.dumps({'type': 'stage2_complete', 'data': stage2_results, 'metadata': {'label_to_model': label_to_model, 'aggregate_rankings': aggregate_rankings}})}\n\n"
 
-            # Stage 3
+            # Stage 3 (long-running: emit heartbeats while the chairman synthesizes)
             yield f"data: {json.dumps({'type': 'stage3_start'})}\n\n"
-            stage3_result = await stage3_synthesize_final(query_content, stage1_results, stage2_results, advanced_config=request.advanced)
+            stage3_result = None
+            async for item in run_with_heartbeat(
+                stage3_synthesize_final(query_content, stage1_results, stage2_results, advanced_config=request.advanced)
+            ):
+                if isinstance(item, tuple) and item[0] == "__result__":
+                    stage3_result = item[1]
+                else:
+                    yield item
             yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
 
             # Title

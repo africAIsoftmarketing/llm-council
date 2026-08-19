@@ -103,3 +103,16 @@ Fixes:
 
 Verification: raw curl (ping first, correct framing) + node fragmentation test pass.
 Full 3-stage happy path not run live (no OpenRouter key in preview).
+
+---
+## SSE Heartbeat Extended to Stages 2 & 3 — 2026
+Residual bug: same infinite-spinner symptom reappeared on Stage 2/3 (stage2_start
+and stage3_start shown, but stage2_complete/stage3_complete never received). Cause:
+run_with_heartbeat was only applied to Stage 1; Stages 2/3 were plain awaits →
+no bytes sent during their long OpenRouter calls → Heroku 30s/55s cutoff.
+Fix (backend/main.py event_generator): wrapped stage2_collect_rankings and
+stage3_synthesize_final in the existing run_with_heartbeat, extracting result via
+("__result__", value) marker. Stage 2 result is a tuple (stage2_results,
+label_to_model) — unpacked after extraction (marker tuple != business tuple).
+SSE format, credit logic, headers, 10s interval unchanged. Frontend unchanged.
+Verified: async heartbeat test (tuple+object results) PASS.
