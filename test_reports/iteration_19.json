@@ -1,0 +1,33 @@
+{
+  "summary": "Backend-only verification of the Stage-2 NameError fix (advanced_config) plus full SSE council stream. Created /app/backend/tests/test_stage2_advanced_config.py (14 tests, all PASS): signature/static checks, mocked stage1/2/3 + run_full_council unit tests, an in-process ASGI SSE test with OpenRouter mocked that now reaches stage2_complete -> stage3_complete -> title_complete -> complete, and live public-URL regression (health, dev-login, conversation CRUD, stream ': ping' framing + error/refund path with no API key). Existing tests/test_monetization.py: 22/22 PASS. NOTE: I had to repair the environment first — PostgreSQL 15 was DOWN, the postgres password was unset and the llm_council database was missing, so the backend failed startup and the public URL returned Cloudflare 502.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/conversations/{id}/message/stream", "issue": "On pipeline failure the SSE 'error' event is emitted but HTTP status stays 200 (expected for SSE); frontend must handle the 'error' event type — verified event contains refunded:true"},
+      {"endpoint": "environment", "issue": "PostgreSQL is not supervisor-managed: service was down, role password unset, DB llm_council absent. Any container restart loses DB + breaks backend startup (asyncpg InvalidPasswordError). Add postgres to supervisor + idempotent bootstrap (createdb + ALTER USER + migrations)."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_stage2_advanced_config.py",
+    "/app/test_reports/pytest/stage2_fix_results.xml"
+  ],
+  "action_items": [
+    "None for the reported bug — stage2_collect_rankings(user_query, stage1_results, advanced_config=None) forwards advanced_config to query_models_parallel; no NameError anywhere; both callers (council.run_full_council, main.event_generator) pass advanced_config.",
+    "Make PostgreSQL start automatically (supervisor entry or start.sh bootstrap) so the backend does not 502 after a container restart."
+  ],
+  "critical_code_review_comments": [
+    "backend/main.py is 882 lines — consider splitting routers (conversations/stream, config, documents) into modules.",
+    "stage2_collect_rankings docstring omits the advanced_config arg description (stage1/stage3 document it).",
+    "event_generator's broad `except Exception` swallows tracebacks (this is exactly why the NameError was invisible); log traceback.format_exc() to stderr before emitting the SSE error event.",
+    "run_with_heartbeat uses a magic tuple marker ('__result__', value) mixed with str yields; a small dataclass/sentinel would be safer if a stage ever returns a 2-tuple starting with that string."
+  ],
+  "updated_files": ["/app/backend/tests/test_stage2_advanced_config.py"],
+  "success_rate": {"backend": "100% (14/14 new + 22/22 monetization)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "Recreated empty llm_council DB (previous data lost with the stopped postgres volume); dev-login user somecedric@gmail.com granted 1000 credits via SQL; a few TEST_ conversations created.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "dev-login somecedric@gmail.com (admin), DEV_AUTH=1",
+  "context_for_next_testing_agent": "Before testing: `service postgresql start`, ensure `ALTER USER postgres WITH PASSWORD 'postgres'` and `createdb llm_council`, then restart backend. pytest-asyncio 1.4.0 installed. OpenRouter must be mocked via monkeypatch on council.query_models_parallel/query_model; for in-process SSE tests load /app/backend/main.py via importlib (a different /app/main.py shadows 'main') and use httpx.ASGITransport with base_url='https://testserver' (session cookie is Secure).",
+  "rca_of_the_issue": "Original bug: stage2_collect_rankings referenced advanced_config without declaring it as a parameter -> NameError swallowed by event_generator's except block, so the UI hung after stage2_start. Verified fixed: parameter added and forwarded; council.stage2_collect_rankings.__code__.co_names contains no 'advanced_config' global reference; mocked end-to-end stream now emits stage2_complete/stage3_complete/complete."
+}

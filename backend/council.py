@@ -56,7 +56,8 @@ async def stage1_collect_responses(user_query: str, vision_images: list = None, 
 
 async def stage2_collect_rankings(
     user_query: str,
-    stage1_results: List[Dict[str, Any]]
+    stage1_results: List[Dict[str, Any]],
+    advanced_config: dict = None
 ) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
     """
     Stage 2: Each model ranks the anonymized responses.

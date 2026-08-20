@@ -778,7 +778,7 @@ My question: {request.content}"""
             yield f"data: {json.dumps({'type': 'stage2_start'})}\n\n"
             stage2_pair = None
             async for item in run_with_heartbeat(
-                stage2_collect_rankings(query_content, stage1_results)
+                stage2_collect_rankings(query_content, stage1_results, advanced_config=request.advanced)
             ):
                 if isinstance(item, tuple) and item[0] == "__result__":
                     stage2_pair = item[1]
