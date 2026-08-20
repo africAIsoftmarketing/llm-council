@@ -116,3 +116,21 @@ stage3_synthesize_final in the existing run_with_heartbeat, extracting result vi
 label_to_model) — unpacked after extraction (marker tuple != business tuple).
 SSE format, credit logic, headers, 10s interval unchanged. Frontend unchanged.
 Verified: async heartbeat test (tuple+object results) PASS.
+
+---
+## Stage 3 Report Actions (export/copy) — 2026
+Additive frontend fix (regression restore). frontend/src/components/Stage3.jsx now
+shows an action bar (only when finalResponse exists) with 3 buttons:
+- Copier: navigator.clipboard.writeText(finalResponse.response) + textarea/execCommand
+  fallback for non-secure contexts; shows "Copié ✓" for 2s.
+- Exporter .txt: Blob text/plain;charset=utf-8 → <a download> → revokeObjectURL.
+  Filename council-report-<timestamp>.txt.
+- Exporter .pdf: jsPDF (unit pt, a4) + splitTextToSize + manual pagination loop
+  (handles long reports, no truncation). Filename council-report-<timestamp>.pdf.
+Errors (clipboard denied / PDF fail) show an inline .report-action-error line for 3s
+(Stage3 receives no showToast prop, so feedback is self-contained).
+Deps: jspdf added to package.json (pulls html2canvas/dompurify as optional; bundles OK).
+Styles added to Stage3.css (.final-response-header, .report-actions, .report-action-btn,
+.report-action-error). Backend/SSE/pipeline untouched. Frontend rebuilt → frontend/dist.
+NOTE: live Stage-3 render requires a completed council run (OpenRouter key), not
+available in preview; verified via successful Vite build + bundle contains the labels.
