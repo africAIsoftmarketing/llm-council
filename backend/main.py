@@ -495,6 +495,12 @@ async def upload_document(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
 
+@app.get("/api/documents/supported-types")
+async def get_supported_types():
+    """Get list of supported file types."""
+    return {"supported_extensions": list(SUPPORTED_EXTENSIONS.keys())}
+
+
 @app.get("/api/documents/{doc_id}")
 async def get_document_details(doc_id: str):
     """Get document details and content."""
@@ -531,12 +537,6 @@ async def toggle_document(doc_id: str, request: ToggleDocumentRequest):
     if not success:
         raise HTTPException(status_code=404, detail="Document not found")
     return {"success": True, "is_active": request.is_active}
-
-
-@app.get("/api/documents/supported-types")
-async def get_supported_types():
-    """Get list of supported file types."""
-    return {"supported_extensions": list(SUPPORTED_EXTENSIONS.keys())}
 
 
 @app.get("/api/documents/{doc_id}/status")

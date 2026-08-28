@@ -134,3 +134,26 @@ Styles added to Stage3.css (.final-response-header, .report-actions, .report-act
 .report-action-error). Backend/SSE/pipeline untouched. Frontend rebuilt → frontend/dist.
 NOTE: live Stage-3 render requires a completed council run (OpenRouter key), not
 available in preview; verified via successful Vite build + bundle contains the labels.
+
+---
+## Stage 3 Enriched Report + Export Quality — 2026
+Frontend-only, additive. Backend/SSE/credits untouched.
+PART A (render + exports):
+- ReactMarkdown now uses remark-gfm (tables, etc.). LaTeX artifacts normalized to
+  Unicode ($\checkmark$→✓, $\rightarrow$→→, $\approx$→≈, $\times$→×, $\leq$→≤ …) and
+  $...$ delimiters stripped; decorative ═══/***/=== runs → real <hr>.
+- On-screen hierarchy improved in Stage3.css: styled section headings, dark monospace
+  code blocks (<pre><code>), GFM tables, blockquotes.
+- PDF export rewritten to WYSIWYG: html2canvas captures an offscreen fully-expanded
+  report surface (browser fonts render all Unicode → no more %P%P/!' corruption),
+  paginated across A4 pages. txt/copy use markdownToPlain() (strips md, keeps Unicode).
+PART B (all council members in final report):
+- Stage3.jsx now accepts stage1Responses, aggregateRankings, labelToModel props
+  (propagated from ChatInterface.jsx). Renders: Chairman synthesis (always visible) +
+  collapsible "Membres du council" accordion (per-model markdown, collapsed by default,
+  first member open) + collapsible "Classement agrégé" table (#, modèle, score moyen,
+  votes). Missing stage1/aggregate handled gracefully (sections hidden).
+- Copy/.txt/.pdf all include the full enriched content (Chairman + members + ranking).
+Deps added: html2canvas, remark-gfm (jspdf already present). Vite build OK.
+Verified visually via temp preview route (removed after): markdown clean, Unicode
+correct, members accordion expands & renders, code/table styled. frontend/dist rebuilt.

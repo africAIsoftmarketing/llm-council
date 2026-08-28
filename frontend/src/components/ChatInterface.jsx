@@ -251,7 +251,15 @@ export default function ChatInterface({
                       <span>Running Stage 3: Final synthesis...</span>
                     </div>
                   )}
-                  {msg.stage3 && <Stage3 finalResponse={msg.stage3} />}
+                  {msg.stage3 && (
+                    <Stage3
+                      finalResponse={msg.stage3}
+                      stage1Responses={msg.stage1}
+                      stage2Rankings={msg.stage2}
+                      aggregateRankings={msg.metadata?.aggregate_rankings}
+                      labelToModel={msg.metadata?.label_to_model}
+                    />
+                  )}
                 </div>
               )}
             </div>
