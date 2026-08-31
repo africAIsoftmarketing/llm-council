@@ -1,0 +1,40 @@
+{
+  "summary": "Tested the 5 new features (Terms modal, admin-only settings + server-side API key persistence, council selection persistence, contact/legal, markdown/KaTeX static check). Bootstrapped Postgres, ran 14 new pytest cases (all passed) in /app/backend/tests/test_admin_settings_persistence.py and 4 Playwright UI flows (admin, non-admin, council persistence, settings tabs). All targeted behaviours work; no functional defects found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/config/advanced", "issue": "No auth dependency at all (unauthenticated read of advanced LLM config) while POST /api/config/advanced is admin-only. Inconsistent gating — consider get_current_user/get_current_admin."},
+      {"endpoint": "GET/POST /api/documents, /api/lm-studio/*", "issue": "Still unauthenticated (pre-existing, out of this change set) — noting for consistency of the new admin-only model."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/legal page", "issues": ["Legal page renders standalone without the app footer/header; only an in-page 'Back to Council' link. Acceptable but slightly inconsistent with the app shell."]},
+      {"screen": "Settings > Council Models", "issues": ["The 'Chairman (synthesizes final answer)' select inside the council panel shows '— auto (first model) —' when the persisted chairman is not part of the council list, which can look like the saved chairman was lost (the Chairman tab shows it correctly). Cosmetic/possible confusion only."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_settings_persistence.py",
+    "/app/test_reports/pytest/admin_settings.xml"
+  ],
+  "action_items": [
+    "Optional: add auth (admin) to GET /api/config/advanced for consistency with POST.",
+    "Optional cosmetic: in Settings > Council Models, display the persisted chairman even when it is not among the selected council models."
+  ],
+  "critical_code_review_comments": [
+    "GET /api/config returns the full config dict; verified the raw openrouter_api_key is not leaked (only masked value), but consider explicitly popping the key field to be future-proof against config schema changes.",
+    "Terms acceptance is stored only in localStorage (llm_council_terms_accepted_v1) — a user on a new browser/device will be re-prompted and there is no server-side audit record of acceptance. Acceptable for the stated requirement, but worth noting for legal traceability."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_admin_settings_persistence.py"
+  ],
+  "success_rate": {"backend": "100% (14/14 pytest)", "frontend": "100% of tested flows (terms modal, admin/non-admin gating, footer, /legal, api-key save, chairman+council persistence, settings tabs)"},
+  "seed_data_creation": "dev-login users somecedric@gmail.com (admin) and bob@example.com (user). A fake key sk-or-v1-... was saved/read during tests and then DELETED from app_settings + config.json (backend restarted); GET /api/config now reports has_api_key=false again. Advanced config mode was set to 'simple' by one test. Council models/chairman were restored to their original values (['openai/gpt-4o','anthropic/claude-3.5-sonnet'], chairman 'openai/gpt-4o').",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Admin: somecedric@gmail.com via /login -> dev-toggle -> dev-email-input -> dev-login-button. Non-admin: bob@example.com.",
+  "context_for_next_testing_agent": "Postgres is NOT supervisor-managed; run the bootstrap block from the review request before testing (pg_ctl start + create db llm_council), then restart backend. Verified: (1) Terms modal appears when localStorage key llm_council_terms_accepted_v1 is absent, accept button disabled until checkbox ticked, dismissed after accept, does not reappear after reload; (2) admin sees nav-settings/nav-advanced, non-admin sees neither and can still open chat/composer; non-admin PUT /api/config, POST /api/config/advanced, POST /api/config/validate-key => 403, admin => 200; (3) API key saved via Settings UI persists in Postgres app_settings, survives backend restart, masked in GET /api/config and inherited by non-admin (has_api_key=true, masked 'sk-or-v1...xxxx'); (4) chairman + council model changes persist in backend and are restored in UI after reload, localStorage cache llm_council_last_selection written; (5) footer (mailto:llmcouncilsupport@africaisoft.africa + /legal) present and /legal renders Legal/Privacy/Terms/Contact. Feature 1 (KaTeX/markdown) verified statically only: MarkdownView imports remarkGfm/remarkMath/rehypeKatex + katex css, and Stage1/2/3 all import MarkdownView; katex ^0.18.4 + rehype-katex ^7.0.1 in package.json. Runtime math rendering is NOT verifiable without an OpenRouter key/credits. No council run was executed.",
+  "rca_of_the_issue": "N/A - no failures. Initial Playwright miss on select-chairman was a test-side selector/tab issue (the chairman select lives under data-testid='tab-chairman', not 'tab-models'); corrected in the follow-up run and passed."
+}

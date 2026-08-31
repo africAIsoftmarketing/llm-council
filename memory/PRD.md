@@ -157,3 +157,29 @@ PART B (all council members in final report):
 Deps added: html2canvas, remark-gfm (jspdf already present). Vite build OK.
 Verified visually via temp preview route (removed after): markdown clean, Unicode
 correct, members accordion expands & renders, code/table styled. frontend/dist rebuilt.
+
+---
+## 5 Improvements: math render, key persistence, settings gating, T&C, legal — 2026
+Verified: testing_agent iteration_20 — 14/14 backend pytest + 4 Playwright UI flows, 100%, no defects.
+1. Math/Markdown: new shared src/components/MarkdownView.jsx (react-markdown + remark-gfm +
+   remark-math + rehype-katex + katex css); preprocessMath converts \[..\]→$$, \(..\)→$,
+   decorative rules→<hr>. Stage1/2/3 now use MarkdownView (KaTeX renders \boxed{}, etc.).
+2. API key persistence + admin-only settings: config_manager.get_api_key() reads Postgres
+   app_settings('openrouter_api_key') first (survives Heroku restart) then config.json/env.
+   PUT /api/config, POST /api/config/advanced, GET /api/config/advanced, POST /api/config/
+   validate-key => admin only (get_current_admin, 403 for non-admin). GET /api/config =>
+   any logged-in user, overlays council/chairman + has_api_key + masked key from DB. Frontend:
+   App.isAdmin gates Settings view + Advanced panel; Sidebar hides nav-settings/nav-advanced
+   for non-admins. Non-admins inherit admin key (has_api_key=true).
+3. Council selection persistence: GET /api/config overlays council_models/chairman_model from
+   app_settings (persist across restart); App caches to localStorage 'llm_council_last_selection'
+   and restores on load.
+4. Terms & Conditions modal (English): src/components/TermsModal.jsx(+css). Shows on first
+   launch (localStorage 'llm_council_terms_accepted_v1' absent), accept btn disabled until
+   checkbox ticked, blocks app, remembered after accept (no reappear on reload).
+5. Contact/legal: src/components/AppFooter.jsx(+css) in app shell (email
+   llmcouncilsupport@africaisoft.africa + /legal + privacy links); src/pages/Legal.jsx(+css)
+   at route /legal (Legal notice + Privacy + Terms + Contact). main.jsx registers /legal.
+Deps added: katex, remark-math, rehype-katex (+ earlier jspdf, html2canvas, remark-gfm).
+NOTE: Feature 1 runtime math render not exercised (needs OpenRouter key); static-verified.
+Preview only: Postgres is NOT supervisor-managed — bootstrap it before backend on pod restart.

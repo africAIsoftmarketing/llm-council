@@ -201,9 +201,21 @@ def update_config(updates: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def get_api_key() -> str:
-    """Get the OpenRouter API key (for internal use only)."""
+    """Get the OpenRouter API key (for internal use only).
+
+    Reads the admin-configured key from Postgres app_settings first (this is the
+    persistent source that survives Heroku dyno restarts), then falls back to the
+    local config.json and finally the OPENROUTER_API_KEY env var.
+    """
+    try:
+        from . import settings_store
+    except ImportError:
+        import settings_store
+    db_key = settings_store.get_setting_sync("openrouter_api_key", None)
+    if db_key:
+        return db_key
     config = load_config()
-    return config.get("openrouter_api_key", "")
+    return config.get("openrouter_api_key", "") or os.environ.get("OPENROUTER_API_KEY", "")
 
 
 def get_council_models() -> List[str]:

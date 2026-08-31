@@ -6,6 +6,7 @@ import App from './App.jsx'
 import Login from './pages/Login.jsx'
 import Credits from './pages/Credits.jsx'
 import Admin from './pages/Admin.jsx'
+import Legal from './pages/Legal.jsx'
 import { AuthProvider } from './auth/AuthContext.jsx'
 import RequireAuth from './auth/RequireAuth.jsx'
 
@@ -15,6 +16,7 @@ createRoot(document.getElementById('root')).render(
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/legal" element={<Legal />} />
           <Route path="/" element={<RequireAuth><App /></RequireAuth>} />
           <Route path="/credits" element={<RequireAuth><Credits /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth adminOnly><Admin /></RequireAuth>} />

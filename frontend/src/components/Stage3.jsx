@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import MarkdownView from './MarkdownView';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import './Stage3.css';
@@ -186,9 +185,7 @@ export default function Stage3({
     }
   };
 
-  const md = (text) => (
-    <ReactMarkdown remarkPlugins={[remarkGfm]}>{sanitizeForDisplay(text)}</ReactMarkdown>
-  );
+  const md = (text) => <MarkdownView>{text}</MarkdownView>;
 
   return (
     <div className="stage stage3">

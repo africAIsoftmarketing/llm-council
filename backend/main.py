@@ -287,7 +287,7 @@ class ToggleDocumentRequest(BaseModel):
 async def health_check():
     """Health check endpoint."""
     config = load_config()
-    has_key = bool(config.get("openrouter_api_key"))
+    has_key = bool(get_api_key())
     # Also consider configured if LM Studio URLs or advanced config is set
     has_lm_studio = bool(config.get("lm_studio_urls")) or bool(config.get("advanced_config"))
     return {
@@ -301,22 +301,37 @@ async def health_check():
 # ===== Configuration Endpoints =====
 
 @app.get("/api/config")
-async def get_configuration():
-    """Get current configuration (API key masked)."""
-    return get_config()
+async def get_configuration(user=Depends(get_current_user)):
+    """Get current configuration.
+
+    council_models / chairman_model are overlaid from Postgres app_settings (the
+    persistent source of truth) so an admin's selection survives dyno restarts.
+    has_api_key reflects the persisted key (DB) too, not just the ephemeral
+    config.json.
+    """
+    cfg = get_config()
+    cfg["council_models"] = await settings_store.get_setting("council_models", cfg.get("council_models"))
+    cfg["chairman_model"] = await settings_store.get_setting("chairman_model", cfg.get("chairman_model"))
+    key = get_api_key()
+    cfg["has_api_key"] = bool(key)
+    if key:
+        cfg["openrouter_api_key_masked"] = (key[:8] + "..." + key[-4:]) if len(key) > 10 else "*" * len(key)
+    return cfg
 
 
 @app.put("/api/config")
-async def update_configuration(request: ConfigUpdateRequest):
-    """Update configuration.
+async def update_configuration(request: ConfigUpdateRequest, user=Depends(get_current_admin)):
+    """Update configuration (admin only).
 
-    council_models / chairman_model are ALSO mirrored into app_settings, which is
-    the live source of truth read by the council pipeline (settings_store), so
-    edits from the Council Models UI take effect immediately without redeploy.
+    The OpenRouter API key is persisted in Postgres app_settings (survives dyno
+    restarts) in addition to config.json. council_models / chairman_model are
+    mirrored into app_settings — the live source read by the council pipeline.
     """
     updates = request.model_dump(exclude_none=True)
     updated_config = update_config(updates)
     apply_config_to_env()
+    if updates.get("openrouter_api_key"):
+        await settings_store.set_setting("openrouter_api_key", updates["openrouter_api_key"], updated_by=user.id)
     if updates.get("council_models"):
         await settings_store.set_setting("council_models", updates["council_models"])
     if updates.get("chairman_model"):
@@ -325,8 +340,8 @@ async def update_configuration(request: ConfigUpdateRequest):
 
 
 @app.post("/api/config/validate-key")
-async def validate_openrouter_key(request: ValidateKeyRequest):
-    """Validate an OpenRouter API key."""
+async def validate_openrouter_key(request: ValidateKeyRequest, user=Depends(get_current_admin)):
+    """Validate an OpenRouter API key (admin only)."""
     result = await validate_api_key(request.api_key)
     return result
 
@@ -457,14 +472,14 @@ class AdvancedConfigRequest(BaseModel):
 
 
 @app.get("/api/config/advanced")
-async def get_advanced_config_endpoint():
-    """Get advanced LLM configuration."""
+async def get_advanced_config_endpoint(user=Depends(get_current_admin)):
+    """Get advanced LLM configuration (admin only)."""
     return get_advanced_config()
 
 
 @app.post("/api/config/advanced")
-async def save_advanced_config_endpoint(request: AdvancedConfigRequest):
-    """Save advanced LLM configuration."""
+async def save_advanced_config_endpoint(request: AdvancedConfigRequest, user=Depends(get_current_admin)):
+    """Save advanced LLM configuration (admin only)."""
     config_data = request.model_dump(exclude_none=True)
     saved_config = save_advanced_config(config_data)
     return saved_config

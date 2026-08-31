@@ -5,14 +5,20 @@ import ChatInterface from './components/ChatInterface';
 import Settings from './components/Settings';
 import AdvancedPanel, { getAdvancedSettings } from './components/AdvancedPanel';
 import AppHeader from './components/AppHeader';
+import AppFooter from './components/AppFooter';
+import TermsModal, { hasAcceptedTerms } from './components/TermsModal';
 import { useAuth } from './auth/AuthContext';
 import { api } from './api';
 import './App.css';
 import './components/AppHeader.css';
 
+const COUNCIL_CACHE_KEY = 'llm_council_last_selection';
+
 function App() {
-  const { refresh } = useAuth();
+  const { user, refresh } = useAuth();
   const navigate = useNavigate();
+  const isAdmin = user?.role === 'admin';
+  const [termsAccepted, setTermsAccepted] = useState(() => hasAcceptedTerms());
   const [creditsModal, setCreditsModal] = useState(null);
   const [conversations, setConversations] = useState([]);
   const [currentConversationId, setCurrentConversationId] = useState(null);
@@ -24,8 +30,16 @@ function App() {
   const [toast, setToast] = useState(null);
   const [showAdvancedPanel, setShowAdvancedPanel] = useState(false);
   const [advancedSettings, setAdvancedSettings] = useState(() => getAdvancedSettings());
-  const [councilModels, setCouncilModels] = useState([]);
-  const [chairmanModel, setChairmanModel] = useState('');
+  // Restore the last council selection instantly from localStorage (persists across
+  // refresh); the authoritative values are then overlaid from the backend (DB).
+  const [councilModels, setCouncilModels] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(COUNCIL_CACHE_KEY))?.council_models || []; }
+    catch { return []; }
+  });
+  const [chairmanModel, setChairmanModel] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(COUNCIL_CACHE_KEY))?.chairman_model || ''; }
+    catch { return ''; }
+  });
 
   const checkConfiguration = useCallback(async () => {
     // The OpenRouter key is a deployment/admin concern; the end-user gate is now
@@ -50,8 +64,14 @@ function App() {
   const loadCouncilConfig = useCallback(async () => {
     try {
       const config = await api.getConfig();
-      setCouncilModels(config.council_models || []);
-      setChairmanModel(config.chairman_model || '');
+      const models = config.council_models || [];
+      const chairman = config.chairman_model || '';
+      setCouncilModels(models);
+      setChairmanModel(chairman);
+      // Cache for instant restore on next refresh.
+      try {
+        localStorage.setItem(COUNCIL_CACHE_KEY, JSON.stringify({ council_models: models, chairman_model: chairman }));
+      } catch { /* noop */ }
     } catch (error) {
       console.error('Failed to load council config:', error);
     }
@@ -324,11 +344,17 @@ function App() {
         currentView={currentView}
         onViewChange={setCurrentView}
         isConfigured={isConfigured}
+        isAdmin={isAdmin}
         onOpenAdvanced={() => setShowAdvancedPanel(true)}
         advancedMode={advancedSettings.mode}
       />
       
-      {currentView === 'chat' ? (
+      {currentView === 'settings' && isAdmin ? (
+        <Settings
+          onConfigUpdate={handleConfigUpdate}
+          showToast={showToast}
+        />
+      ) : (
         <ChatInterface
           conversation={currentConversation}
           onSendMessage={handleSendMessage}
@@ -340,15 +366,10 @@ function App() {
           onDocumentDelete={handleDocumentDelete}
           onDocumentToggle={handleDocumentToggle}
         />
-      ) : (
-        <Settings
-          onConfigUpdate={handleConfigUpdate}
-          showToast={showToast}
-        />
       )}
 
-      {/* Advanced Panel */}
-      {showAdvancedPanel && (
+      {/* Advanced Panel (admin only) */}
+      {showAdvancedPanel && isAdmin && (
         <AdvancedPanel
           onClose={() => setShowAdvancedPanel(false)}
           onSettingsChange={handleAdvancedSettingsChange}
@@ -382,6 +403,10 @@ function App() {
         </div>
       )}
       </div>
+      <AppFooter />
+
+      {/* Startup Terms & Conditions gate */}
+      {!termsAccepted && <TermsModal onAccept={() => setTermsAccepted(true)} />}
     </div>
   );
 }
