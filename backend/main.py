@@ -120,6 +120,39 @@ async def _get_catalogue():
     return [dict(m) for m in models]
 
 
+# ===== Per-user council selection helpers =====
+
+def _user_council_key(uid) -> str:
+    return f"user_council:{uid}"
+
+
+def _user_chairman_key(uid) -> str:
+    return f"user_chairman:{uid}"
+
+
+async def _get_user_council(user):
+    """Return the user's personal council selection, or None if not set."""
+    models = await settings_store.get_setting(_user_council_key(user.id), None)
+    if not models:
+        return None
+    chairman = await settings_store.get_setting(_user_chairman_key(user.id), None)
+    return {"council_models": models, "chairman_model": chairman}
+
+
+async def _inject_user_council(user, advanced):
+    """Inject the user's personal council into the advanced_config dict passed to
+    the pipeline. Falls back to the global admin selection when the user has no
+    personal council."""
+    uc = await _get_user_council(user)
+    if not uc:
+        return advanced
+    advanced = dict(advanced or {})
+    advanced["_user_council_models"] = uc["council_models"]
+    if uc.get("chairman_model"):
+        advanced["_user_chairman_model"] = uc["chairman_model"]
+    return advanced
+
+
 
 # ===== Helper Functions =====
 
@@ -312,6 +345,13 @@ async def get_configuration(user=Depends(get_current_user)):
     cfg = get_config()
     cfg["council_models"] = await settings_store.get_setting("council_models", cfg.get("council_models"))
     cfg["chairman_model"] = await settings_store.get_setting("chairman_model", cfg.get("chairman_model"))
+    # Non-admins see their personal council overlaid on top of the global default.
+    if user.role != "admin":
+        uc = await _get_user_council(user)
+        if uc:
+            cfg["council_models"] = uc["council_models"]
+            if uc.get("chairman_model"):
+                cfg["chairman_model"] = uc["chairman_model"]
     key = get_api_key()
     cfg["has_api_key"] = bool(key)
     if key:
@@ -342,6 +382,70 @@ async def update_configuration(request: ConfigUpdateRequest, user=Depends(get_cu
     if updates.get("chairman_model"):
         await settings_store.set_setting("chairman_model", updates["chairman_model"])
     return updated_config
+
+
+class UserCouncilRequest(BaseModel):
+    """Per-user council selection request."""
+    council_models: List[str]
+    chairman_model: Optional[str] = None
+
+
+@app.get("/api/config/council")
+async def get_user_council_endpoint(user=Depends(get_current_user)):
+    """Get the caller's council selection (personal if set, else global default)."""
+    global_models = await settings_store.get_setting("council_models", [])
+    global_chairman = await settings_store.get_setting("chairman_model", "")
+    uc = await _get_user_council(user)
+    if uc:
+        return {
+            "council_models": uc["council_models"],
+            "chairman_model": uc.get("chairman_model") or "",
+            "is_custom": True,
+            "default_council_models": global_models,
+            "default_chairman_model": global_chairman,
+        }
+    return {
+        "council_models": global_models,
+        "chairman_model": global_chairman,
+        "is_custom": False,
+        "default_council_models": global_models,
+        "default_chairman_model": global_chairman,
+    }
+
+
+@app.put("/api/config/council")
+async def update_user_council_endpoint(request: UserCouncilRequest, user=Depends(get_current_user)):
+    """Save the caller's personal council selection (≥ 2 models, chairman ∈ council)."""
+    # De-duplicate while preserving order.
+    seen = set()
+    models = [m for m in (request.council_models or []) if not (m in seen or seen.add(m))]
+    if len(models) < 2:
+        raise HTTPException(status_code=400, detail="Please select at least 2 council models")
+    # Validate the models exist in the catalogue.
+    catalogue_ids = {m["id"] for m in await _get_catalogue()}
+    unknown = [m for m in models if m not in catalogue_ids]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown model(s): {', '.join(unknown)}")
+    chairman = request.chairman_model or models[0]
+    if chairman not in models:
+        raise HTTPException(status_code=400, detail="The chairman must be one of the selected council models")
+    await settings_store.set_setting(_user_council_key(user.id), models, updated_by=str(user.id))
+    await settings_store.set_setting(_user_chairman_key(user.id), chairman, updated_by=str(user.id))
+    return {"council_models": models, "chairman_model": chairman, "is_custom": True}
+
+
+@app.delete("/api/config/council")
+async def reset_user_council_endpoint(user=Depends(get_current_user)):
+    """Reset the caller's council back to the global admin default."""
+    await settings_store.set_setting(_user_council_key(user.id), None, updated_by=str(user.id))
+    await settings_store.set_setting(_user_chairman_key(user.id), None, updated_by=str(user.id))
+    global_models = await settings_store.get_setting("council_models", [])
+    global_chairman = await settings_store.get_setting("chairman_model", "")
+    return {
+        "council_models": global_models,
+        "chairman_model": global_chairman,
+        "is_custom": False,
+    }
 
 
 @app.post("/api/config/validate-key")
@@ -639,6 +743,9 @@ async def send_message(conversation_id: str, request: SendMessageRequest, user=D
     # Check if this is the first message
     is_first_message = len(conversation["messages"]) == 0
 
+    # Apply the user's personal council selection (falls back to global default)
+    request.advanced = await _inject_user_council(user, request.advanced)
+
     # Build query with document context if requested
     query_content = request.content
     vision_images = []
@@ -721,6 +828,9 @@ async def send_message_stream(conversation_id: str, request: SendMessageRequest,
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     is_first_message = len(conversation["messages"]) == 0
+
+    # Apply the user's personal council selection (falls back to global default)
+    request.advanced = await _inject_user_council(user, request.advanced)
 
     # Build query with document context / vision images (needed to price request)
     query_content = request.content

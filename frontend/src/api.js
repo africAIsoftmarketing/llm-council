@@ -40,6 +40,49 @@ export const api = {
   },
 
   /**
+   * Get the current user's personal council selection (or global default).
+   */
+  async getUserCouncil() {
+    const response = await fetch(`${API_BASE}/api/config/council`, { credentials: 'include' });
+    if (!response.ok) {
+      throw new Error('Failed to get user council');
+    }
+    return response.json();
+  },
+
+  /**
+   * Save the current user's personal council selection.
+   */
+  async updateUserCouncil(councilModels, chairmanModel) {
+    const response = await fetch(`${API_BASE}/api/config/council`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ council_models: councilModels, chairman_model: chairmanModel }),
+    });
+    if (!response.ok) {
+      let detail;
+      try { detail = (await response.json()).detail; } catch { /* noop */ }
+      throw new Error(typeof detail === 'string' ? detail : 'Failed to save user council');
+    }
+    return response.json();
+  },
+
+  /**
+   * Reset the current user's council back to the global default.
+   */
+  async resetUserCouncil() {
+    const response = await fetch(`${API_BASE}/api/config/council`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to reset user council');
+    }
+    return response.json();
+  },
+
+  /**
    * Validate OpenRouter API key.
    */
   async validateApiKey(apiKey) {

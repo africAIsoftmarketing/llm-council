@@ -1,0 +1,39 @@
+{
+  "summary": "Independent verification of the Per-User Council Models feature (backend + frontend). Backend: new pytest suite /app/backend/tests/test_user_council.py (17 tests) covering GET/PUT/DELETE /api/config/council, validation (<2 models, chairman not in council, empty list), chairman defaulting to first model, persistence across a new session (new cookie, same user), /api/config overlay for non-admins, admin isolation (admin GET /api/config unaffected by any user council + global default untouched), isolation between two fresh non-admins, and admin-only gating on PUT /api/config (openrouter_api_key, lm_studio_urls => 403). 17/17 PASSED (one initial failure was a test bug on my side: lm_studio_urls is a dict, not a list - fixed in the test). Frontend: Playwright runs for a FRESH non-admin (random qauserXXXXXX@example.com) and for the admin (somecedric@gmail.com) via dev-login. Non-admin: API Settings tab absent, catalogue edit/delete buttons and 'Add Custom Model' section and edit-model-btn-* all absent (0), remove-model-btn-* present, Save Council disabled at 1 model, saving 3 models issued exactly one PUT /api/config/council (zero PUT /api/config), toast 'Council saved!', 'Reset to default' (btn-reset-council) then appeared and clicking it issued DELETE /api/config/council, hid the button and restored the global default (openai/gpt-4o-mini + anthropic/claude-3.5-sonnet). Admin: API Settings tab present, 32 catalog-edit + 32 catalog-delete buttons, edit-model-btn-* present, 'Add Custom Model' visible, no btn-reset-council, and Save Council issued PUT /api/config (global). Global council restored to its original value after testing. No backend tracebacks; no console errors other than the expected pre-login 401 on /api/auth/me.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/config/council", "issue": "No validation that the submitted model ids exist in the model catalogue, and duplicates are accepted (e.g. ['x/y','x/y'] would pass the >=2 check). Low risk since the UI can only emit catalogue ids, but a hand-crafted request can persist junk/duplicate council entries."},
+      {"endpoint": "PUT /api/config/council (admin)", "issue": "An admin calling this endpoint stores a PERSONAL council that is silently ignored everywhere (GET /api/config and _inject_user_council paths use the global for admins). Harmless but dead state; consider 403 or documenting it."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Settings > Council Models (1920x1080)", "issues": ["The provider tab strip inside the model picker is horizontally clipped - the last tab renders as 'DeepS' cut at the panel edge with no visible scroll affordance/arrows."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_user_council.py",
+    "/app/test_reports/pytest/iter23_user_council.xml"
+  ],
+  "action_items": [
+    "Optional hardening: validate council_models against the catalogue and de-duplicate in PUT /api/config/council.",
+    "Optional: decide behaviour for an admin hitting PUT /api/config/council (currently writes unused per-user state).",
+    "Minor CSS: make the provider tab strip scrollable/wrappable so the last provider tab isn't clipped."
+  ],
+  "critical_code_review_comments": [
+    "Council overlay is correctly read-only w.r.t. the global keys: PUT /api/config/council only writes user_council:{uid}/user_chairman:{uid}, verified by asserting default_council_models and admin GET /api/config stay unchanged.",
+    "DELETE /api/config/council is idempotent (200 + is_custom=false) on a user who never customised - good.",
+    "Settings.jsx role routing (loadConfiguration/handleSaveModels) matches the backend contract; verified at network level that non-admins never touch PUT /api/config."
+  ],
+  "updated_files": ["/app/backend/tests/test_user_council.py"],
+  "success_rate": {"backend": "100% (17/17)", "frontend": "100% (all 5 requested frontend behaviours verified for both roles)"},
+  "seed_data_creation": "Ephemeral dev-login users TEST_council_*@example.com and qauserXXXXXX@example.com (each resets its personal council at teardown). Global council left at ['openai/gpt-4o-mini','anthropic/claude-3.5-sonnet'] with chairman 'openai/gpt-4o-mini'.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin somecedric@gmail.com / non-admin any other email via POST /api/auth/dev-login or /login > 'Accès développeur (aperçu)'",
+  "context_for_next_testing_agent": "Per-user council feature is fully green. Regression suite: /app/backend/tests/test_user_council.py (uses fresh random emails, so it is safe to re-run; it snapshots and restores the global council in a module fixture). Postgres is not supervisor-managed - if /api/health fails, bootstrap PG and restart backend. Do not run the 3-stage pipeline (no real OpenRouter key).",
+  "rca_of_the_issue": "N/A - no defects reproduced; only two low-severity hardening gaps (no catalogue/duplicate validation on PUT /api/config/council; admin personal council is dead state)."
+}

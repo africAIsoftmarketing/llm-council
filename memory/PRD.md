@@ -205,3 +205,14 @@ Result: non-admin sees Council Models + Chairman + Advanced (no API tab, no Stor
 can select/save council & chairman; admin sees everything. No console errors / layout breaks.
 Known non-blocking: dead 'advanced_config' gate entry (field not on model; harmless/future-proof);
 Theme radio group styling is a pre-existing cosmetic nit (out of scope).
+
+---
+## Per-User Council Models — 2026-06 (branch target: master_herokuVersion_v23)
+Verified: testing_agent iter_23 — backend 17/17 pytest (tests/test_user_council.py), frontend 100% (both roles). Extra curl-verified de-dup + catalogue validation guards.
+Non-admin users now keep a PERSONAL council selection without touching the admin's GLOBAL default; unset users fall back to the global default.
+- backend/council.py: _resolve_council_models(advanced_config) / _resolve_chairman_model(advanced_config) prefer per-user override keys (_user_council_models / _user_chairman_model) injected into advanced_config, else global get_council_models/get_chairman_model. Applied in stage1/stage2/stage3 + generate_conversation_title.
+- backend/main.py: helpers _user_council_key(uid)='user_council:{uid}', _user_chairman_key(uid)='user_chairman:{uid}', _get_user_council(user), _inject_user_council(user, advanced). Endpoints GET/PUT/DELETE /api/config/council (all get_current_user). PUT validates: de-dup, >=2 models, all ids in catalogue, chairman in council. GET /api/config overlays personal council for NON-ADMIN only (admin always global). Both message endpoints call request.advanced = await _inject_user_council(user, request.advanced) before pipeline. PUT /api/config stays admin-only for sensitive fields.
+- frontend/src/api.js: api.getUserCouncil(), api.updateUserCouncil(models, chairman), api.resetUserCouncil().
+- frontend/src/components/Settings.jsx: loadConfiguration routes admin->getConfig / non-admin->getUserCouncil (+ isCustomCouncil state). handleSaveModels routes admin->updateConfig / non-admin->updateUserCouncil. handleResetCouncil (DELETE) shown only to non-admins with a custom council (btn-reset-council). Min raised to >=2 (Save disabled < 2). Catalogue-mutating controls (Add Custom Model, catalog-edit/delete-btn-*, council inline edit-model-btn-*) gated to isAdmin; remove-model-btn-* stays for all.
+Storage: Postgres app_settings JSONB, per-user keys. Persistent across restarts.
+Note: admin hitting PUT /api/config/council writes harmless unused per-user state (UI never does this).

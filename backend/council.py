@@ -10,6 +10,29 @@ except ImportError:
     from config_manager import get_council_models, get_chairman_model
 
 
+def _resolve_council_models(advanced_config: dict = None) -> List[str]:
+    """Resolve the council models for this request.
+
+    Uses a per-user override injected into advanced_config
+    (`_user_council_models`) when present, otherwise falls back to the global
+    admin selection.
+    """
+    if advanced_config:
+        override = advanced_config.get("_user_council_models")
+        if override:
+            return override
+    return get_council_models()
+
+
+def _resolve_chairman_model(advanced_config: dict = None) -> str:
+    """Resolve the chairman model, preferring a per-user override."""
+    if advanced_config:
+        override = advanced_config.get("_user_chairman_model")
+        if override:
+            return override
+    return get_chairman_model()
+
+
 async def stage1_collect_responses(user_query: str, vision_images: list = None, advanced_config: dict = None) -> List[Dict[str, Any]]:
     """
     Stage 1: Collect individual responses from all council models.
@@ -22,7 +45,7 @@ async def stage1_collect_responses(user_query: str, vision_images: list = None, 
     Returns:
         List of dicts with 'model' and 'response' keys
     """
-    council_models = get_council_models()
+    council_models = _resolve_council_models(advanced_config)
     
     # Build messages with optional vision content
     if vision_images:
@@ -69,7 +92,7 @@ async def stage2_collect_rankings(
     Returns:
         Tuple of (rankings list, label_to_model mapping)
     """
-    council_models = get_council_models()
+    council_models = _resolve_council_models(advanced_config)
     
     # Create anonymized labels for responses (Response A, Response B, etc.)
     labels = [chr(65 + i) for i in range(len(stage1_results))]  # A, B, C, ...
@@ -155,7 +178,7 @@ async def stage3_synthesize_final(
     Returns:
         Dict with 'model' and 'response' keys
     """
-    chairman_model = get_chairman_model()
+    chairman_model = _resolve_chairman_model(advanced_config)
     
     # Build comprehensive context for chairman
     stage1_text = "\n\n".join([
@@ -316,7 +339,7 @@ Title:"""
     # Choose title model based on advanced config
     if advanced_config and advanced_config.get('mode') in ('lmstudio', 'hybrid'):
         # Use first council model with its routing (LM Studio or OpenRouter)
-        council_models = get_council_models()
+        council_models = _resolve_council_models(advanced_config)
         title_model = council_models[0] if council_models else "google/gemini-2.5-flash"
         response = await query_model(title_model, messages, timeout=title_timeout, advanced_config=advanced_config)
     else:

@@ -30,6 +30,7 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
   const [chairmanModel, setChairmanModel] = useState('');
   const [customModel, setCustomModel] = useState({ id: '', name: '', provider: '' });
   const [theme, setTheme] = useState('light');
+  const [isCustomCouncil, setIsCustomCouncil] = useState(false);
 
   // Model picker states
   const [modelSearch, setModelSearch] = useState('');
@@ -50,15 +51,23 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
       setIsLoading(true);
       const cfg = await api.getConfig();
       setConfig(cfg);
-      setSelectedModels(cfg.council_models || []);
-      setChairmanModel(cfg.chairman_model || '');
       setTheme(cfg.theme || 'light');
+      if (isAdmin) {
+        setSelectedModels(cfg.council_models || []);
+        setChairmanModel(cfg.chairman_model || '');
+      } else {
+        // Non-admins read their personal council (falls back to global default).
+        const uc = await api.getUserCouncil();
+        setSelectedModels(uc.council_models || []);
+        setChairmanModel(uc.chairman_model || '');
+        setIsCustomCouncil(!!uc.is_custom);
+      }
     } catch {
       showToast('Failed to load configuration', 'error');
     } finally {
       setIsLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, isAdmin]);
 
   const loadAvailableModels = useCallback(async () => {
     try {
@@ -177,19 +186,40 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
   };
 
   const handleSaveModels = async () => {
-    if (selectedModels.length === 0) {
-      showToast('Please select at least one council model', 'warning'); return;
+    if (selectedModels.length < 2) {
+      showToast('Please select at least 2 council models', 'warning'); return;
     }
     setIsSaving(true);
     try {
       const chairman = chairmanModel || selectedModels[0];
-      const updated = await api.updateConfig({ council_models: selectedModels, chairman_model: chairman });
-      setSelectedModels(updated.council_models || selectedModels);
-      setChairmanModel(updated.chairman_model || chairman);
-      setConfig(updated);
+      if (isAdmin) {
+        const updated = await api.updateConfig({ council_models: selectedModels, chairman_model: chairman });
+        setSelectedModels(updated.council_models || selectedModels);
+        setChairmanModel(updated.chairman_model || chairman);
+        setConfig(updated);
+      } else {
+        const updated = await api.updateUserCouncil(selectedModels, chairman);
+        setSelectedModels(updated.council_models || selectedModels);
+        setChairmanModel(updated.chairman_model || chairman);
+        setIsCustomCouncil(true);
+      }
       showToast('Council saved!', 'success');
       onConfigUpdate();
-    } catch { showToast('Failed to save model configuration', 'error'); }
+    } catch (err) { showToast(err.message || 'Failed to save model configuration', 'error'); }
+    finally { setIsSaving(false); }
+  };
+
+  /* ── Reset personal council to global default (non-admin) ── */
+  const handleResetCouncil = async () => {
+    setIsSaving(true);
+    try {
+      const reset = await api.resetUserCouncil();
+      setSelectedModels(reset.council_models || []);
+      setChairmanModel(reset.chairman_model || '');
+      setIsCustomCouncil(false);
+      showToast('Council reset to default', 'success');
+      onConfigUpdate();
+    } catch (err) { showToast(err.message || 'Failed to reset council', 'error'); }
     finally { setIsSaving(false); }
   };
 
@@ -333,11 +363,19 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
                   Pick models from the browser, then drag to set deliberation order.
                 </p>
               </div>
-              <button onClick={handleSaveModels}
-                disabled={isSaving || selectedModels.length === 0}
-                className="btn-primary" data-testid="btn-save-models">
-                {isSaving ? 'Saving…' : 'Save Council'}
-              </button>
+              <div className="models-header-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                {!isAdmin && isCustomCouncil && (
+                  <button onClick={handleResetCouncil} disabled={isSaving}
+                    className="btn-secondary" data-testid="btn-reset-council">
+                    Reset to default
+                  </button>
+                )}
+                <button onClick={handleSaveModels}
+                  disabled={isSaving || selectedModels.length < 2}
+                  className="btn-primary" data-testid="btn-save-models">
+                  {isSaving ? 'Saving…' : 'Save Council'}
+                </button>
+              </div>
             </div>
 
             <div className="picker-layout">
@@ -418,14 +456,18 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
                               <span className="pmc-id">{model.id}</span>
                             </div>
                             <div className="pmc-actions">
-                              <button className="pmc-edit-btn"
-                                onClick={e => startCatEdit(e, model)}
-                                title="Modifier le lien OpenRouter"
-                                data-testid={`catalog-edit-btn-${model.id}`}>✎</button>
-                              <button className="pmc-delete-btn"
-                                onClick={e => deleteCatModel(e, model)}
-                                title="Supprimer du catalogue"
-                                data-testid={`catalog-delete-btn-${model.id}`}>🗑</button>
+                              {isAdmin && (
+                                <>
+                                  <button className="pmc-edit-btn"
+                                    onClick={e => startCatEdit(e, model)}
+                                    title="Modifier le lien OpenRouter"
+                                    data-testid={`catalog-edit-btn-${model.id}`}>✎</button>
+                                  <button className="pmc-delete-btn"
+                                    onClick={e => deleteCatModel(e, model)}
+                                    title="Supprimer du catalogue"
+                                    data-testid={`catalog-delete-btn-${model.id}`}>🗑</button>
+                                </>
+                              )}
                             </div>
                             <div className={`pmc-check ${isSelected ? 'checked' : ''}`}
                               style={isSelected ? { background: meta.color } : {}}>
@@ -499,10 +541,12 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
                                 <span className="ci-name">{model?.name || modelId}</span>
                                 <span className="ci-provider">{modelId}</span>
                               </div>
-                              <button className="ci-edit-btn"
-                                onClick={() => startEditModel(modelId)}
-                                title="Modifier le lien OpenRouter"
-                                data-testid={`edit-model-btn-${modelId}`}>✎</button>
+                              {isAdmin && (
+                                <button className="ci-edit-btn"
+                                  onClick={() => startEditModel(modelId)}
+                                  title="Modifier le lien OpenRouter"
+                                  data-testid={`edit-model-btn-${modelId}`}>✎</button>
+                              )}
                               <button className="ci-remove"
                                 onClick={() => handleRemoveModel(modelId)}
                                 title="Supprimer le modèle"
@@ -535,7 +579,8 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
               </div>
             </div>
 
-            {/* Custom model row */}
+            {/* Custom model row (admin only) */}
+            {isAdmin && (
             <div className="custom-model-section">
               <h3>Add Custom Model</h3>
               <div className="custom-model-form">
@@ -553,6 +598,7 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
                 </button>
               </div>
             </div>
+            )}
           </div>
         )}
 
