@@ -349,8 +349,9 @@ function App() {
         advancedMode={advancedSettings.mode}
       />
       
-      {currentView === 'settings' && isAdmin ? (
+      {currentView === 'settings' ? (
         <Settings
+          isAdmin={isAdmin}
           onConfigUpdate={handleConfigUpdate}
           showToast={showToast}
         />

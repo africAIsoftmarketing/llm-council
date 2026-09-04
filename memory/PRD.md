@@ -183,3 +183,25 @@ Verified: testing_agent iteration_20 — 14/14 backend pytest + 4 Playwright UI 
 Deps added: katex, remark-math, rehype-katex (+ earlier jspdf, html2canvas, remark-gfm).
 NOTE: Feature 1 runtime math render not exercised (needs OpenRouter key); static-verified.
 Preview only: Postgres is NOT supervisor-managed — bootstrap it before backend on pod restart.
+
+---
+## Role-based Settings visibility fix — 2026
+Corrected prior over-gating. Verified: testing_agent iter_21 (frontend 100%) + iter_22 (backend 23/23).
+- backend/main.py PUT /api/config: now get_current_user (not admin-only). Non-admins may set
+  council_models / chairman_model / theme (200); admin_only_fields = {openrouter_api_key,
+  lm_studio_urls, advanced_config, storage_location} -> 403 for non-admin. Gate runs before
+  update_config so rejected mixed payloads write nothing (atomic). GET /api/config -> all
+  logged-in users, has_api_key true (non-admin inherits admin key, raw key never leaked).
+- frontend/src/App.jsx: Settings view rendered for ALL users again (passes isAdmin), not
+  admin-gated.
+- frontend/src/components/Sidebar.jsx: nav-settings visible to everyone; nav-advanced (separate
+  Advanced LLM config modal) stays admin-only.
+- frontend/src/components/Settings.jsx: takes isAdmin prop. Tabs = [API Settings (admin only),
+  Council Models, Chairman, Advanced]. Default tab = api (admin) / models (non-admin). API
+  section renders only when activeTab==='api' && isAdmin. Storage Location section
+  (data-testid='section-storage-location') wrapped in {isAdmin && ...}; Advanced tab keeps
+  Theme + About for all (not empty). data-testid='tab-api' absent for non-admins.
+Result: non-admin sees Council Models + Chairman + Advanced (no API tab, no Storage Location),
+can select/save council & chairman; admin sees everything. No console errors / layout breaks.
+Known non-blocking: dead 'advanced_config' gate entry (field not on model; harmless/future-proof);
+Theme radio group styling is a pre-existing cosmetic nit (out of scope).

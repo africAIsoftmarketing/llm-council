@@ -320,14 +320,19 @@ async def get_configuration(user=Depends(get_current_user)):
 
 
 @app.put("/api/config")
-async def update_configuration(request: ConfigUpdateRequest, user=Depends(get_current_admin)):
-    """Update configuration (admin only).
+async def update_configuration(request: ConfigUpdateRequest, user=Depends(get_current_user)):
+    """Update configuration.
 
-    The OpenRouter API key is persisted in Postgres app_settings (survives dyno
-    restarts) in addition to config.json. council_models / chairman_model are
-    mirrored into app_settings — the live source read by the council pipeline.
+    Non-admins may update non-sensitive fields (council_models, chairman_model,
+    theme) — these let them use the Council Models / Chairman tabs. API-sensitive
+    fields (OpenRouter key, LM Studio URLs, advanced provider config) are admin
+    only. The OpenRouter key + council selection are mirrored into Postgres
+    app_settings (persistent across dyno restarts).
     """
     updates = request.model_dump(exclude_none=True)
+    admin_only_fields = {"openrouter_api_key", "lm_studio_urls", "advanced_config", "storage_location"}
+    if user.role != "admin" and (admin_only_fields & set(updates.keys())):
+        raise HTTPException(status_code=403, detail="Admin privileges required to modify API settings")
     updated_config = update_config(updates)
     apply_config_to_env()
     if updates.get("openrouter_api_key"):

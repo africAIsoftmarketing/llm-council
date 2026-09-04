@@ -1,0 +1,38 @@
+{
+  "summary": "Verified role-based Settings visibility fix (non-admin vs admin) end-to-end. Backend: new pytest suite /app/backend/tests/test_role_settings_visibility.py (13 tests, 12 pass, 1 fail = storage_location not admin-gated on API). Frontend Playwright: NON-ADMIN (bob@example.com) sees nav-settings, no nav-advanced, tabs = Council Models/Chairman/Advanced with NO tab-api, default active tab = Council Models, Advanced tab has Theme + About but NO section-storage-location, Save Council -> PUT /api/config 200 + 'Council saved!' toast, Save Chairman -> 200. ADMIN (somecedric@gmail.com) sees all 4 tabs incl. API Settings (default active), nav-advanced present, section-storage-location present on Advanced, Save API Key -> PUT 200 + success toast. Footer + /legal load fine; Terms modal present before acceptance. No JS/page errors on Settings for either role (only pre-login 401 on /api/auth/me, expected).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/config", "issue": "storage_location is NOT in admin_only_fields, so a non-admin can change the app storage path via API (returns 200) even though the UI hides the Storage Location section. Recommend adding 'storage_location' (and any other infra fields) to admin_only_fields."},
+      {"endpoint": "PUT /api/config", "issue": "admin_only_fields includes 'advanced_config' and 'lm_studio_urls', but 'advanced_config' is not a field on ConfigUpdateRequest, so it is silently dropped rather than 403'd (no security impact, dead gating rule). lm_studio_urls correctly 403s."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Settings > Advanced", "issues": ["Theme radio group is cramped/misaligned: radio inputs sit above their 'Light'/'Dark' labels with no row layout or spacing; looks unstyled compared to the rest of the panel (both roles)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_role_settings_visibility.py",
+    "/app/test_reports/pytest/iter21_roles.xml"
+  ],
+  "action_items": [
+    "Add 'storage_location' to admin_only_fields in PUT /api/config (non-admin currently gets 200 and can repoint app storage).",
+    "Optional: drop the dead 'advanced_config' entry from admin_only_fields or add the field to ConfigUpdateRequest so gating is meaningful.",
+    "Optional polish: style the Theme radio group in Settings > Advanced (inline row + label alignment)."
+  ],
+  "critical_code_review_comments": [
+    "Server-side gating list must mirror the UI hiding rules exactly; Storage Location is hidden for non-admins in Settings.jsx but writable via the API (broken-access-control class bug).",
+    "GET /api/config returns full config (incl. advanced_config, throttle, lm_studio_urls keys) to non-admins; masked key only is fine, but consider trimming admin-only sections from the non-admin response."
+  ],
+  "updated_files": ["/app/backend/tests/test_role_settings_visibility.py"],
+  "success_rate": {"backend": "92% (12/13)", "frontend": "100% (all role-visibility + save flows passed)"},
+  "seed_data_creation": "dev-login users somecedric@gmail.com (admin) and bob@example.com (user); admin OpenRouter key set to dummy 'sk-or-v1-TESTKEY...' (no real key available); storage_location restored to 'data' after the gating test.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "Admin somecedric@gmail.com, non-admin bob@example.com via /login -> dev-toggle -> dev-email-input -> dev-login-button",
+  "context_for_next_testing_agent": "Postgres is not supervisor-managed; run the initdb/pg_ctl bootstrap from the review request before testing. Role-visibility suite: /app/backend/tests/test_role_settings_visibility.py (test_nonadmin_storage_location_gating intentionally fails until backend adds storage_location to admin_only_fields). Council pipeline not exercised (dummy OpenRouter key only).",
+  "rca_of_the_issue": "Reported bug (over-gating of Settings) is fixed: Settings.jsx conditions tabs/sections on isAdmin, App.jsx renders Settings for all users, backend PUT /api/config gates only sensitive fields. Remaining gap: admin_only_fields omits storage_location, so the API allows a non-admin to write a field the UI hides."
+}

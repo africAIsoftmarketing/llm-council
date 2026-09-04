@@ -1,0 +1,31 @@
+{
+  "summary": "Backend-only verification of the storage_location broken-access-control fix on PUT /api/config. Bootstrapped Postgres + restarted backend (health ok). Re-ran the full role suite (/app/backend/tests/test_role_settings_visibility.py): 13/13 PASSED, including the previously failing test_nonadmin_storage_location_gating. Added a new focused suite (/app/backend/tests/test_storage_location_gating.py): 10/10 PASSED, covering non-admin storage_location => 403 (with no write side-effect), admin storage_location => 200 + persisted via GET, anonymous => 401/403, mixed payload (chairman_model + storage_location) => 403 with the allowed field NOT leaking through, non-admin allowed fields (council_models / chairman_model / theme) => 200 + persistence verified, non-admin openrouter_api_key & lm_studio_urls => 403, and non-admin GET /api/config has_api_key=true (no raw key exposed). Code review of main.py confirms admin_only_fields = {openrouter_api_key, lm_studio_urls, advanced_config, storage_location} and the check runs before update_config, so rejection is atomic. Backend logs clean (no tracebacks). storage_location restored to 'data'. Frontend skipped per request.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/config", "issue": "'advanced_config' is listed in admin_only_fields but is not a ConfigUpdateRequest field, so a non-admin sending it gets 200 (silently ignored) instead of 403. Harmless today (value never applied - verified), but the gate is dead code and will silently break if the field is ever added to the model."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_role_settings_visibility.py",
+    "/app/backend/tests/test_storage_location_gating.py",
+    "/app/test_reports/pytest/iter22_roles.xml",
+    "/app/test_reports/pytest/iter22_storage.xml"
+  ],
+  "action_items": [
+    "Optional: either add advanced_config to ConfigUpdateRequest or drop it from admin_only_fields so the gate isn't dead code."
+  ],
+  "critical_code_review_comments": [
+    "PUT /api/config gating is correctly evaluated before update_config()/apply_config_to_env(), so a rejected mixed payload writes nothing - verified by test_nonadmin_mixed_payload_rejected_atomically.",
+    "GET /api/config correctly reports has_api_key without leaking the raw sk-or key to non-admins."
+  ],
+  "updated_files": ["/app/backend/tests/test_storage_location_gating.py"],
+  "success_rate": {"backend": "100% (23/23)", "frontend": "not tested (skipped per request)"},
+  "seed_data_creation": "dev-login users somecedric@gmail.com (admin) and bob@example.com (user). The pre-existing role suite writes a dummy OpenRouter key 'sk-or-v1-TESTKEY0000000000000000' into app_settings (has_api_key=true); real council calls will still fail. council_models currently ['openai/gpt-4o-mini','anthropic/claude-3.5-sonnet'], chairman 'openai/gpt-4o-mini', theme 'dark', storage_location 'data'.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin somecedric@gmail.com / non-admin bob@example.com via POST /api/auth/dev-login (cookie jar)",
+  "context_for_next_testing_agent": "Postgres is NOT supervisor-managed and is wiped on pod restart - run the bootstrap from the review request before any testing, then restart backend. Role/config gating is fully green (23 tests across test_role_settings_visibility.py + test_storage_location_gating.py). If you need a clean config, reset storage_location to 'data' as admin. Do not run the council pipeline (no OpenRouter key; a dummy TESTKEY is stored in app_settings).",
+  "rca_of_the_issue": "Original defect: 'storage_location' was accepted by ConfigUpdateRequest but omitted from admin_only_fields in PUT /api/config, so a non-admin could write it (200) even though the UI hides the Storage Location section - a broken-access-control/UI-only-enforcement gap. Fix (adding it to admin_only_fields) is confirmed effective: non-admin now gets 403 with no persisted change, admin still gets 200."
+}
