@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api';
+import { useAuth } from '../auth/AuthContext';
 import './Settings.css';
 
 /* ─── provider colour map ─────────────────────────────────────── */
@@ -16,7 +17,11 @@ const PROVIDER_META = {
 const providerMeta = (p) => PROVIDER_META[p] || { color: '#4a90e2', bg: '#f5f8ff', icon: '◇' };
 
 export default function Settings({ onConfigUpdate, showToast }) {
-  const [activeTab, setActiveTab] = useState('api');
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
+  // Non-admins never land on the (hidden) API Settings tab.
+  const [activeTab, setActiveTab] = useState(isAdmin ? 'api' : 'models');
   const [config, setConfig] = useState(null);
   const [availableModels, setAvailableModels] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,6 +49,11 @@ export default function Settings({ onConfigUpdate, showToast }) {
   const [catEditName, setCatEditName] = useState('');
   const [catEditProvider, setCatEditProvider] = useState('');
   const dragNode = useRef(null);
+
+  // Guard: if a non-admin somehow has the API tab active, redirect to models.
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'api') setActiveTab('models');
+  }, [isAdmin, activeTab]);
 
   const loadConfiguration = useCallback(async () => {
     try {
@@ -248,6 +258,14 @@ export default function Settings({ onConfigUpdate, showToast }) {
 
   const modelById = Object.fromEntries(availableModels.map(m => [m.id, m]));
 
+  /* ── Tabs: API Settings is admin-only ── */
+  const tabs = [
+    ...(isAdmin ? [['api', 'API Settings']] : []),
+    ['models', 'Council Models'],
+    ['chairman', 'Chairman'],
+    ['advanced', 'Advanced'],
+  ];
+
   if (isLoading) {
     return (
       <div className="settings">
@@ -267,7 +285,7 @@ export default function Settings({ onConfigUpdate, showToast }) {
       </div>
 
       <div className="settings-tabs">
-        {[['api','API Settings'],['models','Council Models'],['chairman','Chairman'],['advanced','Advanced']].map(([id, label]) => (
+        {tabs.map(([id, label]) => (
           <button key={id} className={`settings-tab ${activeTab === id ? 'active' : ''}`}
             onClick={() => setActiveTab(id)} data-testid={`tab-${id}`}>{label}</button>
         ))}
@@ -275,8 +293,8 @@ export default function Settings({ onConfigUpdate, showToast }) {
 
       <div className="settings-content">
 
-        {/* ── API Settings ── */}
-        {activeTab === 'api' && (
+        {/* ── API Settings (admin only) ── */}
+        {isAdmin && activeTab === 'api' && (
           <div className="settings-section" data-testid="section-api">
             <h2>OpenRouter API Key</h2>
             <p className="settings-description">
@@ -610,30 +628,33 @@ export default function Settings({ onConfigUpdate, showToast }) {
                 ))}
               </div>
             </div>
-            <div className="info-section">
-              <h3>Storage Location</h3>
-              {config?.storage_paths ? (
-                <div className="storage-paths">
-                  <div className="storage-path-row">
-                    <span className="path-label">Config file:</span>
-                    <code className="path-value">{config.storage_paths.config_file}</code>
+            {/* Storage Location — admin only */}
+            {isAdmin && (
+              <div className="info-section" data-testid="section-storage">
+                <h3>Storage Location</h3>
+                {config?.storage_paths ? (
+                  <div className="storage-paths">
+                    <div className="storage-path-row">
+                      <span className="path-label">Config file:</span>
+                      <code className="path-value">{config.storage_paths.config_file}</code>
+                    </div>
+                    <div className="storage-path-row">
+                      <span className="path-label">Conversations:</span>
+                      <code className="path-value">{config.storage_paths.conversations_dir}</code>
+                    </div>
+                    <div className="storage-path-row">
+                      <span className="path-label">Documents:</span>
+                      <code className="path-value">{config.storage_paths.documents_dir}</code>
+                    </div>
                   </div>
-                  <div className="storage-path-row">
-                    <span className="path-label">Conversations:</span>
-                    <code className="path-value">{config.storage_paths.conversations_dir}</code>
-                  </div>
-                  <div className="storage-path-row">
-                    <span className="path-label">Documents:</span>
-                    <code className="path-value">{config.storage_paths.documents_dir}</code>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <p>Conversations: <code>data/conversations/</code></p>
-                  <p>Documents: <code>data/documents/</code></p>
-                </>
-              )}
-            </div>
+                ) : (
+                  <>
+                    <p>Conversations: <code>data/conversations/</code></p>
+                    <p>Documents: <code>data/documents/</code></p>
+                  </>
+                )}
+              </div>
+            )}
             <div className="info-section">
               <h3>About LLM Council</h3>
               <p>
