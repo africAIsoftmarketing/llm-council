@@ -4,7 +4,7 @@ import { CONTACT_EMAIL } from './TermsModal';
 import africaisoftLogo from '../assets/logo-africaisoft.jpg';
 import './AppFooter.css';
 
-const AFRICAISOFT_URL = '#';
+const AFRICAISOFT_URL = 'https://www.africaisoft.africa/';
 
 export default function AppFooter() {
   const year = new Date().getFullYear();
