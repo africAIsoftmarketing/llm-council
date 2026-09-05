@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import MarkdownView from './MarkdownView';
 import './Stage1.css';
 
 export default function Stage1({ responses }) {
   const [activeTab, setActiveTab] = useState(0);
+  const { t } = useTranslation();
 
   if (!responses || responses.length === 0) {
     return null;
@@ -11,7 +13,7 @@ export default function Stage1({ responses }) {
 
   return (
     <div className="stage stage1">
-      <h3 className="stage-title">Stage 1: Individual Responses</h3>
+      <h3 className="stage-title">{t('stage1.title')}</h3>
 
       <div className="tabs">
         {responses.map((resp, index) => (

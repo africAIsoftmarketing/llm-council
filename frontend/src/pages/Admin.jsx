@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import AppHeader from '../components/AppHeader';
 import { adminApi } from '../api';
 import './Admin.css';
@@ -261,6 +262,7 @@ function fmtUsd(v) {
 }
 
 function OpenRouterTab({ showToast }) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState(null);
   const [cost, setCost] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -275,61 +277,61 @@ function OpenRouterTab({ showToast }) {
       setStatus(s);
       setCost(c);
     } catch (err) {
-      showToast(err.message || 'Failed to load OpenRouter status', 'error');
+      showToast(err.message || t('admin.or.loadFailed'), 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [showToast]);
+  }, [showToast, t]);
 
   useEffect(() => { load(false); }, [load]);
 
   const onRefresh = () => { setRefreshing(true); load(true); };
 
-  if (loading) return <div className="tab-content" data-testid="admin-openrouter-tab">Chargement…</div>;
+  if (loading) return <div className="tab-content" data-testid="admin-openrouter-tab">{t('credits.loading')}</div>;
 
   const notConfigured = status && status.configured === false;
   const invalid = status && status.configured && status.valid === false;
   const valid = status && status.valid === true;
 
   const keyCards = valid ? [
-    { label: 'Key usage (spent)', value: fmtUsd(status.usage), testid: 'or-usage' },
-    { label: 'Key limit', value: status.limit === null || status.limit === undefined ? 'Unlimited' : fmtUsd(status.limit), testid: 'or-limit' },
-    { label: 'Remaining on key', value: status.limit_remaining === null || status.limit_remaining === undefined ? '—' : fmtUsd(status.limit_remaining), testid: 'or-remaining' },
-    { label: 'Free tier?', value: status.is_free_tier ? 'Yes' : 'No', testid: 'or-free-tier' },
+    { label: t('admin.or.usage'), value: fmtUsd(status.usage), testid: 'or-usage' },
+    { label: t('admin.or.limit'), value: status.limit === null || status.limit === undefined ? t('admin.or.unlimited') : fmtUsd(status.limit), testid: 'or-limit' },
+    { label: t('admin.or.remaining'), value: status.limit_remaining === null || status.limit_remaining === undefined ? '—' : fmtUsd(status.limit_remaining), testid: 'or-remaining' },
+    { label: t('admin.or.freeTier'), value: status.is_free_tier ? t('admin.or.yes') : t('admin.or.no'), testid: 'or-free-tier' },
   ] : [];
 
   const costCards = cost ? [
-    { label: 'Total cost (this app)', value: fmtUsd(cost.total_cost), testid: 'cost-total' },
-    { label: 'Last council run', value: cost.last_run ? fmtUsd(cost.last_run.total_cost) : '—', testid: 'cost-last-run' },
-    { label: 'Council runs recorded', value: cost.total_runs ?? 0, testid: 'cost-runs' },
+    { label: t('admin.or.totalCost'), value: fmtUsd(cost.total_cost), testid: 'cost-total' },
+    { label: t('admin.or.lastRun'), value: cost.last_run ? fmtUsd(cost.last_run.total_cost) : '—', testid: 'cost-last-run' },
+    { label: t('admin.or.runs'), value: cost.total_runs ?? 0, testid: 'cost-runs' },
   ] : [];
 
   return (
     <div className="tab-content" data-testid="admin-openrouter-tab">
       <div className="or-header">
-        <h2>OpenRouter — Clé & coûts</h2>
+        <h2>{t('admin.or.heading')}</h2>
         <button className="mini-btn" onClick={onRefresh} disabled={refreshing} data-testid="or-refresh-button">
-          {refreshing ? 'Refreshing…' : '↻ Refresh'}
+          {refreshing ? t('admin.or.refreshing') : t('admin.or.refresh')}
         </button>
       </div>
 
-      <h3>Statut de la clé configurée</h3>
+      <h3>{t('admin.or.keyStatus')}</h3>
       {notConfigured && (
         <div className="or-empty" data-testid="or-not-configured">
-          Aucune clé OpenRouter configurée. Ajoutez-en une dans <strong>Settings → API Settings</strong>.
+          {t('admin.or.notConfigured')}
         </div>
       )}
       {invalid && (
         <div className="or-empty or-invalid" data-testid="or-invalid">
-          La clé configurée est invalide ou révoquée ({status.error || 'invalid_key'}). Mettez-la à jour dans Settings.
+          {t('admin.or.invalid', { error: status.error || 'invalid_key' })}
         </div>
       )}
       {valid && (
         <>
           <div className="stats-grid">
             {keyCards.map((c) => (
-              <div className="stat-card" key={c.label} data-testid={`stat-${c.testid}`}>
+              <div className="stat-card" key={c.testid} data-testid={`stat-${c.testid}`}>
                 <div className="stat-value">{c.value}</div>
                 <div className="stat-label">{c.label}</div>
               </div>
@@ -343,26 +345,26 @@ function OpenRouterTab({ showToast }) {
                   style={{ width: `${Math.min(100, status.usage_percent)}%` }}
                 />
               </div>
-              <span className="or-usage-bar-label">{status.usage_percent}% utilisé</span>
+              <span className="or-usage-bar-label">{t('admin.or.used', { percent: status.usage_percent })}</span>
             </div>
           )}
         </>
       )}
 
-      <h3 style={{ marginTop: 28 }}>Coûts de l'application (usage accounting réel)</h3>
+      <h3 style={{ marginTop: 28 }}>{t('admin.or.appCosts')}</h3>
       <div className="stats-grid">
         {costCards.map((c) => (
-          <div className="stat-card" key={c.label} data-testid={`stat-${c.testid}`}>
+          <div className="stat-card" key={c.testid} data-testid={`stat-${c.testid}`}>
             <div className="stat-value">{c.value}</div>
             <div className="stat-label">{c.label}</div>
           </div>
         ))}
       </div>
 
-      <h3 style={{ marginTop: 24 }}>Coût par modèle</h3>
+      <h3 style={{ marginTop: 24 }}>{t('admin.or.perModel')}</h3>
       {cost && cost.per_model && cost.per_model.length > 0 ? (
         <table className="admin-table" data-testid="or-cost-per-model">
-          <thead><tr><th>Modèle</th><th>Coût total</th><th>Tokens</th></tr></thead>
+          <thead><tr><th>{t('admin.or.colModel')}</th><th>{t('admin.or.colCost')}</th><th>{t('admin.or.colTokens')}</th></tr></thead>
           <tbody>
             {cost.per_model.map((m) => (
               <tr key={m.model} data-testid={`or-model-row-${m.model}`}>
@@ -375,7 +377,7 @@ function OpenRouterTab({ showToast }) {
         </table>
       ) : (
         <div className="or-empty" data-testid="or-no-cost">
-          Aucun coût enregistré pour l'instant. Les coûts apparaissent après chaque débat du council.
+          {t('admin.or.noCost')}
         </div>
       )}
     </div>
@@ -384,27 +386,28 @@ function OpenRouterTab({ showToast }) {
 
 /* ===================== Shell ===================== */
 export default function Admin() {
+  const { t } = useTranslation();
   const [tab, setTab] = useState('models');
   const [toast, showToast] = useToast();
   const tabs = [
-    { id: 'models', label: 'Modèles' },
-    { id: 'users', label: 'Utilisateurs' },
-    { id: 'pricing', label: 'Tarification' },
-    { id: 'openrouter', label: 'OpenRouter' },
-    { id: 'stats', label: 'Statistiques' },
+    { id: 'models', label: t('admin.tabs.models') },
+    { id: 'users', label: t('admin.tabs.users') },
+    { id: 'pricing', label: t('admin.tabs.pricing') },
+    { id: 'openrouter', label: t('admin.tabs.openrouter') },
+    { id: 'stats', label: t('admin.tabs.stats') },
   ];
   return (
     <div className="page-shell">
       <AppHeader />
       <main className="admin-main" data-testid="admin-page">
         <div className="admin-tabs">
-          {tabs.map((t) => (
+          {tabs.map((tb) => (
             <button
-              key={t.id}
-              className={`admin-tab ${tab === t.id ? 'active' : ''}`}
-              onClick={() => setTab(t.id)}
-              data-testid={`admin-tab-${t.id}`}
-            >{t.label}</button>
+              key={tb.id}
+              className={`admin-tab ${tab === tb.id ? 'active' : ''}`}
+              onClick={() => setTab(tb.id)}
+              data-testid={`admin-tab-${tb.id}`}
+            >{tb.label}</button>
           ))}
         </div>
         {tab === 'models' && <ModelsTab showToast={showToast} />}

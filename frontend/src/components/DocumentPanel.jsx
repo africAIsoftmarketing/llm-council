@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import './DocumentPanel.css';
 
 export default function DocumentPanel({
@@ -12,6 +13,7 @@ export default function DocumentPanel({
   const [expandedDoc, setExpandedDoc] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const fileInputRef = useRef(null);
+  const { t } = useTranslation();
 
   const handleFileSelect = async (e) => {
     const files = Array.from(e.target.files);
@@ -97,7 +99,7 @@ export default function DocumentPanel({
   return (
     <div className="document-panel" data-testid="document-panel">
       <div className="panel-header">
-        <h3>Documents</h3>
+        <h3>{t('documents.title')}</h3>
         <button className="close-btn" onClick={onClose}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -118,7 +120,7 @@ export default function DocumentPanel({
             {isUploading ? (
               <>
                 <div className="spinner"></div>
-                <span>Uploading...</span>
+                <span>{t('documents.uploading')}</span>
               </>
             ) : (
               <>
@@ -127,8 +129,8 @@ export default function DocumentPanel({
                   <polyline points="17 8 12 3 7 8"></polyline>
                   <line x1="12" y1="3" x2="12" y2="15"></line>
                 </svg>
-                <span>Click to upload documents</span>
-                <span className="upload-hint">PDF, DOCX, TXT, PPTX, Images</span>
+                <span>{t('documents.clickUpload')}</span>
+                <span className="upload-hint">{t('documents.uploadHint')}</span>
               </>
             )}
           </button>
@@ -146,8 +148,8 @@ export default function DocumentPanel({
         <div className="documents-list">
           {documents.length === 0 ? (
             <div className="no-documents">
-              <p>No documents uploaded yet</p>
-              <p className="hint">Upload documents to include them in your LLM Council queries</p>
+              <p>{t('documents.noDocs')}</p>
+              <p className="hint">{t('documents.noDocsHint')}</p>
             </div>
           ) : (
             documents.map((doc) => (
@@ -165,17 +167,17 @@ export default function DocumentPanel({
                   <div className="doc-meta">
                     <span>{formatFileSize(doc.size)}</span>
                     <span>•</span>
-                    <span>{doc.text_length.toLocaleString()} chars</span>
+                    <span>{t('documents.chars', { count: doc.text_length })}</span>
                     <span>•</span>
-                    <span>{doc.chunk_count} chunk{doc.chunk_count !== 1 ? 's' : ''}</span>
+                    <span>{t('documents.chunks', { count: doc.chunk_count })}</span>
                     {doc.is_vision_image && (
                       <>
                         <span>•</span>
-                        <span className="vision-badge" title="Image will be analyzed by vision-capable AI models">
+                        <span className="vision-badge" title={t('documents.visionTitle')}>
                           <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" style={{marginRight: '4px', verticalAlign: 'middle'}}>
                             <path d="M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9M12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17M12,4.5C7,4.5 2.73,7.61 1,12C2.73,16.39 7,19.5 12,19.5C17,19.5 21.27,16.39 23,12C21.27,7.61 17,4.5 12,4.5Z" />
                           </svg>
-                          Vision
+                          {t('documents.vision')}
                         </span>
                       </>
                     )}
@@ -183,7 +185,7 @@ export default function DocumentPanel({
                 </div>
 
                 <div className="doc-actions">
-                  <label className="toggle-switch" title={doc.is_active ? 'Included in context' : 'Not included'}>
+                  <label className="toggle-switch" title={doc.is_active ? t('documents.included') : t('documents.notIncluded')}>
                     <input
                       type="checkbox"
                       checked={doc.is_active}
@@ -195,7 +197,7 @@ export default function DocumentPanel({
                   <button
                     className="expand-btn"
                     onClick={() => setExpandedDoc(expandedDoc === doc.id ? null : doc.id)}
-                    title="Preview content"
+                    title={t('documents.previewTitle')}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       {expandedDoc === doc.id ? (
@@ -209,7 +211,7 @@ export default function DocumentPanel({
                   <button
                     className={`delete-btn ${deleteConfirm === doc.id ? 'confirm' : ''}`}
                     onClick={() => handleDelete(doc.id)}
-                    title={deleteConfirm === doc.id ? 'Click again to confirm' : 'Delete document'}
+                    title={deleteConfirm === doc.id ? t('documents.deleteConfirmTitle') : t('documents.deleteTitle')}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polyline points="3 6 5 6 21 6"></polyline>
@@ -220,9 +222,9 @@ export default function DocumentPanel({
 
                 {expandedDoc === doc.id && (
                   <div className="doc-preview">
-                    <div className="preview-label">Content Preview:</div>
+                    <div className="preview-label">{t('documents.contentPreview')}</div>
                     <div className="preview-content">
-                      {doc.preview || 'No preview available'}
+                      {doc.preview || t('documents.noPreview')}
                     </div>
                   </div>
                 )}
@@ -234,7 +236,7 @@ export default function DocumentPanel({
 
       <div className="panel-footer">
         <div className="footer-stats">
-          <span>{documents.filter(d => d.is_active).length} of {documents.length} active</span>
+          <span>{t('documents.activeOf', { active: documents.filter(d => d.is_active).length, total: documents.length })}</span>
         </div>
       </div>
     </div>

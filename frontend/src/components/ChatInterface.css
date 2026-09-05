@@ -406,3 +406,26 @@
     margin-top: 8px;
   }
 }
+
+/* Welcome screen with brand logo + How it works */
+.welcome-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 48px 24px 60px;
+  overflow-y: auto;
+  height: 100%;
+  box-sizing: border-box;
+}
+.welcome-logo {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  border-radius: 20px;
+  background: #fff;
+  padding: 8px;
+  box-shadow: 0 8px 30px rgba(31, 45, 31, 0.12);
+  margin-bottom: 18px;
+}
+.welcome-state h2 { margin: 0 0 8px; }

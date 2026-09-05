@@ -19,6 +19,12 @@
   user-select: none;
 }
 .app-header-logo { font-size: 22px; color: #38bdf8; }
+.app-header-logo-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: 10px;
+  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.35); overflow: hidden;
+}
+.app-header-logo-img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .app-header-title { font-weight: 700; letter-spacing: 0.3px; font-size: 16px; }
 
 .app-header-nav { display: flex; gap: 6px; }

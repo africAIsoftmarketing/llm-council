@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Sidebar from './components/Sidebar';
 import ChatInterface from './components/ChatInterface';
 import Settings from './components/Settings';
@@ -17,6 +18,7 @@ const COUNCIL_CACHE_KEY = 'llm_council_last_selection';
 function App() {
   const { user, refresh } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const isAdmin = user?.role === 'admin';
   const [termsAccepted, setTermsAccepted] = useState(() => hasAcceptedTerms());
   const [creditsModal, setCreditsModal] = useState(null);
@@ -136,7 +138,7 @@ function App() {
       setCurrentView('chat');
     } catch (error) {
       console.error('Failed to create conversation:', error);
-      showToast('Failed to create conversation', 'error');
+      showToast(t('toast.createConversationFailed'), 'error');
     }
   };
 
@@ -154,10 +156,10 @@ function App() {
         setCurrentConversationId(null);
         setCurrentConversation(null);
       }
-      showToast('Conversation deleted', 'success');
+      showToast(t('toast.conversationDeleted'), 'success');
     } catch (error) {
       console.error('Failed to delete conversation:', error);
-      showToast('Failed to delete conversation', 'error');
+      showToast(t('toast.deleteConversationFailed'), 'error');
     }
   };
 
@@ -290,7 +292,7 @@ function App() {
               if (i >= 0) steps[i] = 'error';
               return { ...prev, steps, errorStep: i };
             });
-            showToast(event.message || 'An error occurred', 'error');
+            showToast(event.message || t('toast.genericError'), 'error');
             if (event.refunded) refresh();
             setIsLoading(false);
             break;
@@ -313,7 +315,7 @@ function App() {
         const d = error.detail || {};
         setCreditsModal({ required: d.required, balance: d.balance });
       } else {
-        showToast(error.message || 'Failed to send message', 'error');
+        showToast(error.message || t('toast.sendFailed'), 'error');
       }
     }
   };
@@ -331,10 +333,10 @@ function App() {
     try {
       const result = await api.uploadDocument(file);
       await loadDocuments();
-      showToast(`Document "${file.name}" uploaded successfully`, 'success');
+      showToast(t('toast.uploadSuccess', { name: file.name }), 'success');
       return result;
     } catch (error) {
-      showToast(error.message || 'Failed to upload document', 'error');
+      showToast(error.message || t('toast.uploadFailed'), 'error');
       throw error;
     }
   };
@@ -343,9 +345,9 @@ function App() {
     try {
       await api.deleteDocument(docId);
       await loadDocuments();
-      showToast('Document deleted', 'success');
+      showToast(t('toast.documentDeleted'), 'success');
     } catch (error) {
-      showToast('Failed to delete document', 'error');
+      showToast(t('toast.deleteDocumentFailed'), 'error');
     }
   };
 
@@ -354,7 +356,7 @@ function App() {
       await api.toggleDocument(docId, isActive);
       await loadDocuments();
     } catch (error) {
-      showToast('Failed to toggle document', 'error');
+      showToast(t('toast.toggleDocumentFailed'), 'error');
     }
   };
 
@@ -419,14 +421,13 @@ function App() {
       {creditsModal && (
         <div className="credits-modal-overlay" data-testid="insufficient-credits-modal">
           <div className="credits-modal">
-            <h3>Crédits insuffisants</h3>
+            <h3>{t('creditsModal.title')}</h3>
             <p>
-              Cette requête nécessite <strong>{creditsModal.required}</strong> crédits, mais votre
-              solde est de <strong>{creditsModal.balance}</strong>.
+              <span dangerouslySetInnerHTML={{ __html: t('creditsModal.body', { required: `<strong>${creditsModal.required}</strong>`, balance: `<strong>${creditsModal.balance}</strong>` }) }} />
             </p>
             <div className="credits-modal-actions">
-              <button className="cm-secondary" onClick={() => setCreditsModal(null)} data-testid="credits-modal-cancel">Annuler</button>
-              <button className="cm-primary" onClick={() => navigate('/credits')} data-testid="credits-modal-buy">Acheter des crédits</button>
+              <button className="cm-secondary" onClick={() => setCreditsModal(null)} data-testid="credits-modal-cancel">{t('creditsModal.cancel')}</button>
+              <button className="cm-primary" onClick={() => navigate('/credits')} data-testid="credits-modal-buy">{t('creditsModal.buy')}</button>
             </div>
           </div>
         </div>

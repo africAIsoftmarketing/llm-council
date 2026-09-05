@@ -1,12 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { authApi } from '../api';
 import { useAuth } from '../auth/AuthContext';
+import LanguageSwitcher from '../components/LanguageSwitcher';
+import AppFooter from '../components/AppFooter';
+import productLogo from '../assets/logo-product.jpg';
 import './Login.css';
 
 export default function Login() {
   const { refresh } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [devEmail, setDevEmail] = useState('');
   const [devOpen, setDevOpen] = useState(false);
   const [error, setError] = useState('');
@@ -26,7 +31,7 @@ export default function Login() {
       await refresh();
       navigate('/');
     } catch (err) {
-      setError(err.status === 404 ? "Le mode développeur est désactivé." : (err.message || 'Échec de la connexion'));
+      setError(err.status === 404 ? t('login.devDisabled') : (err.message || t('login.failed')));
     } finally {
       setBusy(false);
     }
@@ -34,14 +39,15 @@ export default function Login() {
 
   return (
     <div className="login-page" data-testid="login-page">
+      <div className="login-lang"><LanguageSwitcher /></div>
       <div className="login-card">
         <div className="login-brand">
-          <span className="login-logo">⚖︎</span>
-          <h1>LLM Council</h1>
+          <span className="login-logo-chip">
+            <img src={productLogo} alt={t('header.logoAlt')} className="login-logo-img" />
+          </span>
+          <h1>{t('brand')}</h1>
         </div>
-        <p className="login-tagline">
-          Un conseil de plusieurs IA délibère, se classe et synthétise la meilleure réponse.
-        </p>
+        <p className="login-tagline">{t('tagline')}</p>
 
         <button className="google-btn" onClick={handleGoogle} data-testid="google-login-button">
           <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
@@ -50,31 +56,32 @@ export default function Login() {
             <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
             <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
           </svg>
-          Se connecter avec Google
+          {t('login.google')}
         </button>
 
         <button className="dev-toggle" onClick={() => setDevOpen((v) => !v)} data-testid="dev-toggle">
-          Accès développeur (aperçu)
+          {t('login.devToggle')}
         </button>
 
         {devOpen && (
           <form className="dev-form" onSubmit={handleDevLogin} data-testid="dev-login-form">
             <input
               type="email"
-              placeholder="votre@email.com"
+              placeholder={t('login.devPlaceholder')}
               value={devEmail}
               onChange={(e) => setDevEmail(e.target.value)}
               required
               data-testid="dev-email-input"
             />
             <button type="submit" disabled={busy} data-testid="dev-login-button">
-              {busy ? 'Connexion…' : 'Entrer'}
+              {busy ? t('login.connecting') : t('login.enter')}
             </button>
           </form>
         )}
 
         {error && <div className="login-error" data-testid="login-error">{error}</div>}
       </div>
+      <AppFooter />
     </div>
   );
 }

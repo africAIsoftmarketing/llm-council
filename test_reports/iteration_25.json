@@ -1,0 +1,40 @@
+{
+  "summary": "Frontend-only verification of the AI Delphi Council rebrand, dual logos, full EN/FR i18n, Terms consent modal, Legal page, How it works section, and Settings/Admin localization. All 10 requested checks PASS. No 'LLM Council' string was observed anywhere in the visible UI (EN or FR). No non-401 console errors. Terms modal appears on first authenticated load, supports EN/FR live toggle, accept button is properly disabled until checkbox is checked, persists in localStorage (llm_council_terms_accepted_v1=true) and does not reappear on reload. Language choice persists in localStorage (app_lang) across reload. Dev login (bob@example.com and somecedric@gmail.com admin) works.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/login", "issues": ["Login page has NO footer (AfricAIsoft lockup / Legal / Privacy links absent) — the requirement says the footer/AfricAIsoft branding should be visible on the login page too. Footer is only rendered after authentication. Minor/design nit — not a blocker but inconsistent with the requested rebrand coverage."]}
+    ]
+  },
+  "detailed_verification": {
+    "rebrand": "PASS — <title>=AI Delphi Council; header, sidebar 'AI Delphi Council', login card, welcome heading (EN 'Welcome to AI Delphi Council', FR 'Bienvenue sur AI Delphi Council'), footer copyright, terms modal — all show the new brand. No 'LLM Council' visible text found on any tested route.",
+    "logos": "PASS — Product logo renders in app-header (dark), welcome-screen (white chip), login card (white chip), and Terms modal header. AfricAIsoft footer logo renders in the footer 'by AfricAIsoft' lockup (data-testid=footer-africaisoft). No broken/distorted images observed.",
+    "footer": "PASS on authenticated routes (© 2026 AI Delphi Council · by AfricAIsoft · llmcouncilsupport@africaisoft.africa · Legal notice · Privacy, with correct data-testids). MISSING on /login page (see design_issues).",
+    "language_switcher": "PASS — data-testid=language-switcher with lang-en/lang-fr present in header, login page, terms modal, and legal page. Live switches without reload; localStorage app_lang persists across reload.",
+    "welcome_and_how_it_works": "PASS — welcome-screen present; how-it-works section with hiw-card-input/enrich/process/output all rendered; '+ New conversation' / '+ Nouvelle conversation' button remains clickable (not blocked).",
+    "terms_modal": "PASS — appears on first authenticated load (not on /login itself, which is acceptable but see design_issues). Full Terms of Use + Data Protection sections in EN, full FR translation verified ('Conditions générales', 'Acceptation des conditions', 'protection des données'…). terms-accept-btn is disabled=true until terms-accept-checkbox checked, then enabled. Accepting sets llm_council_terms_accepted_v1=true and modal does not reappear on reload.",
+    "legal_page": "PASS — /legal renders data-testid=legal-page with Legal notice, Data protection, and full Terms of Use sections; back button and language switcher present; legal-contact-email = llmcouncilsupport@africaisoft.africa. Toggles cleanly EN↔FR.",
+    "settings_non_admin": "PASS — data-testid=settings-page with tab-models / tab-chairman / tab-advanced visible; tab-api correctly NOT present for non-admin. All labels translate EN↔FR ('Paramètres', 'Modèles du conseil', 'Président', 'Avancé', 'Enregistrer le conseil'). No English leftovers detected in FR.",
+    "admin_page": "PASS — admin-tab-models/users/pricing/openrouter/stats all present for somecedric@gmail.com. OpenRouter tab content fully localized in FR ('OpenRouter — Clé et coûts', 'Actualiser', 'Statut de la clé configurée', 'Aucune clé OpenRouter configurée…', 'Coûts de l'application (comptabilité réelle)', 'Coût total', 'Dernière exécution du conseil', 'Exécutions enregistrées', 'Coût par modèle'). No English leftovers detected.",
+    "regression": "PASS — dev login works, conversations sidebar loads (empty state), routes /, /credits, /legal, /settings (via app), /admin all render without blank screens. Only 401s on unauth API polls at initial load (expected before token attaches); zero non-401 console errors during navigation."
+  },
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL (design nit): Consider rendering the AppFooter (or at least AfricAIsoft lockup + Legal/Privacy links) on the /login page too, so branding is consistent for logged-out users. Currently footer is only present on authenticated routes.",
+    "OPTIONAL: The Terms modal currently gates the authenticated app rather than the /login page. If the intent is 'first visit → block everything until accepted', consider showing the modal on /login too. Current behavior is acceptable and consistent (login is a small unbranded card)."
+  ],
+  "critical_code_review_comments": [
+    "i18n coverage is thorough — no untranslated strings detected in FR across Settings, Admin/OpenRouter, Legal, Terms, Welcome, Footer, Sidebar.",
+    "All required data-testid selectors are present and stable. Good for regression.",
+    "Consider adding data-testid=terms-modal-lang-switcher and legal-page-lang-switcher wrappers (currently the switcher inside those pages reuses the generic language-switcher testid, which works via scoping but is slightly ambiguous)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only run)", "frontend": "100% of requested checks pass; 1 minor design nit"},
+  "test_credentials": "Dev login via /login → data-testid=dev-toggle → dev-email-input → dev-login-button. Non-admin: bob@example.com. Admin: somecedric@gmail.com.",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Frontend rebrand + i18n + terms + logos verified end-to-end on 2026-09-05. Postgres was healthy (/api/health=200), no restart needed. Terms modal only appears on authenticated routes; clear localStorage keys llm_council_terms_accepted_v1 and app_lang to retest. Login page has no footer — noted as design nit, not a bug."
+}

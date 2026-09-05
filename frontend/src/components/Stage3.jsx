@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import MarkdownView from './MarkdownView';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -66,6 +67,7 @@ export default function Stage3({
   const [membersOpen, setMembersOpen] = useState(false);
   const [rankingOpen, setRankingOpen] = useState(false);
   const exportRef = useRef(null);
+  const { t } = useTranslation();
 
   if (!finalResponse) return null;
 
@@ -81,14 +83,14 @@ export default function Stage3({
   // Build the full plain-text report (Chairman + members + aggregate ranking).
   const buildReportText = () => {
     const parts = [];
-    parts.push('LLM COUNCIL — RAPPORT FINAL');
-    parts.push(`Chairman : ${chairman}`);
+    parts.push(t('stage3.reportTitle'));
+    parts.push(`${t('stage3.chairman', { model: chairman })}`);
     parts.push('');
-    parts.push('=== SYNTHÈSE FINALE (CHAIRMAN) ===');
+    parts.push(`=== ${t('stage3.finalSynthesis')} ===`);
     parts.push(markdownToPlain(finalResponse.response));
     if (members.length) {
       parts.push('');
-      parts.push('=== MEMBRES DU COUNCIL ===');
+      parts.push(`=== ${t('stage3.councilMembers')} ===`);
       members.forEach((m, i) => {
         parts.push('');
         parts.push(`— ${shortModel(m.model)} (${i + 1}/${members.length}) —`);
@@ -97,10 +99,10 @@ export default function Stage3({
     }
     if (ranking.length) {
       parts.push('');
-      parts.push('=== CLASSEMENT AGRÉGÉ (score plus bas = meilleur) ===');
+      parts.push(`=== ${t('stage3.aggregateRanking')} ===`);
       ranking.forEach((agg, i) => {
         parts.push(
-          `#${i + 1}  ${shortModel(agg.model)}  — moyenne ${Number(agg.average_rank).toFixed(2)} (${agg.rankings_count} votes)`
+          `#${i + 1}  ${shortModel(agg.model)}  — ${Number(agg.average_rank).toFixed(2)} (${agg.rankings_count})`
         );
       });
     }
@@ -127,7 +129,7 @@ export default function Stage3({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      flashError('Copie impossible dans ce navigateur.');
+      flashError(t('stage3.copyError'));
     }
   };
 
@@ -143,7 +145,7 @@ export default function Stage3({
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {
-      flashError('Échec de l’export texte.');
+      flashError(t('stage3.txtError'));
     }
   };
 
@@ -179,7 +181,7 @@ export default function Stage3({
       }
       pdf.save(`council-report-${timestamp()}.pdf`);
     } catch {
-      flashError('Échec de la génération du PDF.');
+      flashError(t('stage3.pdfError'));
     } finally {
       setPdfBusy(false);
     }
@@ -189,22 +191,22 @@ export default function Stage3({
 
   return (
     <div className="stage stage3">
-      <h3 className="stage-title">Stage 3: Final Council Answer</h3>
+      <h3 className="stage-title">{t('stage3.title')}</h3>
       <div className="final-response">
         <div className="final-response-header">
-          <div className="chairman-label">Chairman: {chairman}</div>
+          <div className="chairman-label">{t('stage3.chairman', { model: chairman })}</div>
           <div className="report-actions" data-testid="stage3-actions">
             <button type="button" className="report-action-btn" onClick={handleCopy}
-              data-testid="stage3-copy-btn" title="Copier le rapport">
-              {copied ? 'Copié ✓' : 'Copier'}
+              data-testid="stage3-copy-btn" title={t('stage3.copyTitle')}>
+              {copied ? t('stage3.copied') : t('stage3.copy')}
             </button>
             <button type="button" className="report-action-btn" onClick={handleExportText}
-              data-testid="stage3-export-txt-btn" title="Exporter en texte">
-              Exporter .txt
+              data-testid="stage3-export-txt-btn" title={t('stage3.exportTxtTitle')}>
+              {t('stage3.exportTxt')}
             </button>
             <button type="button" className="report-action-btn" onClick={handleExportPdf}
-              disabled={pdfBusy} data-testid="stage3-export-pdf-btn" title="Exporter en PDF">
-              {pdfBusy ? 'PDF…' : 'Exporter .pdf'}
+              disabled={pdfBusy} data-testid="stage3-export-pdf-btn" title={t('stage3.exportPdfTitle')}>
+              {pdfBusy ? t('stage3.pdfBusy') : t('stage3.exportPdf')}
             </button>
           </div>
         </div>
@@ -229,7 +231,7 @@ export default function Stage3({
               aria-expanded={membersOpen}
             >
               <span className="chevron">▶</span>
-              Membres du council ({members.length})
+              {t('stage3.members', { count: members.length })}
             </button>
             {membersOpen && (
               <div className="report-members" data-testid="stage3-members">
@@ -255,13 +257,13 @@ export default function Stage3({
               aria-expanded={rankingOpen}
             >
               <span className="chevron">▶</span>
-              Classement agrégé ({ranking.length})
+              {t('stage3.aggRanking', { count: ranking.length })}
             </button>
             {rankingOpen && (
               <div className="report-ranking" data-testid="stage3-ranking">
                 <table className="ranking-table">
                   <thead>
-                    <tr><th>#</th><th>Modèle</th><th>Score moyen</th><th>Votes</th></tr>
+                    <tr><th>#</th><th>{t('stage3.colModel')}</th><th>{t('stage3.colAvg')}</th><th>{t('stage3.colVotes')}</th></tr>
                   </thead>
                   <tbody>
                     {ranking.map((agg, i) => (
@@ -274,7 +276,7 @@ export default function Stage3({
                     ))}
                   </tbody>
                 </table>
-                <p className="ranking-note">Score plus bas = mieux classé par les pairs.</p>
+                <p className="ranking-note">{t('stage3.rankingNote')}</p>
               </div>
             )}
           </div>
@@ -284,15 +286,15 @@ export default function Stage3({
       {/* Offscreen, fully-expanded surface used to render the WYSIWYG PDF. */}
       <div className="stage3-export-surface" ref={exportRef} aria-hidden="true">
         <div className="export-doc">
-          <h1 className="export-title">LLM Council — Rapport final</h1>
-          <div className="export-chairman">Chairman : {chairman}</div>
+          <h1 className="export-title">{t('stage3.reportTitle')}</h1>
+          <div className="export-chairman">{t('stage3.chairman', { model: chairman })}</div>
 
-          <h2 className="export-h">Synthèse finale (Chairman)</h2>
+          <h2 className="export-h">{t('stage3.finalSynthesis')}</h2>
           <div className="markdown-content">{md(finalResponse.response)}</div>
 
           {members.length > 0 && (
             <>
-              <h2 className="export-h">Membres du council</h2>
+              <h2 className="export-h">{t('stage3.councilMembers')}</h2>
               {members.map((m, i) => (
                 <div key={i} className="export-member">
                   <h3 className="export-h3">{shortModel(m.model)}</h3>
@@ -304,10 +306,10 @@ export default function Stage3({
 
           {ranking.length > 0 && (
             <>
-              <h2 className="export-h">Classement agrégé</h2>
+              <h2 className="export-h">{t('stage3.aggregateRanking')}</h2>
               <table className="ranking-table">
                 <thead>
-                  <tr><th>#</th><th>Modèle</th><th>Score moyen</th><th>Votes</th></tr>
+                  <tr><th>#</th><th>{t('stage3.colModel')}</th><th>{t('stage3.colAvg')}</th><th>{t('stage3.colVotes')}</th></tr>
                 </thead>
                 <tbody>
                   {ranking.map((agg, i) => (
@@ -320,7 +322,7 @@ export default function Stage3({
                   ))}
                 </tbody>
               </table>
-              <p className="ranking-note">Score plus bas = mieux classé par les pairs.</p>
+              <p className="ranking-note">{t('stage3.rankingNote')}</p>
             </>
           )}
         </div>

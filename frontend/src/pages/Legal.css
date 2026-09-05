@@ -40,3 +40,7 @@
 .legal-container a { color: #2d8a2d; font-weight: 600; }
 .legal-container ul { padding-left: 1.3em; }
 .legal-container li { margin: 4px 0; }
+
+.legal-topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.legal-subsection { margin-bottom: 14px; }
+.legal-subsection h3 { font-size: 15px; margin: 0 0 4px; }

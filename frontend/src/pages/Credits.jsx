@@ -1,17 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
+import { useTranslation } from 'react-i18next';
 import AppHeader from '../components/AppHeader';
 import { paymentsApi } from '../api';
 import { useAuth } from '../auth/AuthContext';
 import './Credits.css';
 
 function TxKindBadge({ kind }) {
-  const labels = { purchase: 'Achat', usage: 'Utilisation', admin_grant: 'Octroi admin', refund: 'Remboursement' };
-  return <span className={`tx-badge tx-${kind}`}>{labels[kind] || kind}</span>;
+  const { t } = useTranslation();
+  return <span className={`tx-badge tx-${kind}`}>{t(`credits.kind.${kind}`, kind)}</span>;
 }
 
 export default function Credits() {
   const { refresh } = useAuth();
+  const { t, i18n } = useTranslation();
   const [config, setConfig] = useState(null);
   const [packs, setPacks] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -32,11 +34,11 @@ export default function Credits() {
       setPacks(p.packs || []);
       setTransactions(tx.transactions || []);
     } catch {
-      showToast('Échec du chargement des packs', 'error');
+      showToast(t('credits.loadFailed'), 'error');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -44,20 +46,22 @@ export default function Credits() {
     ? { clientId: config.client_id, currency: config.currency || 'CAD', intent: 'capture' }
     : null;
 
+  const locale = (i18n.resolvedLanguage || 'en').startsWith('fr') ? 'fr-CA' : 'en-CA';
+
   return (
     <div className="page-shell">
       <AppHeader />
       <main className="credits-main" data-testid="credits-page">
         <div className="credits-header">
-          <h1>Acheter des crédits</h1>
-          <p>Chaque requête au council consomme des crédits. Rechargez votre compte ci-dessous.</p>
+          <h1>{t('credits.title')}</h1>
+          <p>{t('credits.subtitle')}</p>
         </div>
 
         {loading ? (
-          <div className="credits-loading">Chargement…</div>
+          <div className="credits-loading">{t('credits.loading')}</div>
         ) : !paypalOptions ? (
           <div className="credits-warning" data-testid="paypal-not-configured">
-            PayPal n'est pas configuré (PAYPAL_CLIENT_ID manquant).
+            {t('credits.paypalNotConfigured')}
           </div>
         ) : (
           <PayPalScriptProvider options={paypalOptions}>
@@ -65,7 +69,7 @@ export default function Credits() {
               {packs.map((pack) => (
                 <div className="pack-card" key={pack.id} data-testid={`pack-card-${pack.id}`}>
                   <div className="pack-name">{pack.name}</div>
-                  <div className="pack-credits"><span>{pack.credits}</span> crédits</div>
+                  <div className="pack-credits"><span>{pack.credits}</span> {t('credits.creditsWord')}</div>
                   <div className="pack-price">{pack.price_cad} {config.currency}</div>
                   <div className="pack-paypal">
                     <PayPalButtons
@@ -79,12 +83,12 @@ export default function Credits() {
                           const res = await paymentsApi.captureOrder(data.orderID);
                           await refresh();
                           await loadAll();
-                          showToast(`Paiement confirmé — solde: ${res.credits} crédits`, 'success');
+                          showToast(t('credits.paymentConfirmed', { credits: res.credits }), 'success');
                         } catch (err) {
-                          showToast(err.message || 'Échec de la capture du paiement', 'error');
+                          showToast(err.message || t('credits.captureFailed'), 'error');
                         }
                       }}
-                      onError={() => showToast('Erreur PayPal', 'error')}
+                      onError={() => showToast(t('credits.paypalError'), 'error')}
                     />
                   </div>
                 </div>
@@ -94,21 +98,21 @@ export default function Credits() {
         )}
 
         <div className="tx-section">
-          <h2>Historique des transactions</h2>
+          <h2>{t('credits.txHistory')}</h2>
           {transactions.length === 0 ? (
-            <div className="tx-empty" data-testid="tx-empty">Aucune transaction pour le moment.</div>
+            <div className="tx-empty" data-testid="tx-empty">{t('credits.txEmpty')}</div>
           ) : (
             <table className="tx-table" data-testid="transactions-table">
               <thead>
-                <tr><th>Date</th><th>Type</th><th>Montant</th><th>Solde</th></tr>
+                <tr><th>{t('credits.colDate')}</th><th>{t('credits.colType')}</th><th>{t('credits.colAmount')}</th><th>{t('credits.colBalance')}</th></tr>
               </thead>
               <tbody>
-                {transactions.map((t) => (
-                  <tr key={t.id}>
-                    <td>{new Date(t.created_at).toLocaleString('fr-CA')}</td>
-                    <td><TxKindBadge kind={t.kind} /></td>
-                    <td className={t.amount >= 0 ? 'amt-pos' : 'amt-neg'}>{t.amount >= 0 ? '+' : ''}{t.amount}</td>
-                    <td>{t.balance_after}</td>
+                {transactions.map((tx) => (
+                  <tr key={tx.id}>
+                    <td>{new Date(tx.created_at).toLocaleString(locale)}</td>
+                    <td><TxKindBadge kind={tx.kind} /></td>
+                    <td className={tx.amount >= 0 ? 'amt-pos' : 'amt-neg'}>{tx.amount >= 0 ? '+' : ''}{tx.amount}</td>
+                    <td>{tx.balance_after}</td>
                   </tr>
                 ))}
               </tbody>

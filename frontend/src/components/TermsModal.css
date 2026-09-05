@@ -87,3 +87,13 @@
 }
 .terms-accept-btn:hover:not(:disabled) { background: #247024; }
 .terms-accept-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Brand logo chip + header language switcher */
+.terms-logo-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 10px; background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12); overflow: hidden; flex-shrink: 0;
+}
+.terms-logo-img { width: 100%; height: 100%; object-fit: contain; }
+.terms-header { display: flex; align-items: center; gap: 12px; }
+.terms-header-lang { margin-left: auto; }

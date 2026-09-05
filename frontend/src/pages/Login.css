@@ -80,3 +80,16 @@
   border-radius: 8px;
   font-size: 13px;
 }
+
+.login-page { position: relative; }
+.login-lang { position: absolute; top: 18px; right: 18px; }
+.login-logo-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 64px; height: 64px; border-radius: 16px; background: #fff;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.14); overflow: hidden; margin-bottom: 6px;
+}
+.login-logo-img { width: 100%; height: 100%; object-fit: contain; padding: 4px; box-sizing: border-box; }
+
+.login-page { display: flex; flex-direction: column; }
+.login-page .login-card { margin: auto; }
+.login-page .app-footer { margin-top: auto; }

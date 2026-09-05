@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import Stage1 from './Stage1';
 import Stage2 from './Stage2';
 import Stage3 from './Stage3';
 import DocumentPanel from './DocumentPanel';
 import CouncilProgress from './CouncilProgress';
+import HowItWorks from './HowItWorks';
+import productLogo from '../assets/logo-product.jpg';
 import './ChatInterface.css';
 
 export default function ChatInterface({
@@ -25,6 +28,7 @@ export default function ChatInterface({
   const [isDragging, setIsDragging] = useState(false);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const { t } = useTranslation();
 
   const activeDocuments = documents?.filter(d => d.is_active) || [];
 
@@ -100,10 +104,10 @@ export default function ChatInterface({
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
             </svg>
           </div>
-          <h2>Configuration Required</h2>
-          <p>Please configure your OpenRouter API key to start using the LLM Council.</p>
+          <h2>{t('chat.configRequired')}</h2>
+          <p>{t('chat.configRequiredDesc')}</p>
           <button onClick={onGoToSettings} className="go-to-settings-btn" data-testid="btn-go-to-settings">
-            Go to Settings
+            {t('chat.goToSettings')}
           </button>
         </div>
       </div>
@@ -127,18 +131,20 @@ export default function ChatInterface({
                 <polyline points="17 8 12 3 7 8"></polyline>
                 <line x1="12" y1="3" x2="12" y2="15"></line>
               </svg>
-              <span>Drop files to upload</span>
+              <span>{t('chat.dropFiles')}</span>
             </div>
           </div>
         )}
-        <div className="empty-state">
-          <h2>Welcome to LLM Council</h2>
-          <p>Create a new conversation to get started</p>
+        <div className="empty-state welcome-state" data-testid="welcome-screen">
+          <img src={productLogo} alt={t('header.logoAlt')} className="welcome-logo" />
+          <h2>{t('chat.welcomeTitle')}</h2>
+          <p>{t('chat.welcomeSubtitle')}</p>
           {documents?.length > 0 && (
             <div className="documents-hint">
-              <span>{activeDocuments.length} document{activeDocuments.length !== 1 ? 's' : ''} ready for context</span>
+              <span>{t('chat.docsReady', { count: activeDocuments.length })}</span>
             </div>
           )}
+          <HowItWorks />
         </div>
       </div>
     );
@@ -160,7 +166,7 @@ export default function ChatInterface({
               <polyline points="17 8 12 3 7 8"></polyline>
               <line x1="12" y1="3" x2="12" y2="15"></line>
             </svg>
-            <span>Drop files to upload</span>
+            <span>{t('chat.dropFiles')}</span>
           </div>
         </div>
       )}
@@ -176,7 +182,7 @@ export default function ChatInterface({
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
             <polyline points="14 2 14 8 20 8"></polyline>
           </svg>
-          <span>{activeDocuments.length} Active</span>
+          <span>{t('chat.activeCount', { count: activeDocuments.length })}</span>
         </button>
       )}
 
@@ -196,15 +202,15 @@ export default function ChatInterface({
         {councilProgress && <CouncilProgress progress={councilProgress} />}
         {conversation.messages.length === 0 ? (
           <div className="empty-state">
-            <h2>Start a conversation</h2>
-            <p>Ask a question to consult the LLM Council</p>
+            <h2>{t('chat.startConversation')}</h2>
+            <p>{t('chat.askQuestion')}</p>
             {activeDocuments.length > 0 && (
               <div className="documents-context-hint">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                   <polyline points="14 2 14 8 20 8"></polyline>
                 </svg>
-                <span>{activeDocuments.length} document{activeDocuments.length !== 1 ? 's' : ''} will be included in your query</span>
+                <span>{t('chat.docsInQuery', { count: activeDocuments.length })}</span>
               </div>
             )}
           </div>
@@ -213,7 +219,7 @@ export default function ChatInterface({
             <div key={index} className="message-group">
               {msg.role === 'user' ? (
                 <div className="user-message">
-                  <div className="message-label">You</div>
+                  <div className="message-label">{t('chat.you')}</div>
                   <div className="message-content">
                     <div className="markdown-content">
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
@@ -222,13 +228,13 @@ export default function ChatInterface({
                 </div>
               ) : (
                 <div className="assistant-message">
-                  <div className="message-label">LLM Council</div>
+                  <div className="message-label">{t('chat.assistantLabel')}</div>
 
                   {/* Stage 1 */}
                   {msg.loading?.stage1 && (
                     <div className="stage-loading">
                       <div className="spinner"></div>
-                      <span>Running Stage 1: Collecting individual responses...</span>
+                      <span>{t('chat.running1')}</span>
                     </div>
                   )}
                   {msg.stage1 && <Stage1 responses={msg.stage1} />}
@@ -237,7 +243,7 @@ export default function ChatInterface({
                   {msg.loading?.stage2 && (
                     <div className="stage-loading">
                       <div className="spinner"></div>
-                      <span>Running Stage 2: Peer rankings...</span>
+                      <span>{t('chat.running2')}</span>
                     </div>
                   )}
                   {msg.stage2 && (
@@ -252,7 +258,7 @@ export default function ChatInterface({
                   {msg.loading?.stage3 && (
                     <div className="stage-loading">
                       <div className="spinner"></div>
-                      <span>Running Stage 3: Final synthesis...</span>
+                      <span>{t('chat.running3')}</span>
                     </div>
                   )}
                   {msg.stage3 && (
@@ -273,7 +279,7 @@ export default function ChatInterface({
         {isLoading && conversation.messages.length === 0 && (
           <div className="loading-indicator">
             <div className="spinner"></div>
-            <span>Consulting the council...</span>
+            <span>{t('chat.consulting')}</span>
           </div>
         )}
 
@@ -293,13 +299,13 @@ export default function ChatInterface({
                   onChange={(e) => setIncludeDocuments(e.target.checked)}
                   data-testid="checkbox-include-docs"
                 />
-                <span>Include {activeDocuments.length} document{activeDocuments.length !== 1 ? 's' : ''} in context</span>
+                <span>{t('chat.includeDocs', { count: activeDocuments.length })}</span>
               </label>
               <button 
                 className="manage-docs-btn"
                 onClick={() => setShowDocuments(true)}
               >
-                Manage
+                {t('chat.manage')}
               </button>
             </div>
           )}
@@ -310,7 +316,7 @@ export default function ChatInterface({
                 type="button"
                 className="upload-btn"
                 onClick={() => fileInputRef.current?.click()}
-                title="Upload document"
+                title={t('chat.uploadTitle')}
                 data-testid="btn-upload-document"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -321,7 +327,7 @@ export default function ChatInterface({
               </button>
               <textarea
                 className="message-input"
-                placeholder="Ask your question... (Shift+Enter for new line, Enter to send)"
+                placeholder={t('chat.placeholder')}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -335,7 +341,7 @@ export default function ChatInterface({
                 disabled={!input.trim() || isLoading}
                 data-testid="btn-send"
               >
-                Send
+                {t('chat.send')}
               </button>
             </div>
           </form>

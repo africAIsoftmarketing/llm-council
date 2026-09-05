@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 import './Settings.css';
 
@@ -16,13 +17,13 @@ const PROVIDER_META = {
 const providerMeta = (p) => PROVIDER_META[p] || { color: '#4a90e2', bg: '#f5f8ff', icon: '◇' };
 
 export default function Settings({ isAdmin = false, onConfigUpdate, showToast }) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState(isAdmin ? 'api' : 'models');
   const [config, setConfig] = useState(null);
   const [availableModels, setAvailableModels] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Form states
   const [apiKey, setApiKey] = useState('');
   const [isValidatingKey, setIsValidatingKey] = useState(false);
   const [keyValidation, setKeyValidation] = useState(null);
@@ -32,14 +33,12 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
   const [theme, setTheme] = useState('light');
   const [isCustomCouncil, setIsCustomCouncil] = useState(false);
 
-  // Model picker states
   const [modelSearch, setModelSearch] = useState('');
   const [activeProvider, setActiveProvider] = useState('All');
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState('');
-  // Catalogue (left picker) inline edit state
   const [catEditingId, setCatEditingId] = useState(null);
   const [catEditId, setCatEditId] = useState('');
   const [catEditName, setCatEditName] = useState('');
@@ -56,18 +55,17 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
         setSelectedModels(cfg.council_models || []);
         setChairmanModel(cfg.chairman_model || '');
       } else {
-        // Non-admins read their personal council (falls back to global default).
         const uc = await api.getUserCouncil();
         setSelectedModels(uc.council_models || []);
         setChairmanModel(uc.chairman_model || '');
         setIsCustomCouncil(!!uc.is_custom);
       }
     } catch {
-      showToast('Failed to load configuration', 'error');
+      showToast(t('settings.loadFailed'), 'error');
     } finally {
       setIsLoading(false);
     }
-  }, [showToast, isAdmin]);
+  }, [showToast, isAdmin, t]);
 
   const loadAvailableModels = useCallback(async () => {
     try {
@@ -81,34 +79,32 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
     loadAvailableModels();
   }, [loadConfiguration, loadAvailableModels]);
 
-  /* ── API key handlers ── */
   const handleValidateKey = async () => {
-    if (!apiKey.trim()) { showToast('Please enter an API key', 'warning'); return; }
+    if (!apiKey.trim()) { showToast(t('settings.enterKey'), 'warning'); return; }
     setIsValidatingKey(true);
     setKeyValidation(null);
     try {
       const result = await api.validateApiKey(apiKey);
       setKeyValidation(result);
-      showToast(result.valid ? 'API key is valid!' : result.error || 'Invalid API key',
+      showToast(result.valid ? t('settings.keyValidExcl') : result.error || t('settings.validateFailed'),
         result.valid ? 'success' : 'error');
-    } catch { showToast('Failed to validate API key', 'error'); }
+    } catch { showToast(t('settings.validateFailed'), 'error'); }
     finally { setIsValidatingKey(false); }
   };
 
   const handleSaveApiKey = async () => {
-    if (!apiKey.trim()) { showToast('Please enter an API key', 'warning'); return; }
+    if (!apiKey.trim()) { showToast(t('settings.enterKey'), 'warning'); return; }
     setIsSaving(true);
     try {
       await api.updateConfig({ openrouter_api_key: apiKey });
-      showToast('API key saved successfully!', 'success');
+      showToast(t('settings.keySaved'), 'success');
       setApiKey('');
       await loadConfiguration();
       onConfigUpdate();
-    } catch { showToast('Failed to save API key', 'error'); }
+    } catch { showToast(t('settings.saveKeyFailed'), 'error'); }
     finally { setIsSaving(false); }
   };
 
-  /* ── Model selection ── */
   const handleToggleModel = (modelId) => {
     setSelectedModels(prev =>
       prev.includes(modelId) ? prev.filter(id => id !== modelId) : [...prev, modelId]
@@ -121,28 +117,20 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
     if (editingId === modelId) { setEditingId(null); setEditValue(''); }
   };
 
-  /* ── Edit an OpenRouter model id inline ── */
-  const startEditModel = (modelId) => {
-    setEditingId(modelId);
-    setEditValue(modelId);
-  };
-  const cancelEditModel = () => {
-    setEditingId(null);
-    setEditValue('');
-  };
+  const startEditModel = (modelId) => { setEditingId(modelId); setEditValue(modelId); };
+  const cancelEditModel = () => { setEditingId(null); setEditValue(''); };
   const confirmEditModel = (oldId) => {
     const newId = editValue.trim();
-    if (!newId) { showToast("L'identifiant OpenRouter ne peut pas être vide", 'warning'); return; }
+    if (!newId) { showToast(t('settings.idEmpty'), 'warning'); return; }
     if (newId === oldId) { cancelEditModel(); return; }
-    if (selectedModels.includes(newId)) { showToast('Ce modèle est déjà dans le council', 'warning'); return; }
+    if (selectedModels.includes(newId)) { showToast(t('settings.alreadyInCouncil'), 'warning'); return; }
     setSelectedModels(prev => prev.map(id => (id === oldId ? newId : id)));
     if (chairmanModel === oldId) setChairmanModel(newId);
     setEditingId(null);
     setEditValue('');
-    showToast("Identifiant modifié — cliquez « Save Council » pour appliquer", 'info');
+    showToast(t('settings.idChanged'), 'info');
   };
 
-  /* ── Catalogue (left picker) edit / delete ── */
   const startCatEdit = (e, model) => {
     e.stopPropagation();
     setCatEditingId(model.id);
@@ -150,14 +138,11 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
     setCatEditName(model.name || '');
     setCatEditProvider(model.provider || '');
   };
-  const cancelCatEdit = (e) => {
-    if (e) e.stopPropagation();
-    setCatEditingId(null);
-  };
+  const cancelCatEdit = (e) => { if (e) e.stopPropagation(); setCatEditingId(null); };
   const saveCatEdit = async (e, oldId) => {
     e.stopPropagation();
     const newId = catEditId.trim();
-    if (!newId) { showToast("L'identifiant OpenRouter ne peut pas être vide", 'warning'); return; }
+    if (!newId) { showToast(t('settings.idEmpty'), 'warning'); return; }
     try {
       await api.updateCatalogModel(oldId, {
         new_id: newId,
@@ -167,27 +152,27 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
       setCatEditingId(null);
       await loadAvailableModels();
       await loadConfiguration();
-      showToast('Modèle du catalogue mis à jour', 'success');
+      showToast(t('settings.catUpdated'), 'success');
     } catch (err) {
-      showToast(err.message || 'Échec de la mise à jour', 'error');
+      showToast(err.message || t('settings.catUpdateFailed'), 'error');
     }
   };
   const deleteCatModel = async (e, model) => {
     e.stopPropagation();
-    if (!window.confirm(`Supprimer « ${model.name || model.id} » du catalogue ?`)) return;
+    if (!window.confirm(t('settings.deleteCatConfirm', { name: model.name || model.id }))) return;
     try {
       await api.deleteCatalogModel(model.id);
       await loadAvailableModels();
       await loadConfiguration();
-      showToast('Modèle supprimé du catalogue', 'success');
+      showToast(t('settings.catDeleted'), 'success');
     } catch (err) {
-      showToast(err.message || 'Échec de la suppression', 'error');
+      showToast(err.message || t('settings.catDeleteFailed'), 'error');
     }
   };
 
   const handleSaveModels = async () => {
     if (selectedModels.length < 2) {
-      showToast('Please select at least 2 council models', 'warning'); return;
+      showToast(t('settings.minTwo'), 'warning'); return;
     }
     setIsSaving(true);
     try {
@@ -203,13 +188,12 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
         setChairmanModel(updated.chairman_model || chairman);
         setIsCustomCouncil(true);
       }
-      showToast('Council saved!', 'success');
+      showToast(t('settings.councilSaved'), 'success');
       onConfigUpdate();
-    } catch (err) { showToast(err.message || 'Failed to save model configuration', 'error'); }
+    } catch (err) { showToast(err.message || t('settings.saveFailed'), 'error'); }
     finally { setIsSaving(false); }
   };
 
-  /* ── Reset personal council to global default (non-admin) ── */
   const handleResetCouncil = async () => {
     setIsSaving(true);
     try {
@@ -217,13 +201,12 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
       setSelectedModels(reset.council_models || []);
       setChairmanModel(reset.chairman_model || '');
       setIsCustomCouncil(false);
-      showToast('Council reset to default', 'success');
+      showToast(t('settings.councilReset'), 'success');
       onConfigUpdate();
-    } catch (err) { showToast(err.message || 'Failed to reset council', 'error'); }
+    } catch (err) { showToast(err.message || t('settings.resetFailed'), 'error'); }
     finally { setIsSaving(false); }
   };
 
-  /* ── Drag-to-reorder ── */
   const handleDragStart = (e, idx) => {
     dragNode.current = e.target;
     setDragIdx(idx);
@@ -243,39 +226,34 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
     setDragOverIdx(null);
   };
 
-  /* ── Custom model ── */
   const handleAddCustomModel = async () => {
     if (!customModel.id || !customModel.name || !customModel.provider) {
-      showToast('Please fill in all custom model fields', 'warning'); return;
+      showToast(t('settings.fillCustom'), 'warning'); return;
     }
     try {
       await api.addCustomModel(customModel.id, customModel.name, customModel.provider);
-      showToast('Custom model added!', 'success');
+      showToast(t('settings.customAdded'), 'success');
       setCustomModel({ id: '', name: '', provider: '' });
       await loadAvailableModels();
-    } catch { showToast('Failed to add custom model', 'error'); }
+    } catch { showToast(t('settings.customFailed'), 'error'); }
   };
 
-  /* ── Theme ── */
   const handleSaveTheme = async () => {
     setIsSaving(true);
     try {
       await api.updateConfig({ theme });
-      showToast('Theme saved!', 'success');
-    } catch { showToast('Failed to save theme', 'error'); }
+      showToast(t('settings.themeSaved'), 'success');
+    } catch { showToast(t('settings.themeSaveFailed'), 'error'); }
     finally { setIsSaving(false); }
   };
 
-  /* ── Derived data ── */
   const providers = ['All', ...Array.from(new Set(availableModels.map(m => m.provider)))];
-
   const filteredModels = availableModels.filter(m => {
     const matchProvider = activeProvider === 'All' || m.provider === activeProvider;
     const q = modelSearch.toLowerCase();
     const matchSearch = !q || m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q);
     return matchProvider && matchSearch;
   });
-
   const modelById = Object.fromEntries(availableModels.map(m => [m.id, m]));
 
   if (isLoading) {
@@ -283,7 +261,7 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
       <div className="settings">
         <div className="settings-loading">
           <div className="spinner" />
-          <span>Loading configuration...</span>
+          <span>{t('settings.loading')}</span>
         </div>
       </div>
     );
@@ -292,16 +270,16 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
   return (
     <div className="settings" data-testid="settings-page">
       <div className="settings-header">
-        <h1>Settings</h1>
-        <p>Configure your LLM Council preferences</p>
+        <h1>{t('settings.title')}</h1>
+        <p>{t('settings.subtitle')}</p>
       </div>
 
       <div className="settings-tabs">
         {[
-          ...(isAdmin ? [['api', 'API Settings']] : []),
-          ['models', 'Council Models'],
-          ['chairman', 'Chairman'],
-          ['advanced', 'Advanced'],
+          ...(isAdmin ? [['api', t('settings.apiTab')]] : []),
+          ['models', t('settings.modelsTab')],
+          ['chairman', t('settings.chairmanTab')],
+          ['advanced', t('settings.advancedTab')],
         ].map(([id, label]) => (
           <button key={id} className={`settings-tab ${activeTab === id ? 'active' : ''}`}
             onClick={() => setActiveTab(id)} data-testid={`tab-${id}`}>{label}</button>
@@ -310,37 +288,35 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
 
       <div className="settings-content">
 
-        {/* ── API Settings (admin only) ── */}
         {activeTab === 'api' && isAdmin && (
           <div className="settings-section" data-testid="section-api">
-            <h2>OpenRouter API Key</h2>
+            <h2>{t('settings.apiTitle')}</h2>
             <p className="settings-description">
-              Get your API key from{' '}
-              <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">openrouter.ai/keys</a>.
-              Make sure you have credits available.
+              {t('settings.apiDescPre')}{' '}
+              <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">openrouter.ai/keys</a>{t('settings.apiDescPost')}
             </p>
             {config?.has_api_key && (
               <div className="current-key-status">
-                <span className="status-badge success">API Key Configured</span>
+                <span className="status-badge success">{t('settings.keyConfigured')}</span>
                 <span className="masked-key">{config.openrouter_api_key_masked}</span>
               </div>
             )}
             <div className="form-group">
-              <label htmlFor="apiKey">New API Key</label>
+              <label htmlFor="apiKey">{t('settings.newKey')}</label>
               <div className="input-with-button">
                 <input type="password" id="apiKey" value={apiKey}
                   onChange={e => setApiKey(e.target.value)} placeholder="sk-or-v1-..."
                   data-testid="input-api-key" />
                 <button onClick={handleValidateKey} disabled={isValidatingKey || !apiKey.trim()}
                   className="btn-secondary" data-testid="btn-validate-key">
-                  {isValidatingKey ? 'Validating…' : 'Validate'}
+                  {isValidatingKey ? t('settings.validating') : t('settings.validate')}
                 </button>
               </div>
             </div>
             {keyValidation && (
               <div className={`validation-result ${keyValidation.valid ? 'valid' : 'invalid'}`}>
                 <span className="validation-icon">{keyValidation.valid ? '✓' : '✗'}</span>
-                <span>{keyValidation.valid ? 'API key is valid' : keyValidation.error}</span>
+                <span>{keyValidation.valid ? t('settings.keyValid') : keyValidation.error}</span>
                 {keyValidation.valid && keyValidation.data?.label && (
                   <span className="key-label">({keyValidation.data.label})</span>
                 )}
@@ -348,44 +324,42 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
             )}
             <button onClick={handleSaveApiKey} disabled={isSaving || !apiKey.trim()}
               className="btn-primary" data-testid="btn-save-api-key">
-              {isSaving ? 'Saving…' : 'Save API Key'}
+              {isSaving ? t('settings.saving') : t('settings.saveKey')}
             </button>
           </div>
         )}
 
-        {/* ── Council Models ── */}
         {activeTab === 'models' && (
           <div className="settings-section models-section" data-testid="section-models">
             <div className="models-header">
               <div>
-                <h2>Council Models</h2>
+                <h2>{t('settings.councilTitle')}</h2>
                 <p className="settings-description" style={{ marginBottom: 0 }}>
-                  Pick models from the browser, then drag to set deliberation order.
+                  {t('settings.pickOrder')}
                 </p>
               </div>
               <div className="models-header-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 {!isAdmin && isCustomCouncil && (
                   <button onClick={handleResetCouncil} disabled={isSaving}
                     className="btn-secondary" data-testid="btn-reset-council">
-                    Reset to default
+                    {t('settings.resetDefault')}
                   </button>
                 )}
                 <button onClick={handleSaveModels}
                   disabled={isSaving || selectedModels.length < 2}
                   className="btn-primary" data-testid="btn-save-models">
-                  {isSaving ? 'Saving…' : 'Save Council'}
+                  {isSaving ? t('settings.saving') : t('settings.saveCouncil')}
                 </button>
               </div>
             </div>
 
             <div className="picker-layout">
-              {/* ── Left: model browser ── */}
               <div className="picker-left">
                 <div className="picker-search-row">
                   <div className="picker-search-wrap">
                     <span className="picker-search-icon">⌕</span>
                     <input className="picker-search" type="text"
-                      placeholder="Search models…" value={modelSearch}
+                      placeholder={t('settings.searchModels')} value={modelSearch}
                       onChange={e => setModelSearch(e.target.value)} />
                     {modelSearch && (
                       <button className="picker-search-clear"
@@ -412,7 +386,7 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
 
                 <div className="picker-model-list">
                   {filteredModels.length === 0 && (
-                    <div className="picker-empty">No models match your search.</div>
+                    <div className="picker-empty">{t('settings.noMatch')}</div>
                   )}
                   {filteredModels.map(model => {
                     const meta = providerMeta(model.provider);
@@ -432,21 +406,21 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
                             <input className="pmc-edit-input" value={catEditId}
                               onChange={e => setCatEditId(e.target.value)}
                               onKeyDown={e => { if (e.key === 'Enter') saveCatEdit(e, model.id); if (e.key === 'Escape') cancelCatEdit(e); }}
-                              placeholder="provider/model-id (lien OpenRouter)" autoFocus
+                              placeholder={t('settings.idPlaceholder')} autoFocus
                               data-testid="catalog-edit-id-input" />
                             <div className="pmc-edit-meta">
                               <input className="pmc-edit-input sm" value={catEditName}
-                                onChange={e => setCatEditName(e.target.value)} placeholder="Nom"
+                                onChange={e => setCatEditName(e.target.value)} placeholder={t('settings.name')}
                                 data-testid="catalog-edit-name-input" />
                               <input className="pmc-edit-input sm" value={catEditProvider}
-                                onChange={e => setCatEditProvider(e.target.value)} placeholder="Provider"
+                                onChange={e => setCatEditProvider(e.target.value)} placeholder={t('settings.provider')}
                                 data-testid="catalog-edit-provider-input" />
                             </div>
                             <div className="pmc-edit-actions">
                               <button className="pmc-save" onClick={e => saveCatEdit(e, model.id)}
-                                data-testid={`catalog-save-${model.id}`}>Save</button>
+                                data-testid={`catalog-save-${model.id}`}>{t('settings.save')}</button>
                               <button className="pmc-cancel" onClick={cancelCatEdit}
-                                data-testid={`catalog-cancel-${model.id}`}>Cancel</button>
+                                data-testid={`catalog-cancel-${model.id}`}>{t('settings.cancel')}</button>
                             </div>
                           </div>
                         ) : (
@@ -460,11 +434,11 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
                                 <>
                                   <button className="pmc-edit-btn"
                                     onClick={e => startCatEdit(e, model)}
-                                    title="Modifier le lien OpenRouter"
+                                    title={t('settings.editIdTitle')}
                                     data-testid={`catalog-edit-btn-${model.id}`}>✎</button>
                                   <button className="pmc-delete-btn"
                                     onClick={e => deleteCatModel(e, model)}
-                                    title="Supprimer du catalogue"
+                                    title={t('settings.deleteCatTitle')}
                                     data-testid={`catalog-delete-btn-${model.id}`}>🗑</button>
                                 </>
                               )}
@@ -481,19 +455,18 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
                 </div>
               </div>
 
-              {/* ── Right: your council ── */}
               <div className="picker-right">
                 <div className="council-header">
-                  <span className="council-title">Your Council</span>
+                  <span className="council-title">{t('settings.yourCouncil')}</span>
                   <span className="council-count">
-                    {selectedModels.length} model{selectedModels.length !== 1 ? 's' : ''}
+                    {t('settings.modelsCount', { count: selectedModels.length })}
                   </span>
                 </div>
 
                 {selectedModels.length === 0 ? (
                   <div className="council-empty">
                     <div className="council-empty-icon">⬡</div>
-                    <p>Click models on the left to add them to your council</p>
+                    <p>{t('settings.councilEmptyHint')}</p>
                   </div>
                 ) : (
                   <div className="council-list">
@@ -524,14 +497,14 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
                                   if (e.key === 'Enter') confirmEditModel(modelId);
                                   if (e.key === 'Escape') cancelEditModel();
                                 }}
-                                placeholder="provider/model-id (lien OpenRouter)"
+                                placeholder={t('settings.idPlaceholder')}
                                 autoFocus
                                 data-testid="edit-model-input"
                               />
-                              <button className="ci-edit-save" title="Enregistrer l'identifiant"
+                              <button className="ci-edit-save" title={t('settings.saveIdTitle')}
                                 onClick={() => confirmEditModel(modelId)}
                                 data-testid={`confirm-edit-${modelId}`}>✓</button>
-                              <button className="ci-edit-cancel" title="Annuler"
+                              <button className="ci-edit-cancel" title={t('settings.cancelTitle')}
                                 onClick={cancelEditModel}
                                 data-testid={`cancel-edit-${modelId}`}>✕</button>
                             </div>
@@ -544,12 +517,12 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
                               {isAdmin && (
                                 <button className="ci-edit-btn"
                                   onClick={() => startEditModel(modelId)}
-                                  title="Modifier le lien OpenRouter"
+                                  title={t('settings.editIdTitle')}
                                   data-testid={`edit-model-btn-${modelId}`}>✎</button>
                               )}
                               <button className="ci-remove"
                                 onClick={() => handleRemoveModel(modelId)}
-                                title="Supprimer le modèle"
+                                title={t('settings.deleteModelTitle')}
                                 data-testid={`remove-model-btn-${modelId}`}>🗑</button>
                             </>
                           )}
@@ -562,11 +535,11 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
                 {selectedModels.length > 0 && (
                   <div className="council-chairman-pick">
                     <label className="cc-label">
-                      <span>👑</span> Chairman (synthesizes final answer)
+                      <span>👑</span> {t('settings.chairmanPick')}
                     </label>
                     <select className="cc-select" value={chairmanModel}
                       onChange={e => setChairmanModel(e.target.value)}>
-                      <option value="">— auto (first model) —</option>
+                      <option value="">{t('settings.autoFirst')}</option>
                       {selectedModels.map(id => {
                         const m = modelById[id];
                         return (
@@ -579,22 +552,21 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
               </div>
             </div>
 
-            {/* Custom model row (admin only) */}
             {isAdmin && (
             <div className="custom-model-section">
-              <h3>Add Custom Model</h3>
+              <h3>{t('settings.addCustom')}</h3>
               <div className="custom-model-form">
-                <input type="text" placeholder="Model ID (e.g., provider/model-name)"
+                <input type="text" placeholder={t('settings.modelId')}
                   value={customModel.id}
                   onChange={e => setCustomModel({ ...customModel, id: e.target.value })} />
-                <input type="text" placeholder="Display Name"
+                <input type="text" placeholder={t('settings.displayName')}
                   value={customModel.name}
                   onChange={e => setCustomModel({ ...customModel, name: e.target.value })} />
-                <input type="text" placeholder="Provider"
+                <input type="text" placeholder={t('settings.provider')}
                   value={customModel.provider}
                   onChange={e => setCustomModel({ ...customModel, provider: e.target.value })} />
                 <button onClick={handleAddCustomModel} className="btn-secondary">
-                  Add Model
+                  {t('settings.addModel')}
                 </button>
               </div>
             </div>
@@ -602,26 +574,22 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
           </div>
         )}
 
-        {/* ── Chairman ── */}
         {activeTab === 'chairman' && (
           <div className="settings-section" data-testid="section-chairman">
-            <h2>Chairman Model</h2>
-            <p className="settings-description">
-              The Chairman synthesizes the final response from all council members.
-              Choose a model that excels at summarisation and analysis.
-            </p>
+            <h2>{t('settings.chairmanTitle')}</h2>
+            <p className="settings-description">{t('settings.chairmanDesc')}</p>
             {config?.chairman_model && (
               <div className="current-chairman">
-                <span>Current Chairman:</span>
+                <span>{t('settings.currentChairman')}</span>
                 <strong>{config.chairman_model}</strong>
               </div>
             )}
             <div className="form-group">
-              <label htmlFor="chairmanSelect">Select Chairman Model</label>
+              <label htmlFor="chairmanSelect">{t('settings.selectChairman')}</label>
               <select id="chairmanSelect" value={chairmanModel}
                 onChange={e => setChairmanModel(e.target.value)}
                 data-testid="select-chairman">
-                <option value="">— Select a model —</option>
+                <option value="">{t('settings.selectModel')}</option>
                 {availableModels.map(model => (
                   <option key={model.id} value={model.id}>
                     {model.name} ({model.provider})
@@ -630,72 +598,69 @@ export default function Settings({ isAdmin = false, onConfigUpdate, showToast })
               </select>
             </div>
             <div className="chairman-tips">
-              <h4>Tips for choosing a Chairman:</h4>
+              <h4>{t('settings.tipsTitle')}</h4>
               <ul>
-                <li>Consider a model with strong reasoning capabilities</li>
-                <li>The chairman should excel at synthesising multiple viewpoints</li>
-                <li>Larger models often produce better summaries</li>
-                <li>The chairman can be one of the council members</li>
+                <li>{t('settings.tip1')}</li>
+                <li>{t('settings.tip2')}</li>
+                <li>{t('settings.tip3')}</li>
+                <li>{t('settings.tip4')}</li>
               </ul>
             </div>
             <button onClick={handleSaveModels} disabled={isSaving || !chairmanModel}
               className="btn-primary" data-testid="btn-save-chairman">
-              {isSaving ? 'Saving…' : 'Save Chairman Selection'}
+              {isSaving ? t('settings.saving') : t('settings.saveChairman')}
             </button>
           </div>
         )}
 
-        {/* ── Advanced ── */}
         {activeTab === 'advanced' && (
           <div className="settings-section" data-testid="section-advanced">
-            <h2>Advanced Settings</h2>
+            <h2>{t('settings.advancedTitle')}</h2>
             <div className="form-group">
-              <label>Theme</label>
+              <label>{t('settings.theme')}</label>
               <div className="theme-options">
-                {['light', 'dark'].map(t => (
-                  <label key={t} className="theme-option">
-                    <input type="radio" name="theme" value={t}
-                      checked={theme === t} onChange={e => setTheme(e.target.value)} />
-                    <span style={{ textTransform: 'capitalize' }}>{t}</span>
+                {[['light', t('settings.light')], ['dark', t('settings.dark')]].map(([val, label]) => (
+                  <label key={val} className="theme-option">
+                    <input type="radio" name="theme" value={val}
+                      checked={theme === val} onChange={e => setTheme(e.target.value)} />
+                    <span>{label}</span>
                   </label>
                 ))}
               </div>
             </div>
             {isAdmin && (
             <div className="info-section" data-testid="section-storage-location">
-              <h3>Storage Location</h3>
+              <h3>{t('settings.storageTitle')}</h3>
               {config?.storage_paths ? (
                 <div className="storage-paths">
                   <div className="storage-path-row">
-                    <span className="path-label">Config file:</span>
+                    <span className="path-label">{t('settings.configFile')}</span>
                     <code className="path-value">{config.storage_paths.config_file}</code>
                   </div>
                   <div className="storage-path-row">
-                    <span className="path-label">Conversations:</span>
+                    <span className="path-label">{t('settings.conversationsLabel')}</span>
                     <code className="path-value">{config.storage_paths.conversations_dir}</code>
                   </div>
                   <div className="storage-path-row">
-                    <span className="path-label">Documents:</span>
+                    <span className="path-label">{t('settings.documentsLabel')}</span>
                     <code className="path-value">{config.storage_paths.documents_dir}</code>
                   </div>
                 </div>
               ) : (
                 <>
-                  <p>Conversations: <code>data/conversations/</code></p>
-                  <p>Documents: <code>data/documents/</code></p>
+                  <p>{t('settings.conversationsLabel')} <code>data/conversations/</code></p>
+                  <p>{t('settings.documentsLabel')} <code>data/documents/</code></p>
                 </>
               )}
             </div>
             )}
             <div className="info-section">
-              <h3>About LLM Council</h3>
-              <p>
-                A 3-stage deliberation system: individual responses &rarr; peer review &rarr; chairman synthesis.
-              </p>
-              <p>Version: 2.0.0</p>
+              <h3>{t('settings.aboutTitle')}</h3>
+              <p>{t('settings.aboutDesc')}</p>
+              <p>{t('settings.version', { version: '2.0.0' })}</p>
             </div>
             <button onClick={handleSaveTheme} disabled={isSaving} className="btn-primary">
-              {isSaving ? 'Saving…' : 'Save Settings'}
+              {isSaving ? t('settings.saving') : t('settings.saveSettings')}
             </button>
           </div>
         )}

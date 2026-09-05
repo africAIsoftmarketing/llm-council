@@ -1,0 +1,33 @@
+.lang-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid #1e293b;
+  border-radius: 999px;
+  background: #0b1220;
+}
+.lang-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 3px 7px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+.lang-btn:hover { color: #e2e8f0; }
+.lang-btn.active { color: #05243a; background: #38bdf8; }
+.lang-sep { color: #334155; font-size: 12px; }
+
+/* Light surfaces (login/legal) override */
+.lang-switcher.on-light {
+  border-color: #d7e0d7;
+  background: #eef4ee;
+}
+.lang-switcher.on-light .lang-btn { color: #5a6b5a; }
+.lang-switcher.on-light .lang-btn:hover { color: #234023; }
+.lang-switcher.on-light .lang-btn.active { color: #fff; background: #2d8a2d; }

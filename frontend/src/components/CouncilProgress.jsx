@@ -1,10 +1,7 @@
+import { useTranslation } from 'react-i18next';
 import './CouncilProgress.css';
 
-const STEPS = [
-  { key: 'stage1', label: 'Stage 1', sub: 'Individual responses' },
-  { key: 'stage2', label: 'Stage 2', sub: 'Peer review / ranking' },
-  { key: 'stage3', label: 'Stage 3', sub: 'Chairman synthesis' },
-];
+const STEP_KEYS = ['stage1', 'stage2', 'stage3'];
 
 /**
  * Live per-stage progress for a council debate. Driven entirely by the existing
@@ -12,12 +9,13 @@ const STEPS = [
  * `progress` prop: { steps: ['pending'|'active'|'done'|'error' x3], done, errorStep }.
  */
 export default function CouncilProgress({ progress }) {
+  const { t } = useTranslation();
   if (!progress) return null;
   const { steps = ['pending', 'pending', 'pending'], done = false } = progress;
 
   const completed = steps.filter((s) => s === 'done').length;
   const hasError = steps.includes('error');
-  const percent = done ? 100 : Math.round((completed / STEPS.length) * 100);
+  const percent = done ? 100 : Math.round((completed / STEP_KEYS.length) * 100);
 
   return (
     <div
@@ -26,19 +24,19 @@ export default function CouncilProgress({ progress }) {
     >
       <div className="cp-head">
         <span className="cp-title">
-          {hasError ? 'Council stopped' : done ? 'Council complete' : 'Council in session…'}
+          {hasError ? t('progress.stopped') : done ? t('progress.complete') : t('progress.inSession')}
         </span>
         <span className="cp-percent" data-testid="council-progress-percent">{percent}%</span>
       </div>
 
       <div className="cp-steps">
-        {STEPS.map((step, i) => {
+        {STEP_KEYS.map((key, i) => {
           const state = steps[i] || 'pending';
           return (
             <div
-              key={step.key}
+              key={key}
               className={`cp-step cp-${state}`}
-              data-testid={`council-step-${step.key}`}
+              data-testid={`council-step-${key}`}
               data-state={state}
             >
               <div className="cp-step-bar">
@@ -49,8 +47,8 @@ export default function CouncilProgress({ progress }) {
                   {state === 'done' ? '✓' : state === 'error' ? '!' : i + 1}
                 </span>
                 <span className="cp-step-labels">
-                  <span className="cp-step-label">{step.label}</span>
-                  <span className="cp-step-sub">{step.sub}</span>
+                  <span className="cp-step-label">{t(`progress.${key}.label`)}</span>
+                  <span className="cp-step-sub">{t(`progress.${key}.sub`)}</span>
                 </span>
               </div>
             </div>

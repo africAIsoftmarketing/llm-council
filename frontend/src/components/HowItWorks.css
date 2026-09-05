@@ -1,0 +1,72 @@
+.how-it-works {
+  width: 100%;
+  max-width: 960px;
+  margin: 28px auto 8px;
+  text-align: left;
+}
+.hiw-head { margin-bottom: 20px; text-align: center; }
+.hiw-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #1f2d1f;
+  margin: 0 0 6px;
+  letter-spacing: -0.01em;
+}
+.hiw-subtitle {
+  font-size: 14px;
+  color: #647564;
+  margin: 0 auto;
+  max-width: 560px;
+}
+.hiw-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.hiw-card {
+  position: relative;
+  background: #fff;
+  border: 1px solid #e6ece6;
+  border-radius: 16px;
+  padding: 18px 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 2px 10px rgba(31, 45, 31, 0.04);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  animation: hiw-rise 0.4s ease both;
+}
+.hiw-card:nth-child(1) { animation-delay: 0.03s; }
+.hiw-card:nth-child(2) { animation-delay: 0.09s; }
+.hiw-card:nth-child(3) { animation-delay: 0.15s; }
+.hiw-card:nth-child(4) { animation-delay: 0.21s; }
+@keyframes hiw-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.hiw-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(31, 45, 31, 0.08);
+  border-color: #2d8a2d;
+}
+.hiw-card-top { display: flex; align-items: center; justify-content: space-between; }
+.hiw-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 12px;
+  background: #ecf6ec; color: #2d8a2d;
+}
+.hiw-step-num {
+  font-size: 26px; font-weight: 800; line-height: 1;
+  color: #e3ece3;
+}
+.hiw-tag {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #2d8a2d;
+}
+.hiw-card-title { font-size: 15px; font-weight: 700; color: #1f2d1f; margin: 0; }
+.hiw-card-desc { font-size: 13px; line-height: 1.55; color: #5a6b5a; margin: 0; }
+
+@media (max-width: 900px) {
+  .hiw-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 520px) {
+  .hiw-grid { grid-template-columns: 1fr; }
+}
+.hiw-icon svg{width:20px;height:20px;}
