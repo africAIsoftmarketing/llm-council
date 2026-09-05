@@ -113,6 +113,31 @@ class AppSetting(Base):
     updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"))
 
 
+class RunCost(Base):
+    """One row per council run — real OpenRouter cost captured inline from
+    usage.cost (Usage Accounting). Used for app-level cost analytics."""
+    __tablename__ = "run_costs"
+
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(PGUUID(as_uuid=True), ForeignKey("users.id"))
+    conversation_id: Mapped[Optional[str]] = mapped_column(Text)
+    breakdown: Mapped[Any] = mapped_column(JSONB, nullable=False, default=dict)  # {model_id: {cost, tokens}}
+    total_cost: Mapped[str] = mapped_column(Text, nullable=False, default="0")  # numeric text for precision
+    total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
+
+    def public_dict(self) -> Dict[str, Any]:
+        return {
+            "id": str(self.id),
+            "user_id": str(self.user_id) if self.user_id else None,
+            "conversation_id": self.conversation_id,
+            "breakdown": self.breakdown or {},
+            "total_cost": float(self.total_cost or 0),
+            "total_tokens": self.total_tokens or 0,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 async def init_db():
     """Create tables and the partial unique index for idempotent purchases."""
     async with engine.begin() as conn:
@@ -121,6 +146,30 @@ async def init_db():
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_credit_tx_paypal_order "
             "ON credit_transactions (paypal_order_id) WHERE paypal_order_id IS NOT NULL"
         ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_run_costs_created_at ON run_costs (created_at DESC)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_run_costs_user_id ON run_costs (user_id)"
+        ))
+
+
+async def record_run_cost(
+    session: AsyncSession,
+    user_id: Optional[uuid.UUID],
+    conversation_id: Optional[str],
+    breakdown: Dict[str, Any],
+    total_cost: float,
+    total_tokens: int,
+) -> None:
+    """Persist a council-run cost record. Best-effort; caller commits."""
+    session.add(RunCost(
+        user_id=user_id,
+        conversation_id=conversation_id,
+        breakdown=breakdown or {},
+        total_cost=str(total_cost or 0),
+        total_tokens=int(total_tokens or 0),
+    ))
 
 
 # ===================== Credit primitives (atomic) =====================

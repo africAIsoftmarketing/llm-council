@@ -9,17 +9,30 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, desc
 
 try:
-    from .db import SessionLocal, User, CreditTransaction, credit_user
+    from .db import SessionLocal, User, CreditTransaction, credit_user, RunCost
     from .auth import get_current_admin
     from . import settings_store
+    from .config_manager import get_api_key
 except ImportError:
-    from db import SessionLocal, User, CreditTransaction, credit_user
+    from db import SessionLocal, User, CreditTransaction, credit_user, RunCost
     from auth import get_current_admin
     import settings_store
+    from config_manager import get_api_key
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 _MODELS_CACHE = {"ids": None, "ts": 0.0}
+
+# OpenRouter key-status cache, keyed by the actual key value so that changing the
+# admin key in Settings instantly invalidates the cached status (a new key value
+# is a cache miss). TTL ~3 minutes; manual refresh bypasses it.
+_KEY_STATUS_CACHE: dict = {}
+_KEY_STATUS_TTL = 180.0
+
+
+def bust_key_status_cache():
+    """Invalidate all cached OpenRouter key statuses (called when the key changes)."""
+    _KEY_STATUS_CACHE.clear()
 
 
 async def _openrouter_model_ids():
@@ -211,4 +224,112 @@ async def get_stats(admin: User = Depends(get_current_admin)):
         "requests_7d": req_7d or 0,
         "requests_30d": req_30d or 0,
         "recent_transactions": recent_out,
+    }
+
+
+# ===================== OpenRouter key status & cost analytics =====================
+
+@router.get("/openrouter/key-status")
+async def openrouter_key_status(refresh: bool = False, admin: User = Depends(get_current_admin)):
+    """Live status of the admin-configured OpenRouter inference key.
+
+    Calls GET https://openrouter.ai/api/v1/key with the persisted key as Bearer.
+    Never exposes the key itself. Cached ~3 min keyed by the key value; refresh=true
+    bypasses the cache.
+    """
+    import time
+    key = get_api_key()
+    if not key:
+        return {"configured": False}
+
+    cached = _KEY_STATUS_CACHE.get(key)
+    if cached and not refresh and (time.time() - cached["ts"] < _KEY_STATUS_TTL):
+        return {**cached["result"], "cached": True}
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(
+                "https://openrouter.ai/api/v1/key",
+                headers={"Authorization": f"Bearer {key}"},
+            )
+    except Exception as e:
+        return {"configured": True, "valid": False, "error": f"connection_error: {e}"}
+
+    if r.status_code == 401:
+        result = {"configured": True, "valid": False, "error": "invalid_or_revoked_key"}
+        _KEY_STATUS_CACHE[key] = {"ts": time.time(), "result": result}
+        return result
+    if r.status_code != 200:
+        return {"configured": True, "valid": False, "error": f"openrouter_status_{r.status_code}"}
+
+    data = (r.json() or {}).get("data", {}) or {}
+    usage = data.get("usage")
+    limit = data.get("limit")
+    limit_remaining = data.get("limit_remaining")
+    is_free_tier = data.get("is_free_tier")
+    usage_percent = None
+    try:
+        if limit not in (None, 0) and usage is not None:
+            usage_percent = round(float(usage) / float(limit) * 100, 2)
+    except (TypeError, ValueError, ZeroDivisionError):
+        usage_percent = None
+
+    result = {
+        "configured": True,
+        "valid": True,
+        "label": data.get("label"),
+        "usage": usage,
+        "limit": limit,
+        "limit_remaining": limit_remaining,
+        "is_free_tier": is_free_tier,
+        "usage_percent": usage_percent,
+    }
+    _KEY_STATUS_CACHE[key] = {"ts": time.time(), "result": result}
+    return {**result, "cached": False}
+
+
+@router.get("/openrouter/cost-summary")
+async def openrouter_cost_summary(admin: User = Depends(get_current_admin)):
+    """App-level cost analytics computed from run_costs records.
+
+    Returns the total cost aggregated by this app, the cost of the last council
+    run (with per-model breakdown), and per-model totals across all runs."""
+    async with SessionLocal() as session:
+        rows = (await session.scalars(
+            select(RunCost).order_by(desc(RunCost.created_at))
+        )).all()
+
+    total_cost = 0.0
+    total_tokens = 0
+    total_runs = len(rows)
+    per_model: dict = {}
+    for row in rows:
+        try:
+            total_cost += float(row.total_cost or 0)
+        except (TypeError, ValueError):
+            pass
+        total_tokens += int(row.total_tokens or 0)
+        for model, vals in (row.breakdown or {}).items():
+            slot = per_model.setdefault(model, {"cost": 0.0, "tokens": 0})
+            try:
+                slot["cost"] += float(vals.get("cost") or 0)
+            except (TypeError, ValueError):
+                pass
+            try:
+                slot["tokens"] += int(vals.get("tokens") or 0)
+            except (TypeError, ValueError):
+                pass
+
+    per_model_list = sorted(
+        [{"model": m, "cost": round(v["cost"], 8), "tokens": v["tokens"]} for m, v in per_model.items()],
+        key=lambda x: x["cost"], reverse=True,
+    )
+    last_run = rows[0].public_dict() if rows else None
+
+    return {
+        "total_cost": round(total_cost, 8),
+        "total_tokens": total_tokens,
+        "total_runs": total_runs,
+        "last_run": last_run,
+        "per_model": per_model_list,
     }

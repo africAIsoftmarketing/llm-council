@@ -49,3 +49,20 @@
 .stat-label { font-size: 13px; color: #64748b; margin-top: 6px; }
 .amt-pos { color: #16a34a; font-weight: 700; }
 .amt-neg { color: #dc2626; font-weight: 700; }
+
+/* ── OpenRouter tab ── */
+.or-header { display: flex; align-items: center; justify-content: space-between; }
+.or-empty {
+  background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px;
+  padding: 16px 18px; color: #64748b; font-size: 14px; margin-bottom: 8px;
+}
+.or-empty.or-invalid { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.or-usage-bar-wrap { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+.or-usage-bar-track {
+  flex: 1; height: 12px; background: #e2e8f0; border-radius: 999px; overflow: hidden;
+}
+.or-usage-bar-fill {
+  height: 100%; background: linear-gradient(90deg, #0e7490, #06b6d4);
+  border-radius: 999px; transition: width 0.4s ease;
+}
+.or-usage-bar-label { font-size: 13px; font-weight: 700; color: #0e7490; min-width: 90px; text-align: right; }

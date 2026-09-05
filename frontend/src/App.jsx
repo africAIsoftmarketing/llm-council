@@ -29,6 +29,7 @@ function App() {
   const [documents, setDocuments] = useState([]);
   const [toast, setToast] = useState(null);
   const [showAdvancedPanel, setShowAdvancedPanel] = useState(false);
+  const [councilProgress, setCouncilProgress] = useState(null);
   const [advancedSettings, setAdvancedSettings] = useState(() => getAdvancedSettings());
   // Restore the last council selection instantly from localStorage (persists across
   // refresh); the authoritative values are then overlaid from the backend (DB).
@@ -131,6 +132,7 @@ function App() {
         ...conversations,
       ]);
       setCurrentConversationId(newConv.id);
+      setCouncilProgress(null);
       setCurrentView('chat');
     } catch (error) {
       console.error('Failed to create conversation:', error);
@@ -140,6 +142,7 @@ function App() {
 
   const handleSelectConversation = (id) => {
     setCurrentConversationId(id);
+    setCouncilProgress(null);
     setCurrentView('chat');
   };
 
@@ -162,6 +165,14 @@ function App() {
     if (!currentConversationId) return;
 
     setIsLoading(true);
+    // Reset the per-stage progress bar for this new run.
+    setCouncilProgress({ steps: ['pending', 'pending', 'pending'], done: false, errorStep: null });
+    const setStep = (idx, state) => setCouncilProgress((prev) => {
+      if (!prev) return prev;
+      const steps = [...prev.steps];
+      steps[idx] = state;
+      return { ...prev, steps };
+    });
     try {
       // Optimistically add user message to UI
       const userMessage = { role: 'user', content };
@@ -194,6 +205,7 @@ function App() {
       await api.sendMessageStream(currentConversationId, content, (eventType, event) => {
         switch (eventType) {
           case 'stage1_start':
+            setStep(0, 'active');
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
@@ -203,6 +215,7 @@ function App() {
             break;
 
           case 'stage1_complete':
+            setStep(0, 'done');
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
@@ -213,6 +226,7 @@ function App() {
             break;
 
           case 'stage2_start':
+            setStep(1, 'active');
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
@@ -222,6 +236,7 @@ function App() {
             break;
 
           case 'stage2_complete':
+            setStep(1, 'done');
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
@@ -233,6 +248,7 @@ function App() {
             break;
 
           case 'stage3_start':
+            setStep(2, 'active');
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
@@ -242,6 +258,7 @@ function App() {
             break;
 
           case 'stage3_complete':
+            setStep(2, 'done');
             setCurrentConversation((prev) => {
               const messages = [...prev.messages];
               const lastMsg = messages[messages.length - 1];
@@ -258,6 +275,7 @@ function App() {
 
           case 'complete':
             // Stream complete, reload conversations list + refresh credit balance
+            setCouncilProgress((prev) => (prev ? { ...prev, steps: ['done', 'done', 'done'], done: true } : prev));
             loadConversations();
             refresh();
             setIsLoading(false);
@@ -265,6 +283,13 @@ function App() {
 
           case 'error':
             console.error('Stream error:', event.message);
+            setCouncilProgress((prev) => {
+              if (!prev) return prev;
+              const steps = [...prev.steps];
+              const i = steps.findIndex((s) => s !== 'done');
+              if (i >= 0) steps[i] = 'error';
+              return { ...prev, steps, errorStep: i };
+            });
             showToast(event.message || 'An error occurred', 'error');
             if (event.refunded) refresh();
             setIsLoading(false);
@@ -281,6 +306,8 @@ function App() {
         ...prev,
         messages: prev.messages.slice(0, -2),
       }));
+      // Clear the progress bar on a hard failure (request rejected, 402, network).
+      setCouncilProgress(null);
       setIsLoading(false);
       if (error.status === 402) {
         const d = error.detail || {};
@@ -366,6 +393,7 @@ function App() {
           onDocumentUpload={handleDocumentUpload}
           onDocumentDelete={handleDocumentDelete}
           onDocumentToggle={handleDocumentToggle}
+          councilProgress={councilProgress}
         />
       )}
 

@@ -216,3 +216,19 @@ Non-admin users now keep a PERSONAL council selection without touching the admin
 - frontend/src/components/Settings.jsx: loadConfiguration routes admin->getConfig / non-admin->getUserCouncil (+ isCustomCouncil state). handleSaveModels routes admin->updateConfig / non-admin->updateUserCouncil. handleResetCouncil (DELETE) shown only to non-admins with a custom council (btn-reset-council). Min raised to >=2 (Save disabled < 2). Catalogue-mutating controls (Add Custom Model, catalog-edit/delete-btn-*, council inline edit-model-btn-*) gated to isAdmin; remove-model-btn-* stays for all.
 Storage: Postgres app_settings JSONB, per-user keys. Persistent across restarts.
 Note: admin hitting PUT /api/config/council writes harmless unused per-user state (UI never does this).
+
+---
+## Progress Bar + OpenRouter Key Status & Cost Analytics — 2026-06 (branch target: master_herokuVersion_v23)
+Verified: testing_agent iter_24 — backend 9/9 new (tests/test_openrouter_and_costs.py) + 17/17 regression, frontend 100%. No issues.
+Feature 1 — per-stage council progress bar (frontend-only, driven by existing SSE):
+- frontend/src/components/CouncilProgress.jsx + .css: 3-step stepper (Stage1 Individual / Stage2 Peer review / Stage3 Chairman). States pending/active/done/error; active = animated indeterminate sweep (keeps moving during SSE : keep-alive heartbeats); done=green; error=red; percent shown.
+- frontend/src/App.jsx: councilProgress state; set on send + reset; SSE handler maps stageN_start->active, stageN_complete->done, complete->100%/done, error->first non-done step becomes error; hard catch (402/network)->null; reset on conversation select/create. Passed to ChatInterface.
+- frontend/src/components/ChatInterface.jsx: renders <CouncilProgress> at top of messages-container (above answer area).
+Feature 2 — admin OpenRouter key status + per-run cost (admin-only):
+- backend/openrouter.py: query_model returns usage.cost + total_tokens (adds harmless usage:{include:true}; reads cost from body regardless).
+- backend/council.py: stage1/2/3 results carry cost/tokens; generate_conversation_title(return_usage=True)->(title,cost,tokens,model); aggregate_run_cost(...) -> (breakdown{model:{cost,tokens}}, total_cost, total_tokens), missing cost treated as 0 (never crashes).
+- backend/db.py: RunCost model (run_costs table, total_cost stored as Text for precision, breakdown JSONB) + record_run_cost(); init_db creates indexes ix_run_costs_created_at (DESC) + ix_run_costs_user_id.
+- backend/main.py: _record_run_cost_safe() best-effort after BOTH message endpoints; both endpoints capture title usage; PUT /api/config calls admin.bust_key_status_cache() when openrouter_api_key changes.
+- backend/admin.py: GET /api/admin/openrouter/key-status (Depends get_current_admin) calls GET https://openrouter.ai/api/v1/key with persisted key; returns usage/limit/limit_remaining/is_free_tier/usage_percent; {configured:false} no key, {configured:true,valid:false} on 401; cache _KEY_STATUS_CACHE keyed BY KEY VALUE, TTL 180s, refresh=true bypass; never leaks key. GET /api/admin/openrouter/cost-summary -> {total_cost,total_tokens,total_runs,last_run,per_model[]}.
+- frontend/src/pages/Admin.jsx: new 'OpenRouter' tab (admin-tab-openrouter) — key cards, usage bar, app cost cards, per-model table, Refresh button. frontend/src/api.js: adminApi.openrouterKeyStatus(refresh) + openrouterCostSummary().
+ENV NOTE: Postgres is volatile & NOT supervisor-managed. If backend 502/DB-refused: `pg_ctlcluster 15 main start` (or pg_ctl on /var/lib/postgresql/15/main), ensure db llm_council exists, `ALTER USER postgres WITH PASSWORD 'postgres'`, then restart backend.

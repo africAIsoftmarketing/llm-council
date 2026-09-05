@@ -567,4 +567,6 @@ export const adminApi = {
   getSettings: () => jreq('/api/admin/settings'),
   updateSetting: (key, value) => jreq(`/api/admin/settings/${key}`, { method: 'PUT', body: JSON.stringify({ value }) }),
   stats: () => jreq('/api/admin/stats'),
+  openrouterKeyStatus: (refresh = false) => jreq(`/api/admin/openrouter/key-status?refresh=${refresh ? 'true' : 'false'}`),
+  openrouterCostSummary: () => jreq('/api/admin/openrouter/cost-summary'),
 };

@@ -252,6 +252,9 @@ async def query_model(
     payload = {
         "model": model,
         "messages": messages,
+        # Usage Accounting: cost is returned inline in the response body regardless,
+        # but we set the (now-optional) flag explicitly. We read usage.cost below.
+        "usage": {"include": True},
     }
 
     try:
@@ -265,11 +268,14 @@ async def query_model(
 
             data = response.json()
             message = data['choices'][0]['message']
+            usage = data.get('usage') or {}
 
             return {
                 'content': message.get('content'),
                 'reasoning_details': message.get('reasoning_details'),
-                'source': 'openrouter'
+                'source': 'openrouter',
+                'cost': usage.get('cost'),
+                'tokens': usage.get('total_tokens'),
             }
 
     except Exception as e:

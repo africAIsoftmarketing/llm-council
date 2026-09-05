@@ -1,0 +1,37 @@
+{
+  "summary": "Tested Feature 1 (per-stage CouncilProgress bar) and Feature 2 (Admin OpenRouter tab: key-status + cost-summary + cache invalidation). Backend: 9/9 new tests + 17/17 regression tests (test_user_council.py) all green. Frontend: Admin > OpenRouter tab renders correctly (or-invalid banner, cost cards, or-no-cost empty state, or-refresh-button works without full reload). CouncilProgress bar appears above answer area, stage1 transitions pending -> active -> error on invalid key, percent stays at 0%, no console/layout errors, error toast shows refund message. Reset on new conversation clears the bar (progress becomes null).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "First-time login", "issues": ["Terms & Conditions modal blocks input for automated tests; not a bug but note that any e2e must accept T&C once per user account before the chat becomes usable."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_openrouter_and_costs.py",
+    "/app/backend/tests/test_user_council.py",
+    "/app/test_reports/pytest/openrouter_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "admin.py: _KEY_STATUS_CACHE only stores entries on 401 and 200 paths; other non-200 responses (e.g. 429/5xx) are not cached which is a reasonable choice.",
+    "admin.py: openrouter_key_status never returns the raw key value in responses — verified via test_status_shape_never_leaks_key.",
+    "db.py: RunCost.total_cost is stored as Text for numeric precision; public_dict() casts to float which is fine for JSON responses.",
+    "main.py: PUT /api/config correctly invokes bust_key_status_cache() when openrouter_api_key is updated; regression test test_cache_invalidation_on_key_change confirms next call is a cache miss.",
+    "main.py stream handler: pipeline failure yields an 'error' SSE event with refunded:true and no traceback string — good UX. Credits shown in header (40) after refund could be a client-side cache; the DB refund happens server-side (verified via backend test)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_openrouter_and_costs.py"
+  ],
+  "success_rate": {"backend": "100% (9/9 new + 17/17 regression)", "frontend": "100% (all requested selectors verified: admin-tab-openrouter, or-invalid, stat-cost-total/last-run/runs, or-no-cost, or-refresh-button, council-progress, council-step-stage1/2/3, council-progress-percent; stage1 active->error path verified; reset verified)"},
+  "test_credentials": "Dev-login admin: somecedric@gmail.com; regular user: TEST_or_<random>@example.com (created on the fly).",
+  "seed_data_creation": "Backend test grants 50 credits to admin via /api/admin/users/{id}/credits for the pipeline-failure test; cleans up the conversation. No permanent seed data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Both new features work end-to-end. Cache invalidation on key change confirmed by comparing cached:true after two consecutive calls with the same key, then cached:false immediately after a PUT /api/config with a new key. Graceful cost aggregation confirmed: when the pipeline fails before any assistant message, total_runs in cost-summary is unchanged (no garbage row written) and the SSE error event carries refunded:true and a clean human-readable message. The credit count shown in the header may lag slightly after a refund; the DB row is correct (see test test_stream_error_and_refund_no_traceback).",
+  "rca of the issue": "N/A — no issues found."
+}

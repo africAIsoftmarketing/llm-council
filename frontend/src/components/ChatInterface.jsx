@@ -4,6 +4,7 @@ import Stage1 from './Stage1';
 import Stage2 from './Stage2';
 import Stage3 from './Stage3';
 import DocumentPanel from './DocumentPanel';
+import CouncilProgress from './CouncilProgress';
 import './ChatInterface.css';
 
 export default function ChatInterface({
@@ -16,6 +17,7 @@ export default function ChatInterface({
   onDocumentUpload,
   onDocumentDelete,
   onDocumentToggle,
+  councilProgress,
 }) {
   const [input, setInput] = useState('');
   const [showDocuments, setShowDocuments] = useState(false);
@@ -190,6 +192,8 @@ export default function ChatInterface({
       )}
 
       <div className="messages-container">
+        {/* Live per-stage council progress (driven by SSE events) */}
+        {councilProgress && <CouncilProgress progress={councilProgress} />}
         {conversation.messages.length === 0 ? (
           <div className="empty-state">
             <h2>Start a conversation</h2>

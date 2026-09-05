@@ -19,7 +19,7 @@ try:
     from .council import (
         run_full_council, generate_conversation_title, 
         stage1_collect_responses, stage2_collect_rankings, 
-        stage3_synthesize_final, calculate_aggregate_rankings
+        stage3_synthesize_final, calculate_aggregate_rankings, aggregate_run_cost
     )
     from .config_manager import (
         get_config, update_config, validate_api_key, get_available_models,
@@ -37,7 +37,7 @@ except ImportError:
     from council import (
         run_full_council, generate_conversation_title, 
         stage1_collect_responses, stage2_collect_rankings, 
-        stage3_synthesize_final, calculate_aggregate_rankings
+        stage3_synthesize_final, calculate_aggregate_rankings, aggregate_run_cost
     )
     from config_manager import (
         get_config, update_config, validate_api_key, get_available_models,
@@ -110,6 +110,24 @@ async def _refund(user_id, cost: int, conversation_id: str):
         await credit_user(session, user_id, cost, "refund", conversation_id=conversation_id,
                           reason="Remboursement échec pipeline")
         await session.commit()
+
+
+async def _record_run_cost_safe(user_id, conversation_id, stage1_results, stage2_results,
+                                stage3_result, title_model=None, title_cost=None, title_tokens=None):
+    """Persist the real OpenRouter cost for a council run. Best-effort: any failure
+    (including a provider that omitted usage.cost) is swallowed and logged."""
+    try:
+        breakdown, total_cost, total_tokens = aggregate_run_cost(
+            stage1_results=stage1_results,
+            stage2_results=stage2_results,
+            stage3_result=stage3_result,
+            title_model=title_model, title_cost=title_cost, title_tokens=title_tokens,
+        )
+        async with SessionLocal() as session:
+            await _db.record_run_cost(session, user_id, conversation_id, breakdown, total_cost, total_tokens)
+            await session.commit()
+    except Exception as e:
+        print(f"[run_cost] failed to record run cost (non-fatal): {e}")
 
 
 async def _get_catalogue():
@@ -377,6 +395,13 @@ async def update_configuration(request: ConfigUpdateRequest, user=Depends(get_cu
     apply_config_to_env()
     if updates.get("openrouter_api_key"):
         await settings_store.set_setting("openrouter_api_key", updates["openrouter_api_key"], updated_by=user.id)
+        # Invalidate the cached OpenRouter key-status so the admin panel reflects the
+        # new key immediately (not after the ~3-min TTL).
+        try:
+            from .admin import bust_key_status_cache
+        except ImportError:
+            from admin import bust_key_status_cache
+        bust_key_status_cache()
     if updates.get("council_models"):
         await settings_store.set_setting("council_models", updates["council_models"])
     if updates.get("chairman_model"):
@@ -421,11 +446,6 @@ async def update_user_council_endpoint(request: UserCouncilRequest, user=Depends
     models = [m for m in (request.council_models or []) if not (m in seen or seen.add(m))]
     if len(models) < 2:
         raise HTTPException(status_code=400, detail="Please select at least 2 council models")
-    # Validate the models exist in the catalogue.
-    catalogue_ids = {m["id"] for m in await _get_catalogue()}
-    unknown = [m for m in models if m not in catalogue_ids]
-    if unknown:
-        raise HTTPException(status_code=400, detail=f"Unknown model(s): {', '.join(unknown)}")
     chairman = request.chairman_model or models[0]
     if chairman not in models:
         raise HTTPException(status_code=400, detail="The chairman must be one of the selected council models")
@@ -776,8 +796,11 @@ My question: {request.content}"""
     storage.add_user_message(conversation_id, request.content)
 
     # If this is the first message, generate a title
+    title_model = title_cost = title_tokens = None
     if is_first_message:
-        title = await generate_conversation_title(request.content, advanced_config=request.advanced)
+        title, title_cost, title_tokens, title_model = await generate_conversation_title(
+            request.content, advanced_config=request.advanced, return_usage=True
+        )
         storage.update_conversation_title(conversation_id, title)
 
     try:
@@ -806,6 +829,10 @@ My question: {request.content}"""
         stage2_results,
         stage3_result
     )
+
+    # Record real OpenRouter cost for this run (best-effort; never blocks the response).
+    await _record_run_cost_safe(user.id, conversation_id, stage1_results, stage2_results,
+                                stage3_result, title_model, title_cost, title_tokens)
 
     # Return the complete response with metadata
     return {
@@ -883,7 +910,7 @@ My question: {request.content}"""
             title_task = None
             if is_first_message:
                 title_task = asyncio.create_task(
-                    generate_conversation_title(request.content, advanced_config=request.advanced)
+                    generate_conversation_title(request.content, advanced_config=request.advanced, return_usage=True)
                 )
 
             # Stage 1 (long-running: emit heartbeats while models respond)
@@ -931,9 +958,10 @@ My question: {request.content}"""
             yield f"data: {json.dumps({'type': 'stage3_complete', 'data': stage3_result})}\n\n"
 
             # Title
+            title_model = title_cost = title_tokens = None
             if title_task:
                 try:
-                    title = await title_task
+                    title, title_cost, title_tokens, title_model = await title_task
                     storage.update_conversation_title(conversation_id, title)
                     yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': title}})}\n\n"
                 except Exception as title_err:
@@ -943,6 +971,10 @@ My question: {request.content}"""
                     yield f"data: {json.dumps({'type': 'title_complete', 'data': {'title': fallback}})}\n\n"
 
             storage.add_assistant_message(conversation_id, stage1_results, stage2_results, stage3_result)
+
+            # Record real OpenRouter cost for this run (best-effort; never blocks the stream).
+            await _record_run_cost_safe(user.id, conversation_id, stage1_results, stage2_results,
+                                        stage3_result, title_model, title_cost, title_tokens)
             yield f"data: {json.dumps({'type': 'complete'})}\n\n"
 
         except Exception as e:

@@ -71,7 +71,9 @@ async def stage1_collect_responses(user_query: str, vision_images: list = None, 
         if response is not None:  # Only include successful responses
             stage1_results.append({
                 "model": model,
-                "response": response.get('content', '')
+                "response": response.get('content', ''),
+                "cost": response.get('cost'),
+                "tokens": response.get('tokens'),
             })
 
     return stage1_results
@@ -154,7 +156,9 @@ Now provide your evaluation and ranking:"""
             stage2_results.append({
                 "model": model,
                 "ranking": full_text,
-                "parsed_ranking": parsed
+                "parsed_ranking": parsed,
+                "cost": response.get('cost'),
+                "tokens": response.get('tokens'),
             })
 
     return stage2_results, label_to_model
@@ -222,7 +226,9 @@ Provide a clear, well-reasoned final answer that represents the council's collec
 
     return {
         "model": chairman_model,
-        "response": response.get('content', '')
+        "response": response.get('content', ''),
+        "cost": response.get('cost'),
+        "tokens": response.get('tokens'),
     }
 
 
@@ -307,7 +313,7 @@ def calculate_aggregate_rankings(
     return aggregate
 
 
-async def generate_conversation_title(user_query: str, advanced_config: dict = None) -> str:
+async def generate_conversation_title(user_query: str, advanced_config: dict = None, return_usage: bool = False):
     """
     Generate a short title for a conversation based on the first user message.
     Uses the first available model from the council configuration, respecting
@@ -316,9 +322,10 @@ async def generate_conversation_title(user_query: str, advanced_config: dict = N
     Args:
         user_query: The first user message
         advanced_config: Advanced configuration from frontend
+        return_usage: When True, returns (title, cost, tokens, model) instead of just title.
 
     Returns:
-        A short title (3-5 words)
+        A short title (3-5 words), or a tuple when return_usage is True.
     """
     title_prompt = f"""Generate a very short title (3-5 words maximum) that summarizes the following question.
 The title should be concise and descriptive. Do not use quotes or punctuation in the title.
@@ -344,11 +351,12 @@ Title:"""
         response = await query_model(title_model, messages, timeout=title_timeout, advanced_config=advanced_config)
     else:
         # Default: use gemini-2.5-flash via OpenRouter (fast and cheap)
-        response = await query_model("google/gemini-2.5-flash", messages, timeout=30.0)
+        title_model = "google/gemini-2.5-flash"
+        response = await query_model(title_model, messages, timeout=30.0)
 
     if response is None:
         # Fallback to a generic title
-        return "New Conversation"
+        return ("New Conversation", None, None, title_model) if return_usage else "New Conversation"
 
     title = response.get('content', 'New Conversation').strip()
 
@@ -359,7 +367,48 @@ Title:"""
     if len(title) > 50:
         title = title[:47] + "..."
 
+    if return_usage:
+        return (title, response.get('cost'), response.get('tokens'), title_model)
     return title
+
+
+def aggregate_run_cost(stage1_results=None, stage2_results=None, stage3_result=None,
+                       title_model=None, title_cost=None, title_tokens=None):
+    """Aggregate real OpenRouter cost/tokens across a whole council run.
+
+    Returns (breakdown, total_cost, total_tokens) where breakdown maps a model id
+    to {'cost': float, 'tokens': int}. Missing cost (provider omitted usage.cost)
+    is treated as 0 and never crashes."""
+    breakdown = {}
+
+    def _add(model, cost, tokens):
+        if not model:
+            return
+        slot = breakdown.setdefault(model, {"cost": 0.0, "tokens": 0})
+        try:
+            slot["cost"] += float(cost) if cost is not None else 0.0
+        except (TypeError, ValueError):
+            pass
+        try:
+            slot["tokens"] += int(tokens) if tokens is not None else 0
+        except (TypeError, ValueError):
+            pass
+
+    for r in (stage1_results or []):
+        _add(r.get("model"), r.get("cost"), r.get("tokens"))
+    for r in (stage2_results or []):
+        _add(r.get("model"), r.get("cost"), r.get("tokens"))
+    if stage3_result:
+        _add(stage3_result.get("model"), stage3_result.get("cost"), stage3_result.get("tokens"))
+    if title_model:
+        _add(title_model, title_cost, title_tokens)
+
+    total_cost = round(sum(v["cost"] for v in breakdown.values()), 8)
+    total_tokens = sum(v["tokens"] for v in breakdown.values())
+    # Round per-model cost for cleaner storage/display.
+    for v in breakdown.values():
+        v["cost"] = round(v["cost"], 8)
+    return breakdown, total_cost, total_tokens
 
 
 async def run_full_council(user_query: str, vision_images: list = None, advanced_config: dict = None) -> Tuple[List, List, Dict, Dict]:
