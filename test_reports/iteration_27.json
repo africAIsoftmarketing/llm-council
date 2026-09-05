@@ -1,0 +1,19 @@
+{
+  "summary": "Verified /legal page scroll fix. Tested EN & FR across Desktop 1920x800, Short Desktop 1280x600, Mobile 390x740. In every case .legal-page is scrollable (scrollHeight > clientHeight), no horizontal overflow, and the final contact email (llmcouncilsupport@africaisoft.africa, data-testid=legal-contact-email) is reachable and visible in viewport after scrolling to bottom. Back button (legal-back-btn) and language switcher (language-switcher, lang-en/lang-fr) are visible and functional. Regression check: main app #root remains height:100vh overflow:hidden — fix scoped only to .legal-page as intended.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100%"},
+  "seed_data_creation": "",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "/legal scroll fix validated. Measurements: Desktop 1920x800 scrollHeight=2432 clientHeight=800; Short Desktop 1280x600 scrollHeight=2432; Mobile 390x740 scrollHeight=4571. Horizontal overflow: none in all cases. Email visible in viewport after scroll-to-bottom in EN and FR.",
+  "rca of the issue": "Original bug: #root has height:100vh + overflow:hidden (needed by chat app); .legal-page used min-height:100vh so its overflow was clipped by parent with no scrollbar. Fix in Legal.css: .legal-page now uses height:100vh + overflow-y:auto + overflow-x:hidden + -webkit-overflow-scrolling:touch to create an internal scroll container. Verified working."
+}

@@ -1,8 +1,11 @@
 .legal-page {
-  min-height: 100vh;
+  height: 100vh;
+  box-sizing: border-box;
   background: #f4f7f4;
   padding: 40px 20px;
   overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 .legal-container {
   max-width: 760px;
