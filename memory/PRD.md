@@ -243,3 +243,13 @@ Verified: testing_agent iter_25 — frontend 100% (all 10 checks). Login-page fo
 5) i18n: react-i18next + i18next + i18next-browser-languagedetector. frontend/src/i18n/{index.js,en.json,fr.json}. BRAND const kept identical both langs. LanguageSwitcher.jsx (EN/FR) in header + login + terms + legal. Persist localStorage key 'app_lang', default browser lang, fallback en, live switch no reload. Imported in main.jsx. Wired t() across: AppHeader, AppFooter, Sidebar, ChatInterface, HowItWorks, CouncilProgress, DocumentPanel, Stage1/2/3, TermsModal, Legal, Login, Credits, Settings (full), Admin (tabs + OpenRouter tab). api.js adminApi unchanged.
 NOTE: header nav label "Council" intentionally identical in both languages (brand). No backend changes this task.
 ENV: Postgres volatile/not-supervised — restart via `pg_ctlcluster 15 main start` + ALTER USER postgres password 'postgres' + ensure db llm_council + restart backend if 502.
+
+---
+## FIX: Heroku servait un build figé périmé — 2026-09 (iter_26, frontend 100%)
+Symptôme (déployé Heroku): "no localization, logo didn't change" — page /login montrait encore "LLM Council" + ancien logo balance, alors que l'aperçu Emergent (Vite dev) était correct.
+Cause: le repo commite `frontend/dist` (cf .gitignore ligne 21 "frontend/dist is intentionally committed so Heroku serves the built SPA"). Le backend (backend/main.py get_frontend_path) sert frontend/dist. Après édition de frontend/src/*, le dist n'avait jamais été régénéré → Heroku servait l'ancien build (title "frontend", "LLM Council", pas d'i18n).
+Correctif:
+- Ajout de frontend/.env.production (REACT_APP_BACKEND_URL vide + VITE_BACKEND_URL vide) => build de prod en SAME-ORIGIN (API_BASE=''), comme l'ancien build qui encodait /api. (le .env dev garde l'URL d'aperçu, protégé, inchangé).
+- Régénéré frontend/dist via `yarn build`. Nouveau dist: <title>AI Delphi Council</title>, logo-product bundlé, i18n FR/EN ("Bienvenue sur AI Delphi Council", "Comment ça marche"), lien www.africaisoft.africa, AUCUNE URL preview encodée.
+Vérif: testing_agent iter_26 a servi le dist (serve -s) à l'URL d'aperçu => 100%, aucun "LLM Council", aucun ancien logo.
+ACTION UTILISATEUR: "Save to Github" (pousse le nouveau dist + .env.production) puis REDÉPLOYER cette branche sur Heroku. À CHAQUE futur changement front, il FAUT régénérer frontend/dist avant de pousser (sinon Heroku reste figé).

@@ -1,0 +1,31 @@
+{
+  "summary": "Verified the freshly rebuilt PRODUCTION frontend/dist served at the preview URL. Rebrand to 'AI Delphi Council', new product logo image, EN/FR language switcher, French localization (login + dashboard), persistence via localStorage, dev-login flow, terms modal, welcome screen, How-it-works 4 cards, and footer AfricAIsoft lockup all render correctly. No 'LLM Council' text and no scale/balance emoji anywhere. Only console errors are expected 401s on unauthenticated /api/auth/me calls.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_features": [
+    "Login page shows brand text 'AI Delphi Council' and product logo <img src=/assets/logo-product-*.jpg alt='AI Delphi Council'> (no scale emoji, no 'LLM Council').",
+    "Language switcher visible on /login with data-testid=language-switcher, lang-en, lang-fr.",
+    "FR click switches login card to 'Se connecter avec Google' and 'Accès développeur (aperçu)' live; EN click reverts to 'Sign in with Google' / 'Developer access (preview)'.",
+    "Preference persists across reload (localStorage app_lang=fr; body still French after reload).",
+    "Dev-login flow works: dev-toggle -> dev-email-input (bob@example.com) -> dev-login-button; terms-modal accepted via checkbox + accept button.",
+    "Post-login header shows product logo + 'AI Delphi Council' + EN/FR switcher; welcome screen shows 'Welcome to AI Delphi Council'; how-it-works section (data-testid=how-it-works) with 4 cards (Input/Enrich/Process/Output).",
+    "Footer shows '© 2026 AI Delphi Council' and 'by AfricAIsoft' lockup with logo image.",
+    "Toggling FR post-login translates whole UI live: 'Bienvenue sur AI Delphi Council', 'Comment ça marche', 'Nouvelle conversation', 'Discussion', 'Paramètres', 'crédits', 'Acheter des crédits'.",
+    "No blank screen; only expected 401 (pre-auth /api/auth/me) console errors; SPA loads and navigates on the production build."
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "test_credentials": "Dev login: bob@example.com via dev-toggle UI",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Preview URL is currently serving the static production build (frontend/dist via serve -s), same-origin /api. i18n rebrand verified end-to-end on the deployed artifact.",
+  "rca of the issue": "Original bug ('no localization / logo unchanged') was due to a stale committed frontend/dist that the production server was serving. Main agent rebuilt frontend/dist from current source; this run confirms the fresh build resolves the issue on the exact deployed artifact."
+}
