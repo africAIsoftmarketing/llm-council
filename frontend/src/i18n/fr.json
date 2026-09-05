@@ -68,7 +68,7 @@
 
   "how": {
     "title": "Comment ça marche",
-    "subtitle": "De votre question à une réponse synthétisée et prête à décider, en quatre étapes.",
+    "subtitle": "De votre question à une réponse synthétisée et prête à l'emploi pour décider, en quatre étapes.",
     "input": { "tag": "Entrée", "title": "Apportez votre matière", "desc": "Déposez des documents (PDF, Word, diapositives), des images (captures d’écran, schémas) ou une question en langage courant, aussi complexe soit-elle. Tout ce que vous fournissez est traité comme contexte de travail, pas comme bruit de fond." },
     "enrich": { "tag": "Enrichissement", "title": "Ajoutez le bon contexte", "desc": "AI Delphi Council détecte votre intention, décide si une recherche est nécessaire et intègre du contexte en temps réel ou de référence lorsque votre question dépend de preuves récentes — détection d’intention, recherche web et recherche approfondie avant toute synthèse." },
     "process": { "tag": "Traitement", "title": "Délibération du conseil", "desc": "Trois étapes : chaque modèle répond d’abord indépendamment, puis évalue et classe les réponses de façon anonyme, et enfin un président (chairman) produit une synthèse qui préserve consensus, désaccords et réserves." },
