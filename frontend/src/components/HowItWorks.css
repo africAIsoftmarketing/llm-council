@@ -15,8 +15,8 @@
 .hiw-subtitle {
   font-size: 14px;
   color: #647564;
+  width: min(560px, 100%);
   margin: 0 auto;
-  max-width: 560px;
   text-align: center;
   text-wrap: balance;
 }
