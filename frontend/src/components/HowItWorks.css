@@ -17,6 +17,8 @@
   color: #647564;
   margin: 0 auto;
   max-width: 560px;
+  text-align: center;
+  text-wrap: balance;
 }
 .hiw-grid {
   display: grid;
