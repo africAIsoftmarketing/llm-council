@@ -4,7 +4,13 @@
   margin: 28px auto 8px;
   text-align: left;
 }
-.hiw-head { margin-bottom: 20px; text-align: center; }
+.hiw-head {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
 .hiw-title {
   font-size: 20px;
   font-weight: 800;
@@ -15,8 +21,8 @@
 .hiw-subtitle {
   font-size: 14px;
   color: #647564;
-  width: min(560px, 100%);
-  margin: 0 auto;
+  max-width: 560px;
+  margin: 0;
   text-align: center;
   text-wrap: balance;
 }
