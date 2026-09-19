@@ -327,6 +327,24 @@ export const api = {
     return response.json();
   },
 
+  // ===== Cost Estimate API =====
+
+  /**
+   * Pre-compute the credit cost of the next message. No debit performed.
+   */
+  async estimateCost(includeDocuments = true) {
+    const response = await fetch(`${API_BASE}/api/cost/estimate`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ include_documents: includeDocuments }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to estimate cost');
+    }
+    return response.json();
+  },
+
   // ===== Conversation APIs =====
 
   /**

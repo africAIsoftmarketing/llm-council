@@ -1,10 +1,17 @@
 {
   "brand": "AI Delphi Council",
   "tagline": "A council of multiple AIs deliberates, ranks and synthesizes the best answer.",
-  "lang": { "en": "EN", "fr": "FR", "switch": "Language", "english": "English", "french": "Français" },
-
-  "nav": { "council": "Council", "admin": "Administration" },
-
+  "lang": {
+    "en": "EN",
+    "fr": "FR",
+    "switch": "Language",
+    "english": "English",
+    "french": "Français"
+  },
+  "nav": {
+    "council": "Council",
+    "admin": "Administration"
+  },
   "header": {
     "buyCredits": "Buy credits",
     "creditsLabel": "credits",
@@ -12,7 +19,6 @@
     "logoutTitle": "Sign out",
     "logoAlt": "AI Delphi Council"
   },
-
   "footer": {
     "copy": "© {{year}} AI Delphi Council",
     "by": "by AfricAIsoft",
@@ -20,7 +26,6 @@
     "legal": "Legal notice",
     "privacy": "Privacy"
   },
-
   "sidebar": {
     "ready": "Ready",
     "notConfigured": "Not configured",
@@ -37,7 +42,6 @@
     "deleteConfirmTitle": "Click again to confirm",
     "deleteTitle": "Delete conversation"
   },
-
   "chat": {
     "configRequired": "Configuration required",
     "configRequiredDesc": "Please configure your OpenRouter API key to start using the AI Delphi Council.",
@@ -65,26 +69,50 @@
     "placeholder": "Ask your question… (Shift+Enter for a new line, Enter to send)",
     "send": "Send"
   },
-
   "how": {
     "title": "How it works",
     "subtitle": "From your question to a synthesized, decision-ready answer in four stages.",
-    "input": { "tag": "Input", "title": "Bring your material", "desc": "Drop in documents (PDF, Word, slides), images (screenshots, diagrams) or a plain-language question of any complexity. Whatever you provide is treated as working context, not background noise." },
-    "enrich": { "tag": "Enrich", "title": "Add the right context", "desc": "AI Delphi Council detects your intent, decides whether fresh research is needed, and pulls in real-time or reference context when your question depends on current evidence — intent detection, web search and deep research before any synthesis." },
-    "process": { "tag": "Process", "title": "Council deliberation", "desc": "Three stages: each model first answers independently, then reviews and ranks the answers anonymously, and finally a chairman synthesizes a response that preserves consensus, dissent and caveats." },
-    "output": { "tag": "Output", "title": "A synthesized answer", "desc": "You get a ranked, synthesized answer instead of a single-model guess — complete with confidence and disagreement signals and export-ready Word, PDF, PowerPoint or spreadsheet artifacts on request." }
+    "input": {
+      "tag": "Input",
+      "title": "Bring your material",
+      "desc": "Drop in documents (PDF, Word, slides), images (screenshots, diagrams) or a plain-language question of any complexity. Whatever you provide is treated as working context, not background noise."
+    },
+    "enrich": {
+      "tag": "Enrich",
+      "title": "Add the right context",
+      "desc": "AI Delphi Council detects your intent, decides whether fresh research is needed, and pulls in real-time or reference context when your question depends on current evidence — intent detection, web search and deep research before any synthesis."
+    },
+    "process": {
+      "tag": "Process",
+      "title": "Council deliberation",
+      "desc": "Three stages: each model first answers independently, then reviews and ranks the answers anonymously, and finally a chairman synthesizes a response that preserves consensus, dissent and caveats."
+    },
+    "output": {
+      "tag": "Output",
+      "title": "A synthesized answer",
+      "desc": "You get a ranked, synthesized answer instead of a single-model guess — complete with confidence and disagreement signals and export-ready Word, PDF, PowerPoint or spreadsheet artifacts on request."
+    }
   },
-
   "progress": {
     "inSession": "Council in session…",
     "complete": "Council complete",
     "stopped": "Council stopped",
-    "stage1": { "label": "Stage 1", "sub": "Individual responses" },
-    "stage2": { "label": "Stage 2", "sub": "Peer review / ranking" },
-    "stage3": { "label": "Stage 3", "sub": "Chairman synthesis" }
+    "stage1": {
+      "label": "Stage 1",
+      "sub": "Individual responses"
+    },
+    "stage2": {
+      "label": "Stage 2",
+      "sub": "Peer review / ranking"
+    },
+    "stage3": {
+      "label": "Stage 3",
+      "sub": "Chairman synthesis"
+    }
   },
-
-  "stage1": { "title": "Stage 1: Individual responses" },
+  "stage1": {
+    "title": "Stage 1: Individual responses"
+  },
   "stage2": {
     "title": "Stage 2: Peer rankings",
     "rawEval": "Raw evaluations",
@@ -120,7 +148,6 @@
     "councilMembers": "Council members",
     "aggregateRanking": "Aggregate ranking"
   },
-
   "documents": {
     "title": "Documents",
     "uploading": "Uploading…",
@@ -142,7 +169,6 @@
     "noPreview": "No preview available",
     "activeOf": "{{active}} of {{total}} active"
   },
-
   "login": {
     "google": "Sign in with Google",
     "devToggle": "Developer access (preview)",
@@ -152,7 +178,6 @@
     "devDisabled": "Developer mode is disabled.",
     "failed": "Sign-in failed"
   },
-
   "credits": {
     "title": "Buy credits",
     "subtitle": "Every council request consumes credits. Top up your account below.",
@@ -169,16 +194,36 @@
     "paymentConfirmed": "Payment confirmed — balance: {{credits}} credits",
     "captureFailed": "Payment capture failed",
     "paypalError": "PayPal error",
-    "kind": { "purchase": "Purchase", "usage": "Usage", "admin_grant": "Admin grant", "refund": "Refund" }
+    "kind": {
+      "purchase": "Purchase",
+      "usage": "Usage",
+      "admin_grant": "Admin grant",
+      "refund": "Refund"
+    }
   },
-
   "creditsModal": {
     "title": "Not enough credits",
     "body": "This request requires {{required}} credits, but your balance is {{balance}}.",
     "cancel": "Cancel",
     "buy": "Buy credits"
   },
-
+  "costPreview": {
+    "title": "Cost Estimate",
+    "costLabel": "Cost of this request",
+    "credits": "credits",
+    "costTypeStandard": "standard",
+    "costTypeVision": "vision",
+    "balanceLabel": "Current balance",
+    "balanceAfterLabel": "Balance after execution",
+    "councilLabel": "Council",
+    "modelsCount": "{{count}} model(s)",
+    "chairmanLabel": "Chairman",
+    "confirm": "Confirm and send",
+    "modifyConfig": "Modify configuration",
+    "cancel": "Cancel",
+    "insufficientBalance": "Insufficient balance",
+    "buyCredits": "Buy credits"
+  },
   "toast": {
     "createConversationFailed": "Failed to create conversation",
     "conversationDeleted": "Conversation deleted",
@@ -191,7 +236,6 @@
     "deleteDocumentFailed": "Failed to delete document",
     "toggleDocumentFailed": "Failed to toggle document"
   },
-
   "terms": {
     "modalTitle": "Terms & Conditions",
     "checkbox": "I have read and accept the Terms of Use and the Data Protection conditions.",
@@ -201,18 +245,54 @@
     "contactHeading": "Contact",
     "contactIntro": "For any question about these terms or your data, contact us at",
     "sections": {
-      "acceptance": { "h": "1. Acceptance of terms", "p": "By accessing or using AI Delphi Council (the \"Service\"), you agree to be bound by these Terms of Use. If you do not agree, you must not use the Service. These terms may be updated from time to time, and continued use after changes constitutes acceptance of the revised terms." },
-      "service": { "h": "2. Description of the service", "p": "AI Delphi Council is an AI multi-model deliberation platform. It routes your queries to several third-party large language models via OpenRouter, then collects independent answers, runs an anonymous peer review and ranking, and produces a chairman synthesis. The Service is an orchestration layer and does not itself create the underlying model outputs." },
-      "accounts": { "h": "3. Accounts and eligibility", "p": "You must provide accurate account information and are responsible for activity under your account. You must be of the age of majority in your jurisdiction and legally able to enter into these terms. You are responsible for keeping your credentials confidential." },
-      "acceptableUse": { "h": "4. Acceptable use", "p": "You agree not to use the Service to submit unlawful, harmful, abusive, infringing or deceptive content; to attempt to disrupt, overload or reverse-engineer the Service; to violate the rights of others; or to generate content prohibited by the policies of the underlying AI providers. Credits consumed per council request are governed by the pricing displayed in your account." },
-      "providers": { "h": "5. Third-party AI providers & no guarantee of accuracy", "p": "Outputs are generated by third-party AI models and are inherently probabilistic. They may be inaccurate, incomplete, biased or out of date. Outputs are provided for informational purposes only and do not constitute professional, legal, financial or medical advice. You are solely responsible for reviewing and verifying any output before relying on it." },
-      "ip": { "h": "6. Intellectual property", "p": "The Service, its interface, branding and software are owned by AfricAIsoft and its licensors and are protected by applicable intellectual property laws. Subject to these terms, you are granted a limited, non-exclusive, non-transferable right to use the Service. \"AI Delphi Council\" and \"AfricAIsoft\" are marks of their owner." },
-      "content": { "h": "7. User content and data", "p": "You retain your rights in the prompts, documents and content you submit. You grant us the limited right to process and transmit that content to the configured AI providers solely to generate responses and operate the Service. You are responsible for ensuring you have the right to submit any content you provide." },
-      "disclaimer": { "h": "8. Disclaimers & limitation of liability", "p": "The Service is provided \"as is\" and \"as available\", without warranties of any kind, whether express or implied. To the maximum extent permitted by law, AfricAIsoft shall not be liable for any indirect, incidental, special or consequential damages, or for any loss arising from your use of, or reliance on, the Service or its outputs." },
-      "availability": { "h": "9. Service availability & changes", "p": "We may modify, suspend or discontinue all or part of the Service at any time, including features, pricing and the set of available models. We aim for continuity but do not guarantee uninterrupted or error-free availability." },
-      "termination": { "h": "10. Termination", "p": "You may stop using the Service at any time. We may suspend or terminate access if you breach these terms or use the Service in a way that creates risk or legal exposure. Provisions that by their nature should survive termination will survive." },
-      "law": { "h": "11. Governing law", "p": "These terms are governed by the laws of [Jurisdiction — Burkina Faso / Québec, to be confirmed], without regard to conflict-of-law rules. Any dispute shall be subject to the competent courts of that jurisdiction." },
-      "contact": { "h": "12. Contact", "p": "For any question regarding these terms, contact us at" }
+      "acceptance": {
+        "h": "1. Acceptance of terms",
+        "p": "By accessing or using AI Delphi Council (the \"Service\"), you agree to be bound by these Terms of Use. If you do not agree, you must not use the Service. These terms may be updated from time to time, and continued use after changes constitutes acceptance of the revised terms."
+      },
+      "service": {
+        "h": "2. Description of the service",
+        "p": "AI Delphi Council is an AI multi-model deliberation platform. It routes your queries to several third-party large language models via OpenRouter, then collects independent answers, runs an anonymous peer review and ranking, and produces a chairman synthesis. The Service is an orchestration layer and does not itself create the underlying model outputs."
+      },
+      "accounts": {
+        "h": "3. Accounts and eligibility",
+        "p": "You must provide accurate account information and are responsible for activity under your account. You must be of the age of majority in your jurisdiction and legally able to enter into these terms. You are responsible for keeping your credentials confidential."
+      },
+      "acceptableUse": {
+        "h": "4. Acceptable use",
+        "p": "You agree not to use the Service to submit unlawful, harmful, abusive, infringing or deceptive content; to attempt to disrupt, overload or reverse-engineer the Service; to violate the rights of others; or to generate content prohibited by the policies of the underlying AI providers. Credits consumed per council request are governed by the pricing displayed in your account."
+      },
+      "providers": {
+        "h": "5. Third-party AI providers & no guarantee of accuracy",
+        "p": "Outputs are generated by third-party AI models and are inherently probabilistic. They may be inaccurate, incomplete, biased or out of date. Outputs are provided for informational purposes only and do not constitute professional, legal, financial or medical advice. You are solely responsible for reviewing and verifying any output before relying on it."
+      },
+      "ip": {
+        "h": "6. Intellectual property",
+        "p": "The Service, its interface, branding and software are owned by AfricAIsoft and its licensors and are protected by applicable intellectual property laws. Subject to these terms, you are granted a limited, non-exclusive, non-transferable right to use the Service. \"AI Delphi Council\" and \"AfricAIsoft\" are marks of their owner."
+      },
+      "content": {
+        "h": "7. User content and data",
+        "p": "You retain your rights in the prompts, documents and content you submit. You grant us the limited right to process and transmit that content to the configured AI providers solely to generate responses and operate the Service. You are responsible for ensuring you have the right to submit any content you provide."
+      },
+      "disclaimer": {
+        "h": "8. Disclaimers & limitation of liability",
+        "p": "The Service is provided \"as is\" and \"as available\", without warranties of any kind, whether express or implied. To the maximum extent permitted by law, AfricAIsoft shall not be liable for any indirect, incidental, special or consequential damages, or for any loss arising from your use of, or reliance on, the Service or its outputs."
+      },
+      "availability": {
+        "h": "9. Service availability & changes",
+        "p": "We may modify, suspend or discontinue all or part of the Service at any time, including features, pricing and the set of available models. We aim for continuity but do not guarantee uninterrupted or error-free availability."
+      },
+      "termination": {
+        "h": "10. Termination",
+        "p": "You may stop using the Service at any time. We may suspend or terminate access if you breach these terms or use the Service in a way that creates risk or legal exposure. Provisions that by their nature should survive termination will survive."
+      },
+      "law": {
+        "h": "11. Governing law",
+        "p": "These terms are governed by the laws of [Jurisdiction — Burkina Faso / Québec, to be confirmed], without regard to conflict-of-law rules. Any dispute shall be subject to the competent courts of that jurisdiction."
+      },
+      "contact": {
+        "h": "12. Contact",
+        "p": "For any question regarding these terms, contact us at"
+      }
     },
     "dataProtection": {
       "h": "Data protection & privacy",
@@ -229,7 +309,6 @@
       "publisher": "Publisher / Contact:"
     }
   },
-
   "settings": {
     "loading": "Loading configuration…",
     "loadFailed": "Failed to load configuration",
@@ -323,9 +402,14 @@
     "customAdded": "Custom model added!",
     "customFailed": "Failed to add custom model"
   },
-
   "admin": {
-    "tabs": { "models": "Models", "users": "Users", "pricing": "Pricing", "openrouter": "OpenRouter", "stats": "Statistics" },
+    "tabs": {
+      "models": "Models",
+      "users": "Users",
+      "pricing": "Pricing",
+      "openrouter": "OpenRouter",
+      "stats": "Statistics"
+    },
     "or": {
       "heading": "OpenRouter — Key & costs",
       "refresh": "↻ Refresh",

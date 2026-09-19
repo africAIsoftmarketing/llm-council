@@ -8,6 +8,7 @@ import AdvancedPanel, { getAdvancedSettings } from './components/AdvancedPanel';
 import AppHeader from './components/AppHeader';
 import AppFooter from './components/AppFooter';
 import TermsModal, { hasAcceptedTerms } from './components/TermsModal';
+import CostPreviewModal from './components/CostPreviewModal';
 import { useAuth } from './auth/AuthContext';
 import { api } from './api';
 import './App.css';
@@ -22,6 +23,7 @@ function App() {
   const isAdmin = user?.role === 'admin';
   const [termsAccepted, setTermsAccepted] = useState(() => hasAcceptedTerms());
   const [creditsModal, setCreditsModal] = useState(null);
+  const [costPreview, setCostPreview] = useState(null);
   const [conversations, setConversations] = useState([]);
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [currentConversation, setCurrentConversation] = useState(null);
@@ -164,6 +166,42 @@ function App() {
   };
 
   const handleSendMessage = async (content, includeDocuments = true) => {
+    if (!currentConversationId) return;
+
+    // Step 1: pre-compute the credit cost and show the confirmation modal.
+    // Fallback: if the estimate fails, send directly (no regression).
+    try {
+      const estimate = await api.estimateCost(includeDocuments);
+      setCostPreview({
+        ...estimate,
+        pendingContent: content,
+        pendingIncludeDocs: includeDocuments,
+      });
+      return;
+    } catch (error) {
+      console.error('Cost estimate failed, proceeding directly:', error);
+    }
+
+    await _doSendMessage(content, includeDocuments);
+  };
+
+  const handleCostConfirm = () => {
+    if (!costPreview) return;
+    const { pendingContent, pendingIncludeDocs } = costPreview;
+    setCostPreview(null);
+    _doSendMessage(pendingContent, pendingIncludeDocs);
+  };
+
+  const handleCostGoToSettings = () => {
+    setCostPreview(null);
+    setCurrentView('settings');
+  };
+
+  const handleCostCancel = () => {
+    setCostPreview(null);
+  };
+
+  const _doSendMessage = async (content, includeDocuments = true) => {
     if (!currentConversationId) return;
 
     setIsLoading(true);
@@ -415,6 +453,16 @@ function App() {
         <div className={`toast toast-${toast.type}`} data-testid="toast-notification">
           {toast.message}
         </div>
+      )}
+
+      {/* Cost preview / confirmation modal */}
+      {costPreview && (
+        <CostPreviewModal
+          estimate={costPreview}
+          onConfirm={handleCostConfirm}
+          onGoToSettings={handleCostGoToSettings}
+          onCancel={handleCostCancel}
+        />
       )}
 
       {/* Insufficient credits modal */}

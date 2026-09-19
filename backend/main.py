@@ -714,6 +714,58 @@ async def get_document_status(doc_id: str):
     return status_info
 
 
+# ===== Cost Estimate (pre-flight, no debit) =====
+
+class CostEstimateRequest(BaseModel):
+    """Request to pre-compute the credit cost of the next message. No debit."""
+    include_documents: Optional[bool] = True
+
+
+class CostEstimateResponse(BaseModel):
+    cost: int
+    balance: int
+    balance_after: int
+    can_afford: bool
+    council_models: list
+    chairman_model: str
+    has_vision: bool
+    cost_type: str
+
+
+@app.post("/api/cost/estimate", response_model=CostEstimateResponse)
+async def estimate_cost(request: CostEstimateRequest, user=Depends(get_current_user)):
+    """Pre-compute the credit cost for the current council config. Debits NOTHING."""
+    vision_images = []
+    if request.include_documents:
+        vision_images = get_active_vision_images()
+
+    has_vision = bool(vision_images)
+    cost = await _request_cost(has_vision)
+
+    async with SessionLocal() as session:
+        fresh_user = await session.get(_db.User, user.id)
+        balance = fresh_user.credits if fresh_user else 0
+
+    uc = await _get_user_council(user)
+    if uc:
+        council_models = uc["council_models"]
+        chairman = uc.get("chairman_model") or (council_models[0] if council_models else "")
+    else:
+        council_models = list(await settings_store.get_setting("council_models", []))
+        chairman = await settings_store.get_setting("chairman_model", "")
+
+    return {
+        "cost": cost,
+        "balance": balance,
+        "balance_after": balance - cost,
+        "can_afford": balance >= cost,
+        "council_models": council_models,
+        "chairman_model": chairman,
+        "has_vision": has_vision,
+        "cost_type": "vision" if has_vision else "standard",
+    }
+
+
 # ===== Conversation Endpoints =====
 
 @app.get("/api/conversations", response_model=List[ConversationMetadata])

@@ -1,10 +1,17 @@
 {
   "brand": "AI Delphi Council",
   "tagline": "Un conseil de plusieurs IA délibère, se classe et synthétise la meilleure réponse.",
-  "lang": { "en": "EN", "fr": "FR", "switch": "Langue", "english": "English", "french": "Français" },
-
-  "nav": { "council": "Council", "admin": "Administration" },
-
+  "lang": {
+    "en": "EN",
+    "fr": "FR",
+    "switch": "Langue",
+    "english": "English",
+    "french": "Français"
+  },
+  "nav": {
+    "council": "Council",
+    "admin": "Administration"
+  },
   "header": {
     "buyCredits": "Acheter des crédits",
     "creditsLabel": "crédits",
@@ -12,7 +19,6 @@
     "logoutTitle": "Se déconnecter",
     "logoAlt": "AI Delphi Council"
   },
-
   "footer": {
     "copy": "© {{year}} AI Delphi Council",
     "by": "par AfricAIsoft",
@@ -20,7 +26,6 @@
     "legal": "Mentions légales",
     "privacy": "Confidentialité"
   },
-
   "sidebar": {
     "ready": "Prêt",
     "notConfigured": "Non configuré",
@@ -37,7 +42,6 @@
     "deleteConfirmTitle": "Cliquez à nouveau pour confirmer",
     "deleteTitle": "Supprimer la conversation"
   },
-
   "chat": {
     "configRequired": "Configuration requise",
     "configRequiredDesc": "Veuillez configurer votre clé API OpenRouter pour commencer à utiliser AI Delphi Council.",
@@ -65,26 +69,50 @@
     "placeholder": "Posez votre question… (Maj+Entrée pour un saut de ligne, Entrée pour envoyer)",
     "send": "Envoyer"
   },
-
   "how": {
     "title": "Comment ça marche",
     "subtitle": "De votre question à une réponse synthétisée et prête à l'emploi pour décider, en quatre étapes.",
-    "input": { "tag": "Entrée", "title": "Apportez votre matière", "desc": "Déposez des documents (PDF, Word, diapositives), des images (captures d’écran, schémas) ou une question en langage courant, aussi complexe soit-elle. Tout ce que vous fournissez est traité comme contexte de travail, pas comme bruit de fond." },
-    "enrich": { "tag": "Enrichissement", "title": "Ajoutez le bon contexte", "desc": "AI Delphi Council détecte votre intention, décide si une recherche est nécessaire et intègre du contexte en temps réel ou de référence lorsque votre question dépend de preuves récentes — détection d’intention, recherche web et recherche approfondie avant toute synthèse." },
-    "process": { "tag": "Traitement", "title": "Délibération du conseil", "desc": "Trois étapes : chaque modèle répond d’abord indépendamment, puis évalue et classe les réponses de façon anonyme, et enfin un président (chairman) produit une synthèse qui préserve consensus, désaccords et réserves." },
-    "output": { "tag": "Sortie", "title": "Une réponse synthétisée", "desc": "Vous obtenez une réponse classée et synthétisée plutôt que la supposition d’un seul modèle — avec des signaux de confiance et de désaccord, et des livrables prêts à l’export en Word, PDF, PowerPoint ou tableur sur demande." }
+    "input": {
+      "tag": "Entrée",
+      "title": "Apportez votre matière",
+      "desc": "Déposez des documents (PDF, Word, diapositives), des images (captures d’écran, schémas) ou une question en langage courant, aussi complexe soit-elle. Tout ce que vous fournissez est traité comme contexte de travail, pas comme bruit de fond."
+    },
+    "enrich": {
+      "tag": "Enrichissement",
+      "title": "Ajoutez le bon contexte",
+      "desc": "AI Delphi Council détecte votre intention, décide si une recherche est nécessaire et intègre du contexte en temps réel ou de référence lorsque votre question dépend de preuves récentes — détection d’intention, recherche web et recherche approfondie avant toute synthèse."
+    },
+    "process": {
+      "tag": "Traitement",
+      "title": "Délibération du conseil",
+      "desc": "Trois étapes : chaque modèle répond d’abord indépendamment, puis évalue et classe les réponses de façon anonyme, et enfin un président (chairman) produit une synthèse qui préserve consensus, désaccords et réserves."
+    },
+    "output": {
+      "tag": "Sortie",
+      "title": "Une réponse synthétisée",
+      "desc": "Vous obtenez une réponse classée et synthétisée plutôt que la supposition d’un seul modèle — avec des signaux de confiance et de désaccord, et des livrables prêts à l’export en Word, PDF, PowerPoint ou tableur sur demande."
+    }
   },
-
   "progress": {
     "inSession": "Conseil en séance…",
     "complete": "Conseil terminé",
     "stopped": "Conseil interrompu",
-    "stage1": { "label": "Étape 1", "sub": "Réponses individuelles" },
-    "stage2": { "label": "Étape 2", "sub": "Évaluation / classement par les pairs" },
-    "stage3": { "label": "Étape 3", "sub": "Synthèse du président" }
+    "stage1": {
+      "label": "Étape 1",
+      "sub": "Réponses individuelles"
+    },
+    "stage2": {
+      "label": "Étape 2",
+      "sub": "Évaluation / classement par les pairs"
+    },
+    "stage3": {
+      "label": "Étape 3",
+      "sub": "Synthèse du président"
+    }
   },
-
-  "stage1": { "title": "Étape 1 : Réponses individuelles" },
+  "stage1": {
+    "title": "Étape 1 : Réponses individuelles"
+  },
   "stage2": {
     "title": "Étape 2 : Classements par les pairs",
     "rawEval": "Évaluations brutes",
@@ -120,7 +148,6 @@
     "councilMembers": "Membres du conseil",
     "aggregateRanking": "Classement agrégé"
   },
-
   "documents": {
     "title": "Documents",
     "uploading": "Téléversement…",
@@ -142,7 +169,6 @@
     "noPreview": "Aucun aperçu disponible",
     "activeOf": "{{active}} sur {{total}} actifs"
   },
-
   "login": {
     "google": "Se connecter avec Google",
     "devToggle": "Accès développeur (aperçu)",
@@ -152,7 +178,6 @@
     "devDisabled": "Le mode développeur est désactivé.",
     "failed": "Échec de la connexion"
   },
-
   "credits": {
     "title": "Acheter des crédits",
     "subtitle": "Chaque requête au conseil consomme des crédits. Rechargez votre compte ci-dessous.",
@@ -169,16 +194,36 @@
     "paymentConfirmed": "Paiement confirmé — solde : {{credits}} crédits",
     "captureFailed": "Échec de la capture du paiement",
     "paypalError": "Erreur PayPal",
-    "kind": { "purchase": "Achat", "usage": "Utilisation", "admin_grant": "Octroi admin", "refund": "Remboursement" }
+    "kind": {
+      "purchase": "Achat",
+      "usage": "Utilisation",
+      "admin_grant": "Octroi admin",
+      "refund": "Remboursement"
+    }
   },
-
   "creditsModal": {
     "title": "Crédits insuffisants",
     "body": "Cette requête nécessite {{required}} crédits, mais votre solde est de {{balance}}.",
     "cancel": "Annuler",
     "buy": "Acheter des crédits"
   },
-
+  "costPreview": {
+    "title": "Estimation du coût",
+    "costLabel": "Coût de cette requête",
+    "credits": "crédits",
+    "costTypeStandard": "standard",
+    "costTypeVision": "vision",
+    "balanceLabel": "Solde actuel",
+    "balanceAfterLabel": "Solde après exécution",
+    "councilLabel": "Council",
+    "modelsCount": "{{count}} modèle(s)",
+    "chairmanLabel": "Chairman",
+    "confirm": "Confirmer et envoyer",
+    "modifyConfig": "Modifier la configuration",
+    "cancel": "Annuler",
+    "insufficientBalance": "Solde insuffisant",
+    "buyCredits": "Acheter des crédits"
+  },
   "toast": {
     "createConversationFailed": "Échec de la création de la conversation",
     "conversationDeleted": "Conversation supprimée",
@@ -191,7 +236,6 @@
     "deleteDocumentFailed": "Échec de la suppression du document",
     "toggleDocumentFailed": "Échec du changement d’état du document"
   },
-
   "terms": {
     "modalTitle": "Conditions générales",
     "checkbox": "J’ai lu et j’accepte les Conditions d’utilisation et les conditions de protection des données.",
@@ -201,18 +245,54 @@
     "contactHeading": "Contact",
     "contactIntro": "Pour toute question concernant ces conditions ou vos données, contactez-nous à",
     "sections": {
-      "acceptance": { "h": "1. Acceptation des conditions", "p": "En accédant à AI Delphi Council (le « Service ») ou en l’utilisant, vous acceptez d’être lié par ces Conditions d’utilisation. Si vous n’êtes pas d’accord, vous ne devez pas utiliser le Service. Ces conditions peuvent être mises à jour de temps à autre ; toute utilisation continue après modification vaut acceptation des conditions révisées." },
-      "service": { "h": "2. Description du service", "p": "AI Delphi Council est une plateforme de délibération multi-modèles par IA. Elle achemine vos requêtes vers plusieurs grands modèles de langage tiers via OpenRouter, puis recueille des réponses indépendantes, effectue une évaluation et un classement anonymes par les pairs, et produit une synthèse par un président. Le Service est une couche d’orchestration et ne génère pas lui-même les sorties des modèles sous-jacents." },
-      "accounts": { "h": "3. Comptes et admissibilité", "p": "Vous devez fournir des informations exactes et êtes responsable de l’activité liée à votre compte. Vous devez avoir l’âge de la majorité dans votre juridiction et être légalement en mesure d’accepter ces conditions. Il vous incombe de garder vos identifiants confidentiels." },
-      "acceptableUse": { "h": "4. Utilisation acceptable", "p": "Vous vous engagez à ne pas utiliser le Service pour soumettre du contenu illégal, nuisible, abusif, contrefaisant ou trompeur ; à ne pas tenter de perturber, surcharger ou faire de l’ingénierie inverse du Service ; à ne pas violer les droits d’autrui ; ni à générer du contenu interdit par les politiques des fournisseurs d’IA sous-jacents. Les crédits consommés par requête au conseil sont régis par la tarification affichée dans votre compte." },
-      "providers": { "h": "5. Fournisseurs d’IA tiers et absence de garantie d’exactitude", "p": "Les réponses sont générées par des modèles d’IA tiers et sont par nature probabilistes. Elles peuvent être inexactes, incomplètes, biaisées ou obsolètes. Elles sont fournies à titre informatif uniquement et ne constituent pas un avis professionnel, juridique, financier ou médical. Il vous incombe seul de vérifier toute réponse avant de vous y fier." },
-      "ip": { "h": "6. Propriété intellectuelle", "p": "Le Service, son interface, sa marque et son logiciel appartiennent à AfricAIsoft et à ses concédants et sont protégés par les lois applicables sur la propriété intellectuelle. Sous réserve de ces conditions, un droit d’utilisation limité, non exclusif et non transférable vous est accordé. « AI Delphi Council » et « AfricAIsoft » sont des marques de leur titulaire." },
-      "content": { "h": "7. Contenu et données de l’utilisateur", "p": "Vous conservez vos droits sur les invites, documents et contenus que vous soumettez. Vous nous accordez le droit limité de traiter et de transmettre ce contenu aux fournisseurs d’IA configurés uniquement pour générer des réponses et exploiter le Service. Il vous incombe de vous assurer que vous disposez du droit de soumettre tout contenu fourni." },
-      "disclaimer": { "h": "8. Avertissements et limitation de responsabilité", "p": "Le Service est fourni « tel quel » et « selon disponibilité », sans garantie d’aucune sorte, expresse ou implicite. Dans toute la mesure permise par la loi, AfricAIsoft ne saurait être tenue responsable de dommages indirects, accessoires, spéciaux ou consécutifs, ni de toute perte découlant de votre utilisation du Service ou de ses réponses, ou de votre confiance en ceux-ci." },
-      "availability": { "h": "9. Disponibilité et évolutions du service", "p": "Nous pouvons modifier, suspendre ou interrompre tout ou partie du Service à tout moment, y compris les fonctionnalités, la tarification et l’ensemble des modèles disponibles. Nous visons la continuité mais ne garantissons pas une disponibilité ininterrompue ou sans erreur." },
-      "termination": { "h": "10. Résiliation", "p": "Vous pouvez cesser d’utiliser le Service à tout moment. Nous pouvons suspendre ou résilier l’accès en cas de manquement à ces conditions ou d’utilisation créant un risque ou une exposition juridique. Les dispositions qui, par nature, doivent survivre à la résiliation, survivront." },
-      "law": { "h": "11. Droit applicable", "p": "Ces conditions sont régies par le droit de [Juridiction — Burkina Faso / Québec, à confirmer], sans égard aux règles de conflit de lois. Tout litige relèvera des tribunaux compétents de cette juridiction." },
-      "contact": { "h": "12. Contact", "p": "Pour toute question concernant ces conditions, contactez-nous à" }
+      "acceptance": {
+        "h": "1. Acceptation des conditions",
+        "p": "En accédant à AI Delphi Council (le « Service ») ou en l’utilisant, vous acceptez d’être lié par ces Conditions d’utilisation. Si vous n’êtes pas d’accord, vous ne devez pas utiliser le Service. Ces conditions peuvent être mises à jour de temps à autre ; toute utilisation continue après modification vaut acceptation des conditions révisées."
+      },
+      "service": {
+        "h": "2. Description du service",
+        "p": "AI Delphi Council est une plateforme de délibération multi-modèles par IA. Elle achemine vos requêtes vers plusieurs grands modèles de langage tiers via OpenRouter, puis recueille des réponses indépendantes, effectue une évaluation et un classement anonymes par les pairs, et produit une synthèse par un président. Le Service est une couche d’orchestration et ne génère pas lui-même les sorties des modèles sous-jacents."
+      },
+      "accounts": {
+        "h": "3. Comptes et admissibilité",
+        "p": "Vous devez fournir des informations exactes et êtes responsable de l’activité liée à votre compte. Vous devez avoir l’âge de la majorité dans votre juridiction et être légalement en mesure d’accepter ces conditions. Il vous incombe de garder vos identifiants confidentiels."
+      },
+      "acceptableUse": {
+        "h": "4. Utilisation acceptable",
+        "p": "Vous vous engagez à ne pas utiliser le Service pour soumettre du contenu illégal, nuisible, abusif, contrefaisant ou trompeur ; à ne pas tenter de perturber, surcharger ou faire de l’ingénierie inverse du Service ; à ne pas violer les droits d’autrui ; ni à générer du contenu interdit par les politiques des fournisseurs d’IA sous-jacents. Les crédits consommés par requête au conseil sont régis par la tarification affichée dans votre compte."
+      },
+      "providers": {
+        "h": "5. Fournisseurs d’IA tiers et absence de garantie d’exactitude",
+        "p": "Les réponses sont générées par des modèles d’IA tiers et sont par nature probabilistes. Elles peuvent être inexactes, incomplètes, biaisées ou obsolètes. Elles sont fournies à titre informatif uniquement et ne constituent pas un avis professionnel, juridique, financier ou médical. Il vous incombe seul de vérifier toute réponse avant de vous y fier."
+      },
+      "ip": {
+        "h": "6. Propriété intellectuelle",
+        "p": "Le Service, son interface, sa marque et son logiciel appartiennent à AfricAIsoft et à ses concédants et sont protégés par les lois applicables sur la propriété intellectuelle. Sous réserve de ces conditions, un droit d’utilisation limité, non exclusif et non transférable vous est accordé. « AI Delphi Council » et « AfricAIsoft » sont des marques de leur titulaire."
+      },
+      "content": {
+        "h": "7. Contenu et données de l’utilisateur",
+        "p": "Vous conservez vos droits sur les invites, documents et contenus que vous soumettez. Vous nous accordez le droit limité de traiter et de transmettre ce contenu aux fournisseurs d’IA configurés uniquement pour générer des réponses et exploiter le Service. Il vous incombe de vous assurer que vous disposez du droit de soumettre tout contenu fourni."
+      },
+      "disclaimer": {
+        "h": "8. Avertissements et limitation de responsabilité",
+        "p": "Le Service est fourni « tel quel » et « selon disponibilité », sans garantie d’aucune sorte, expresse ou implicite. Dans toute la mesure permise par la loi, AfricAIsoft ne saurait être tenue responsable de dommages indirects, accessoires, spéciaux ou consécutifs, ni de toute perte découlant de votre utilisation du Service ou de ses réponses, ou de votre confiance en ceux-ci."
+      },
+      "availability": {
+        "h": "9. Disponibilité et évolutions du service",
+        "p": "Nous pouvons modifier, suspendre ou interrompre tout ou partie du Service à tout moment, y compris les fonctionnalités, la tarification et l’ensemble des modèles disponibles. Nous visons la continuité mais ne garantissons pas une disponibilité ininterrompue ou sans erreur."
+      },
+      "termination": {
+        "h": "10. Résiliation",
+        "p": "Vous pouvez cesser d’utiliser le Service à tout moment. Nous pouvons suspendre ou résilier l’accès en cas de manquement à ces conditions ou d’utilisation créant un risque ou une exposition juridique. Les dispositions qui, par nature, doivent survivre à la résiliation, survivront."
+      },
+      "law": {
+        "h": "11. Droit applicable",
+        "p": "Ces conditions sont régies par le droit de [Juridiction — Burkina Faso / Québec, à confirmer], sans égard aux règles de conflit de lois. Tout litige relèvera des tribunaux compétents de cette juridiction."
+      },
+      "contact": {
+        "h": "12. Contact",
+        "p": "Pour toute question concernant ces conditions, contactez-nous à"
+      }
     },
     "dataProtection": {
       "h": "Protection des données et confidentialité",
@@ -229,7 +309,6 @@
       "publisher": "Éditeur / Contact :"
     }
   },
-
   "settings": {
     "loading": "Chargement de la configuration…",
     "loadFailed": "Échec du chargement de la configuration",
@@ -323,9 +402,14 @@
     "customAdded": "Modèle personnalisé ajouté !",
     "customFailed": "Échec de l’ajout du modèle personnalisé"
   },
-
   "admin": {
-    "tabs": { "models": "Modèles", "users": "Utilisateurs", "pricing": "Tarification", "openrouter": "OpenRouter", "stats": "Statistiques" },
+    "tabs": {
+      "models": "Modèles",
+      "users": "Utilisateurs",
+      "pricing": "Tarification",
+      "openrouter": "OpenRouter",
+      "stats": "Statistiques"
+    },
     "or": {
       "heading": "OpenRouter — Clé et coûts",
       "refresh": "↻ Actualiser",

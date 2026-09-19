@@ -18,7 +18,7 @@ sys.path.insert(0, "/app/backend")
 import council  # noqa: E402
 
 BASE_URL = os.environ.get(
-    "REACT_APP_BACKEND_URL", "https://streaming-parser-fix.preview.emergentagent.com"
+    "REACT_APP_BACKEND_URL", "https://cost-preview-flow.preview.emergentagent.com"
 ).rstrip("/")
 ADMIN_EMAIL = "somecedric@gmail.com"
 
