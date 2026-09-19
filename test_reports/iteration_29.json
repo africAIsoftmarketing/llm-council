@@ -1,0 +1,24 @@
+{
+  "summary": "Post-build-fix regression pass on the Pre-flight cost estimate + confirmation flow. Backend: /api/cost/estimate 10/10 pass; /api/conversations debit + refund + 402 regression suite (test_monetization.py) 22/22 pass. Frontend: on the public preview URL, verified that clicking Send opens CostPreviewModal (data-testid=cost-preview-modal) showing cost=10 (standard), balance, balance_after, council models and chairman; Cancel closes with no side effect; Modify configuration switches to Settings view; zero-credit user sees Insufficient balance (data-testid=cost-preview-insufficient) and Buy credits (data-testid=cost-preview-buy) in place of Confirm. Note: the preview URL is served by the Vite dev server (script tags reference /@vite/client and /src/main.jsx), so the rebuilt frontend/dist bundle is not actually what is served in this environment — the feature works because the source already contains it. If this preview is ever switched to serve the static dist build, the bundle index-DYDZwSmR.js is in place and grep confirms costPreview/estimateCost/cost-preview symbols.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_cost_estimate.py",
+    "/app/backend/tests/test_monetization.py",
+    "/app/test_reports/pytest/cost_estimate.xml",
+    "/app/test_reports/pytest/monetization.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Preview environment serves the Vite dev server (index.html references /@vite/client and /src/main.jsx) rather than the built dist/. The build-fix (rebuilding dist) is therefore not exercised on the preview URL. If production is expected to serve the static dist, add an e2e check that fetches the served HTML and asserts it references an /assets/index-*.js file (not /@vite/client) to prevent future stale-bundle regressions.",
+    "Textarea is cleared before the estimate modal opens (previously noted). Cancel returns the user to an empty input — minor UX nit unchanged from iteration 28."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin: somecedric@gmail.com via POST /api/auth/dev-login. Ephemeral TEST_* emails for regular/zero-credit users.",
+  "seed_data_creation": "Ephemeral TEST_broke_* and TEST_ui_* users via dev-login; admin credits granted through /api/admin/users/{id}/credits.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Feature fully green. If OPENROUTER_API_KEY is later added, Confirm branch will complete the full 3-stage pipeline instead of stopping at Stage 1 with auto-refund. If deployment switches from vite dev to static dist serving, verify preview HTML references /assets/index-*.js.",
+  "rca of the issue": "No bugs. The originally reported stale-bundle issue was moot in this environment because the preview URL serves the Vite dev server directly from source, not the built dist. Feature works end-to-end against source and against the rebuilt dist bundle."
+}
