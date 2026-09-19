@@ -222,7 +222,10 @@
     "modifyConfig": "Modify configuration",
     "cancel": "Cancel",
     "insufficientBalance": "Insufficient balance",
-    "buyCredits": "Buy credits"
+    "buyCredits": "Buy credits",
+    "apiCalls": "API calls (pipeline)",
+    "estimatedUsd": "Estimated OpenRouter cost",
+    "perModelCost": "Cost per model"
   },
   "toast": {
     "createConversationFailed": "Failed to create conversation",

@@ -31,6 +31,8 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         {"id": "pro", "name": "Pro", "price_cad": 40, "credits": 650},
     ],
     "request_cost": {"standard": 10, "vision": 15},
+    "credits_per_usd": 500.0,
+    "minimum_credits_per_request": 2,
 }
 
 

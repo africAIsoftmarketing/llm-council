@@ -113,3 +113,44 @@
   color: #64748b;
   text-decoration: underline;
 }
+
+.cost-preview-model-costs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.model-cost-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 4px 8px;
+  background: #f8fafc;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.model-cost-name {
+  color: #334155;
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-cost-credits {
+  color: #0f172a;
+  font-weight: 600;
+  white-space: nowrap;
+  margin-left: 12px;
+}
+
+.model-cost-credits em {
+  color: #94a3b8;
+  font-style: normal;
+  font-size: 11px;
+  margin-left: 4px;
+}

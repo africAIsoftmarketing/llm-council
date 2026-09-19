@@ -76,6 +76,11 @@ except ImportError:
     from admin import _openrouter_model_ids
     from db import SessionLocal, debit_user, credit_user
 
+try:
+    from .pricing import estimate_run_credits
+except ImportError:
+    from pricing import estimate_run_credits
+
 # SessionMiddleware is required by authlib for OAuth state (CSRF) handling.
 app.add_middleware(
     SessionMiddleware,
@@ -88,6 +93,30 @@ app.add_middleware(
 async def _request_cost(has_vision: bool) -> int:
     cost = await settings_store.get_setting("request_cost", {"standard": 10, "vision": 15})
     return int(cost.get("vision", 15) if has_vision else cost.get("standard", 10))
+
+
+async def _dynamic_cost(user, has_vision: bool) -> int:
+    """Compute the dynamic credit cost for a council run. Falls back to flat rate."""
+    try:
+        credits_per_usd = await settings_store.get_setting("credits_per_usd", 500.0)
+        minimum_credits = await settings_store.get_setting("minimum_credits_per_request", 2)
+        uc = await _get_user_council(user)
+        if uc:
+            cm = uc["council_models"]
+            ch = uc.get("chairman_model") or (cm[0] if cm else "")
+        else:
+            cm = list(await settings_store.get_setting("council_models", []))
+            ch = await settings_store.get_setting("chairman_model", "")
+        pr = await estimate_run_credits(
+            council_models=cm, chairman_model=ch,
+            has_vision=has_vision,
+            credits_per_usd=float(credits_per_usd),
+            minimum_credits=int(minimum_credits),
+        )
+        return pr["cost"]
+    except Exception as e:
+        print(f"[dynamic_cost] fallback to flat rate: {e}")
+        return await _request_cost(has_vision)
 
 
 async def _debit_or_402(user, cost: int, conversation_id: str) -> int:
@@ -721,26 +750,14 @@ class CostEstimateRequest(BaseModel):
     include_documents: Optional[bool] = True
 
 
-class CostEstimateResponse(BaseModel):
-    cost: int
-    balance: int
-    balance_after: int
-    can_afford: bool
-    council_models: list
-    chairman_model: str
-    has_vision: bool
-    cost_type: str
-
-
-@app.post("/api/cost/estimate", response_model=CostEstimateResponse)
+@app.post("/api/cost/estimate")
 async def estimate_cost(request: CostEstimateRequest, user=Depends(get_current_user)):
-    """Pre-compute the credit cost for the current council config. Debits NOTHING."""
+    """Dynamic pre-compute of the credit cost based on council composition and the
+    real per-model OpenRouter pricing. Debits NOTHING."""
     vision_images = []
     if request.include_documents:
         vision_images = get_active_vision_images()
-
     has_vision = bool(vision_images)
-    cost = await _request_cost(has_vision)
 
     async with SessionLocal() as session:
         fresh_user = await session.get(_db.User, user.id)
@@ -754,7 +771,24 @@ async def estimate_cost(request: CostEstimateRequest, user=Depends(get_current_u
         council_models = list(await settings_store.get_setting("council_models", []))
         chairman = await settings_store.get_setting("chairman_model", "")
 
-    return {
+    credits_per_usd = await settings_store.get_setting("credits_per_usd", 500.0)
+    minimum_credits = await settings_store.get_setting("minimum_credits_per_request", 2)
+
+    try:
+        pricing_result = await estimate_run_credits(
+            council_models=council_models,
+            chairman_model=chairman,
+            has_vision=has_vision,
+            credits_per_usd=float(credits_per_usd),
+            minimum_credits=int(minimum_credits),
+        )
+        cost = pricing_result["cost"]
+    except Exception as e:
+        print(f"[estimate_cost] Dynamic pricing failed, using flat rate: {e}")
+        cost = await _request_cost(has_vision)
+        pricing_result = None
+
+    response = {
         "cost": cost,
         "balance": balance,
         "balance_after": balance - cost,
@@ -764,6 +798,16 @@ async def estimate_cost(request: CostEstimateRequest, user=Depends(get_current_u
         "has_vision": has_vision,
         "cost_type": "vision" if has_vision else "standard",
     }
+
+    if pricing_result:
+        response["pricing"] = {
+            "estimated_usd": pricing_result["estimated_usd"],
+            "credits_per_usd": pricing_result["credits_per_usd"],
+            "total_api_calls": pricing_result["total_api_calls"],
+            "per_model_credits": pricing_result["per_model_credits"],
+        }
+
+    return response
 
 
 # ===== Conversation Endpoints =====
@@ -841,7 +885,7 @@ My question: {request.content}"""
             query_content += image_note
 
     # ===== Credit debit (atomic, server-priced) BEFORE running =====
-    cost = await _request_cost(bool(vision_images))
+    cost = await _dynamic_cost(user, bool(vision_images))
     await _debit_or_402(user, cost, conversation_id)
 
     # Add user message
@@ -929,7 +973,7 @@ My question: {request.content}"""
             query_content += f"\n\n[Note: {len(vision_images)} image(s) attached for visual analysis]"
 
     # ===== Credit debit (atomic, server-priced) BEFORE running =====
-    cost = await _request_cost(bool(vision_images))
+    cost = await _dynamic_cost(user, bool(vision_images))
     await _debit_or_402(user, cost, conversation_id)
 
     async def event_generator():

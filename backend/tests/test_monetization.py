@@ -95,7 +95,13 @@ class TestCreditsGate:
         assert r.status_code == 402, r.text
         detail = r.json().get("detail", {})
         assert detail.get("error") == "insufficient_credits"
-        assert detail.get("required") == 10
+        # Cost is now dynamic (composition-based); required must be a positive int
+        # and match the pre-flight estimate for this user.
+        assert isinstance(detail.get("required"), int) and detail.get("required") > 0
+        est = user_a.post(
+            f"{BASE_URL}/api/cost/estimate", json={"include_documents": False}
+        ).json()
+        assert detail.get("required") == est["cost"]
         assert detail.get("balance") == 0
 
 
@@ -221,32 +227,34 @@ class TestAdminPricing:
         assert any(p["id"] == "pro" and p["credits"] == 650 for p in packs)
 
     def test_update_request_cost_changes_402_required(self, admin_session):
-        # set an unusual cost
-        r = admin_session.put(
-            f"{BASE_URL}/api/admin/settings/request_cost",
-            json={"value": {"standard": 7, "vision": 15}},
-        )
-        assert r.status_code == 200
-
-        # new user (0 credits), try message
+        # Cost is now dynamic; the admin knob is `credits_per_usd` (consumption rate).
+        # Doubling the rate must increase the credits required for the same council.
         fresh_email = f"TEST_cost_{uuid.uuid4().hex[:8]}@example.com"
         s = _login(fresh_email)
+
+        admin_session.put(
+            f"{BASE_URL}/api/admin/settings/credits_per_usd", json={"value": 500.0}
+        )
+        time.sleep(1)
+        low = s.post(f"{BASE_URL}/api/cost/estimate", json={"include_documents": False}).json()["cost"]
+
+        admin_session.put(
+            f"{BASE_URL}/api/admin/settings/credits_per_usd", json={"value": 1000.0}
+        )
+        time.sleep(1)
         r = s.post(f"{BASE_URL}/api/conversations", json={})
         cid = r.json()["id"]
-
-        # wait for cache TTL to be safe? settings cache is 60s. set_setting invalidates cache immediately.
-        time.sleep(1)
         r = s.post(
             f"{BASE_URL}/api/conversations/{cid}/message",
             json={"content": "hi", "include_documents": False},
         )
         assert r.status_code == 402
-        assert r.json()["detail"]["required"] == 7
+        high_required = r.json()["detail"]["required"]
+        assert high_required > low, f"higher rate should require more credits: {high_required} vs {low}"
 
         # restore default
         admin_session.put(
-            f"{BASE_URL}/api/admin/settings/request_cost",
-            json={"value": {"standard": 10, "vision": 15}},
+            f"{BASE_URL}/api/admin/settings/credits_per_usd", json={"value": 500.0}
         )
 
 
@@ -300,11 +308,14 @@ class TestRefund:
         # get current balance
         me = user_a.get(f"{BASE_URL}/api/auth/me").json()
         uid = me["id"]
-        # ensure enough credits (grant if needed)
-        if me["credits"] < 20:
+        # ensure enough credits for the (now dynamic) cost — grant well above the estimate
+        est_cost = user_a.post(
+            f"{BASE_URL}/api/cost/estimate", json={"include_documents": False}
+        ).json()["cost"]
+        if me["credits"] < est_cost + 10:
             admin_session.post(
                 f"{BASE_URL}/api/admin/users/{uid}/credits",
-                json={"amount": 100, "reason": "TEST refund setup"},
+                json={"amount": est_cost + 100, "reason": "TEST refund setup"},
             )
             me = user_a.get(f"{BASE_URL}/api/auth/me").json()
         pre_balance = me["credits"]
@@ -326,8 +337,8 @@ class TestRefund:
         post_balance = user_a.get(f"{BASE_URL}/api/auth/me").json()["credits"]
 
         if r.status_code == 200:
-            # pipeline miraculously succeeded — credits should be debited
-            assert post_balance == pre_balance - 10
+            # pipeline miraculously succeeded — a dynamic cost should be debited
+            assert post_balance == pre_balance - est_cost
         else:
             # Refund path: balance should be back to pre_balance
             assert post_balance == pre_balance, f"credits not refunded: pre={pre_balance} post={post_balance}"

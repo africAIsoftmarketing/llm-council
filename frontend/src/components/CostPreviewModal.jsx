@@ -71,6 +71,37 @@ export default function CostPreviewModal({ estimate, onConfirm, onGoToSettings, 
             <span className="cpr-label">{t('costPreview.chairmanLabel')}</span>
             <span className="cpr-value" data-testid="cost-preview-chairman">{chairmanModel}</span>
           </div>
+
+          {estimate.pricing && (
+            <>
+              <div className="cost-preview-divider" />
+              <div className="cost-preview-row">
+                <span className="cpr-label">{t('costPreview.apiCalls')}</span>
+                <span className="cpr-value">{estimate.pricing.total_api_calls}</span>
+              </div>
+              <div className="cost-preview-row">
+                <span className="cpr-label">{t('costPreview.estimatedUsd')}</span>
+                <span className="cpr-value">
+                  ~${estimate.pricing.estimated_usd.toFixed(4)} USD
+                </span>
+              </div>
+
+              <div className="cost-preview-row cost-preview-row--stack">
+                <span className="cpr-label">{t('costPreview.perModelCost')}</span>
+                <div className="cost-preview-model-costs" data-testid="cost-preview-per-model">
+                  {estimate.pricing.per_model_credits.map((m) => (
+                    <div key={m.model} className="model-cost-row">
+                      <span className="model-cost-name">{m.model}</span>
+                      <span className="model-cost-credits">
+                        {m.credits} {t('costPreview.credits')}
+                        <em>(~${m.usd.toFixed(6)})</em>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {!canAfford && (

@@ -70,31 +70,43 @@ class TestCostEstimateShape:
 
 class TestCostEstimatePricing:
     def test_standard_cost_no_vision(self, admin_session, user_a):
-        # Ensure default pricing.
+        # Ensure default consumption rate.
         admin_session.put(
-            f"{BASE_URL}/api/admin/settings/request_cost",
-            json={"value": {"standard": 10, "vision": 15}},
+            f"{BASE_URL}/api/admin/settings/credits_per_usd", json={"value": 500.0}
         )
         r = user_a.post(f"{BASE_URL}/api/cost/estimate", json={"include_documents": False})
         assert r.status_code == 200, r.text
         d = r.json()
         assert d["has_vision"] is False
         assert d["cost_type"] == "standard"
-        assert d["cost"] == 10
+        # Cost is dynamic and composition-based; it must be a positive integer.
+        assert isinstance(d["cost"], int) and d["cost"] > 0
+        # The dynamic pricing block must be present with a coherent pipeline size.
+        assert "pricing" in d
+        n = len(d["council_models"])
+        assert d["pricing"]["total_api_calls"] == (2 * n) + 2
+        assert d["pricing"]["estimated_usd"] > 0
 
     def test_cost_tracks_admin_pricing(self, admin_session, user_a):
-        # Change the standard price and confirm the estimate reflects it.
+        # The admin knob is now credits_per_usd (consumption rate). Doubling it must
+        # increase the credits charged for the same council composition.
         admin_session.put(
-            f"{BASE_URL}/api/admin/settings/request_cost",
-            json={"value": {"standard": 7, "vision": 15}},
+            f"{BASE_URL}/api/admin/settings/credits_per_usd", json={"value": 500.0}
         )
-        r = user_a.post(f"{BASE_URL}/api/cost/estimate", json={"include_documents": False})
-        assert r.status_code == 200, r.text
-        assert r.json()["cost"] == 7
+        low = user_a.post(
+            f"{BASE_URL}/api/cost/estimate", json={"include_documents": False}
+        ).json()["cost"]
+
+        admin_session.put(
+            f"{BASE_URL}/api/admin/settings/credits_per_usd", json={"value": 1000.0}
+        )
+        high = user_a.post(
+            f"{BASE_URL}/api/cost/estimate", json={"include_documents": False}
+        ).json()["cost"]
+        assert high > low
         # restore default
         admin_session.put(
-            f"{BASE_URL}/api/admin/settings/request_cost",
-            json={"value": {"standard": 10, "vision": 15}},
+            f"{BASE_URL}/api/admin/settings/credits_per_usd", json={"value": 500.0}
         )
 
 
@@ -126,12 +138,12 @@ class TestCostEstimateBalance:
         uid = s.get(f"{BASE_URL}/api/auth/me").json()["id"]
         admin_session.post(
             f"{BASE_URL}/api/admin/users/{uid}/credits",
-            json={"amount": 100, "reason": "TEST cost estimate"},
+            json={"amount": 100000, "reason": "TEST cost estimate"},
         )
         r = s.post(f"{BASE_URL}/api/cost/estimate", json={"include_documents": False})
         assert r.status_code == 200, r.text
         d = r.json()
-        assert d["balance"] >= 100
+        assert d["balance"] >= 100000
         assert d["can_afford"] is True
 
 
