@@ -1,0 +1,24 @@
+{
+  "summary": "Tested pre-flight cost estimate + confirmation flow end-to-end. Backend: all 10 tests in test_cost_estimate.py pass and 22 regression tests in test_monetization.py pass (credit debit/refund/402 unchanged). Frontend: verified CostPreviewModal opens on Send instead of firing request directly, displays correct cost/balance/balance_after/chairman/models, Cancel closes, Modify configuration navigates to Settings view, Confirm starts the streaming pipeline (Stage 1 begins then auto-refunds on missing OPENROUTER_API_KEY as expected), and zero-credit users see the insufficient-balance message + Buy credits button in place of Confirm.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_cost_estimate.py",
+    "/app/backend/tests/test_monetization.py",
+    "/app/test_reports/pytest/cost_estimate.xml",
+    "/app/test_reports/pytest/monetization.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "handleSendMessage clears the textarea when the estimate modal opens; on Cancel the user has to retype the message. Minor UX nit - consider preserving the pending content or not clearing input until _doSendMessage runs.",
+    "Fallback path (estimate throws) silently sends without confirmation. Acceptable per spec (no regression), but a subtle toast informing the user would help debuggability."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin: somecedric@gmail.com via POST /api/auth/dev-login. Regular test users use TEST_*@example.com pattern.",
+  "seed_data_creation": "Ephemeral TEST_ui_* users created via dev-login; credits granted through /api/admin/users/{id}/credits for the funded flow.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Pre-flight cost estimate feature is fully working (backend + UI). If OPENROUTER_API_KEY is added later, the Confirm branch will complete the full 3-stage pipeline instead of stopping at Stage 1 with auto-refund. Ensure request_cost remains {standard:10, vision:15} for tests to pass (test resets it explicitly).",
+  "rca of the issue": "N/A - no bugs found"
+}

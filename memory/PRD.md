@@ -253,3 +253,11 @@ Correctif:
 - Régénéré frontend/dist via `yarn build`. Nouveau dist: <title>AI Delphi Council</title>, logo-product bundlé, i18n FR/EN ("Bienvenue sur AI Delphi Council", "Comment ça marche"), lien www.africaisoft.africa, AUCUNE URL preview encodée.
 Vérif: testing_agent iter_26 a servi le dist (serve -s) à l'URL d'aperçu => 100%, aucun "LLM Council", aucun ancien logo.
 ACTION UTILISATEUR: "Save to Github" (pousse le nouveau dist + .env.production) puis REDÉPLOYER cette branche sur Heroku. À CHAQUE futur changement front, il FAUT régénérer frontend/dist avant de pousser (sinon Heroku reste figé).
+
+---
+## Feature: Pré-calcul & confirmation du coût en crédits (2026-06)
+- **Backend** `POST /api/cost/estimate` (main.py, avant les routes conversations): pré-calcule le coût (standard/vision), solde, solde après, can_afford, council_models, chairman. AUCUN débit. 401 si non authentifié.
+- **Frontend**: `api.estimateCost()`; `App.jsx` intercepte `handleSendMessage` → affiche `CostPreviewModal` (Confirmer / Modifier la config → Settings / Annuler). Envoi réel extrait dans `_doSendMessage`. Fallback direct si l'estimation échoue (aucune régression). Solde insuffisant → bouton « Acheter des crédits ».
+- **i18n**: bloc `costPreview` ajouté (fr/en).
+- **Tests**: `backend/tests/test_cost_estimate.py` (10 tests, 100% pass). Régression `test_monetization.py` OK. Testing agent: 100% backend + frontend, aucun bug.
+- Aucun endpoint/composant existant modifié en dehors de main.py (ajout), api.js (ajout), App.jsx (refactor handleSendMessage).
