@@ -1,0 +1,24 @@
+{
+  "summary": "v33 dynamic credit pricing (backend/pricing.py + POST /api/cost/estimate pricing block + dynamic debit + CostPreviewModal breakdown) fully verified. All 42 pytest tests pass (10 test_pricing + 10 test_cost_estimate + 22 test_monetization). End-to-end frontend flow confirmed on live preview URL: modal opens on Send, shows API calls (6=2*N+2), estimated USD (~$0.1545), per-model breakdown (google/gemini-3-pro-preview 62c, openai/gpt-5.1 16c, google/gemini-2.5-flash 1c), Buy credits for zero-credit users, Confirm and send for funded users, Modify configuration navigates to Settings, Cancel closes.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_pricing.py",
+    "/app/backend/tests/test_cost_estimate.py",
+    "/app/backend/tests/test_monetization.py",
+    "/app/test_reports/pytest/iter30_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "pricing._PRICING_CACHE_TS is refreshed inside the try only when the HTTP call succeeds — if OpenRouter returns non-200 or times out, get_model_pricing keeps retrying every call and blocking each request for up to 20s. Consider setting the timestamp on failure too (or falling back to a shorter retry window) to avoid latency spikes when OpenRouter is down.",
+    "backend/main.py is ~1140 lines; if it keeps growing consider splitting message routes and admin routes into separate routers."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "dev-login POST /api/auth/dev-login — admin somecedric@gmail.com; per-test users TEST_*",
+  "seed_data_creation": "Ephemeral TEST_* dev-login users only.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Dynamic pricing is stable. Default council is 2 models (openai/gpt-5.1 + google/gemini-3-pro-preview) with chairman openai/gpt-5.1, and default credits_per_usd=500 yields ~78 credits for a standard no-vision request (~$0.1545). If any test needs to run message sends, fund users with >=200 credits. OPENROUTER_API_KEY still absent -> Confirm branch causes a 502 with automatic refund. Backend log path: /var/log/supervisor/backend.*.log.",
+  "rca of the issue": "N/A - no issues found."
+}

@@ -261,3 +261,12 @@ ACTION UTILISATEUR: "Save to Github" (pousse le nouveau dist + .env.production) 
 - **i18n**: bloc `costPreview` ajouté (fr/en).
 - **Tests**: `backend/tests/test_cost_estimate.py` (10 tests, 100% pass). Régression `test_monetization.py` OK. Testing agent: 100% backend + frontend, aucun bug.
 - Aucun endpoint/composant existant modifié en dehors de main.py (ajout), api.js (ajout), App.jsx (refactor handleSendMessage).
+
+---
+## Feature: Tarification dynamique par modèle (v33, 2026-06)
+- **backend/pricing.py** (NOUVEAU): pricing OpenRouter par modèle (cache 10 min), estimation tokens du pipeline 3 étapes (2N+2 appels), conversion USD→crédits (`credits_per_usd`, plancher `minimum_credits_per_request`).
+- **settings_store.py**: `credits_per_usd=500.0` + `minimum_credits_per_request=2` (admin-configurables).
+- **main.py**: helper `_dynamic_cost(user, has_vision)` (fallback flat rate); `POST /api/cost/estimate` renvoie un bloc `pricing` (estimated_usd, credits_per_usd, total_api_calls, per_model_credits); les 2 endpoints d'envoi débitent désormais le coût dynamique.
+- **CostPreviewModal**: affiche appels API, coût USD estimé, et coût par modèle. i18n apiCalls/estimatedUsd/perModelCost (fr/en).
+- **Tests**: test_pricing.py (10) + test_cost_estimate/test_monetization mis à jour au modèle dynamique → 42/42 pass. Testing agent iteration_30: 100% BE+FE.
+- **Build**: frontend rebuild → index-BcmOr_SW.js / index-DLrAmrrG.css (dist inclus dans le livrable).
