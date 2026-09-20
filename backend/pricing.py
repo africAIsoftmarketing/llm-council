@@ -168,20 +168,24 @@ async def estimate_run_credits(
     total_usd, breakdown = await estimate_run_usd(
         council_models, chairman_model, has_vision, user_input_tokens
     )
-    total_credits = await usd_to_credits(total_usd, credits_per_usd, minimum_credits)
 
     n = len(council_models)
     tok = estimate_tokens_for_run(n, user_input_tokens, has_vision)
 
+    # 1. Aggregate USD per model (across stages)
     model_usd: Dict[str, float] = {}
     for entry in breakdown:
         model_usd[entry["model"]] = model_usd.get(entry["model"], 0.0) + entry["usd"]
 
+    # 2. Convert each model's USD to credits (ceil individually)
     per_model_credits = []
     for model, usd in model_usd.items():
         mc = max(1, math.ceil(usd * credits_per_usd)) if usd > 0 else 0
         per_model_credits.append({"model": model, "credits": mc, "usd": round(usd, 8)})
     per_model_credits.sort(key=lambda x: x["credits"], reverse=True)
+
+    # 3. Total = sum of per-model credits (guarantees consistency with breakdown)
+    total_credits = max(minimum_credits, sum(m["credits"] for m in per_model_credits))
 
     for entry in breakdown:
         entry["usd"] = round(entry["usd"], 8)

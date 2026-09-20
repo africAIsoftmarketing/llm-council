@@ -223,8 +223,6 @@
     "cancel": "Annuler",
     "insufficientBalance": "Solde insuffisant",
     "buyCredits": "Acheter des crédits",
-    "apiCalls": "Appels API (pipeline)",
-    "estimatedUsd": "Coût estimé OpenRouter",
     "perModelCost": "Coût par modèle"
   },
   "toast": {
