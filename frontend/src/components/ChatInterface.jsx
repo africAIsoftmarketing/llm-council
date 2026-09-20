@@ -201,9 +201,10 @@ export default function ChatInterface({
         {/* Live per-stage council progress (driven by SSE events) */}
         {councilProgress && <CouncilProgress progress={councilProgress} />}
         {conversation.messages.length === 0 ? (
-          <div className="empty-state">
-            <h2>{t('chat.startConversation')}</h2>
-            <p>{t('chat.askQuestion')}</p>
+          <div className="empty-state welcome-state">
+            <img src={productLogo} alt={t('header.logoAlt')} className="welcome-logo" />
+            <h2>{t('chat.welcomeTitle')}</h2>
+            <p>{t('chat.welcomeSubtitle')}</p>
             {activeDocuments.length > 0 && (
               <div className="documents-context-hint">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -213,6 +214,7 @@ export default function ChatInterface({
                 <span>{t('chat.docsInQuery', { count: activeDocuments.length })}</span>
               </div>
             )}
+            <HowItWorks />
           </div>
         ) : (
           conversation.messages.map((msg, index) => (
