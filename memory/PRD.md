@@ -270,3 +270,10 @@ ACTION UTILISATEUR: "Save to Github" (pousse le nouveau dist + .env.production) 
 - **CostPreviewModal**: affiche appels API, coût USD estimé, et coût par modèle. i18n apiCalls/estimatedUsd/perModelCost (fr/en).
 - **Tests**: test_pricing.py (10) + test_cost_estimate/test_monetization mis à jour au modèle dynamique → 42/42 pass. Testing agent iteration_30: 100% BE+FE.
 - **Build**: frontend rebuild → index-BcmOr_SW.js / index-DLrAmrrG.css (dist inclus dans le livrable).
+
+---
+## Fixes: cohérence du total + nettoyage modale (v34, 2026-06)
+- **pricing.py** `estimate_run_credits`: `total_credits = max(minimum, sum(per_model_credits))` → le total = somme exacte des crédits par modèle affichés (fin de ceil(somme) ≠ somme(ceil)). Le débit réel utilise ce même total.
+- **CostPreviewModal**: retiré les lignes « Appels API » et « Coût estimé USD » ainsi que le ~$ par modèle ; ne reste que les crédits. Clés i18n apiCalls/estimatedUsd supprimées (fr/en).
+- **Tests**: 23/23 (test_pricing 10 + test_cost_estimate 13, dont 3 nouveaux checks cost==sum). Testing agent iteration_31: 100% BE+FE (modale: total=252 = 150+74+17+10+1).
+- **Build**: frontend rebuild → index-Rf6ozjSw.js (dist inclus).

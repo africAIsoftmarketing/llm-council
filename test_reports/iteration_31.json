@@ -1,0 +1,24 @@
+{
+  "summary": "v34 fixes verified end-to-end. Backend: 23/23 pytest pass (10 test_pricing + 13 test_cost_estimate incl. 3 new v34 consistency tests). Added assertions: (a) cost == sum(per_model_credits) with default rate, (b) same holds across credits_per_usd = 250/500/1000, (c) zero-credit user hitting POST /api/conversations/{id}/message returns 402 whose detail.required equals /api/cost/estimate cost which equals sum(per_model_credits). Frontend: live modal displays TOP=252 credits and per-model rows summing exactly to 252 (150+74+17+10+1), no 'API calls' row, no 'Estimated OpenRouter cost' row, no '$' anywhere, per-model lines show only 'N credits'. Cancel closes the modal, Modify configuration navigates to Settings view (Council models / Chairman / Advanced tabs visible).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_cost_estimate.py",
+    "/app/backend/tests/test_pricing.py",
+    "/app/test_reports/pytest/iter31_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "pricing._PRICING_CACHE_TS is still only refreshed on HTTP 200; on OpenRouter downtime every request incurs a fresh 20s timeout. Set timestamp on failure (with shorter TTL) to avoid latency spikes (carried over from iter30).",
+    "pricing.usd_to_credits() is unused now that estimate_run_credits computes per-model credits inline; consider removing or documenting.",
+    "estimate_run_credits still returns 'estimated_usd' in the response even though the UI no longer displays it — harmless but slightly dead-weight over the wire."
+  ],
+  "updated_files": ["/app/backend/tests/test_cost_estimate.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "dev-login; admin somecedric@gmail.com; per-test TEST_* users funded via /api/admin/users/{uid}/credits",
+  "seed_data_creation": "Ephemeral TEST_v34_* users; funded 5000 credits for confirm/cancel flows.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "v34 stable. New test class TestCostEqualsSumPerModel in /app/backend/tests/test_cost_estimate.py guards the consistency invariant. On a 4-model council with default credits_per_usd=500 the standard-request cost is ~252 credits (150+74+17+10+1). OPENROUTER_API_KEY still absent — Confirm path triggers 502 with auto-refund, expected. Frontend needs T&C modal acceptance on first login (checkbox + 'Accept & continue').",
+  "rca of the issue": "N/A — feature verified. Previous inconsistency (top-level ceil(total_usd*rate) vs. sum of per-model ceils) is fixed by pricing.py:188 total_credits = max(minimum, sum(m['credits'] for m in per_model_credits))."
+}

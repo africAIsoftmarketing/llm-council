@@ -109,6 +109,68 @@ class TestCostEstimatePricing:
             f"{BASE_URL}/api/admin/settings/credits_per_usd", json={"value": 500.0}
         )
 
+# ============================ v34 consistency: cost == sum(per_model_credits) ============================
+
+class TestCostEqualsSumPerModel:
+    def test_cost_equals_sum_of_per_model_credits_default(self, admin_session, user_a):
+        admin_session.put(
+            f"{BASE_URL}/api/admin/settings/credits_per_usd", json={"value": 500.0}
+        )
+        r = user_a.post(f"{BASE_URL}/api/cost/estimate", json={"include_documents": False})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        pm = d["pricing"]["per_model_credits"]
+        assert isinstance(pm, list) and len(pm) > 0
+        # each entry has model + integer credits
+        for entry in pm:
+            assert "model" in entry and "credits" in entry
+            assert isinstance(entry["credits"], int) and entry["credits"] >= 0
+        total = sum(m["credits"] for m in pm)
+        # v34 rule: top-level cost equals sum of per-model credits (floored by minimum)
+        assert d["cost"] == total, f"cost={d['cost']} sum(per_model)={total}"
+
+    def test_cost_equals_sum_under_multiple_rates(self, admin_session, user_a):
+        for rate in (500.0, 1000.0, 250.0):
+            admin_session.put(
+                f"{BASE_URL}/api/admin/settings/credits_per_usd", json={"value": rate}
+            )
+            d = user_a.post(
+                f"{BASE_URL}/api/cost/estimate", json={"include_documents": False}
+            ).json()
+            total = sum(m["credits"] for m in d["pricing"]["per_model_credits"])
+            assert d["cost"] == total, f"rate={rate} cost={d['cost']} sum={total}"
+        admin_session.put(
+            f"{BASE_URL}/api/admin/settings/credits_per_usd", json={"value": 500.0}
+        )
+
+    def test_message_402_required_matches_estimate_cost(self, admin_session):
+        # Zero-credit user should get 402, and detail.required must equal /api/cost/estimate cost
+        # which itself must equal sum(per_model_credits).
+        s = _login(f"TEST_broke_debit_{uuid.uuid4().hex[:8]}@example.com")
+        est = s.post(f"{BASE_URL}/api/cost/estimate", json={"include_documents": False}).json()
+        assert est["balance"] == 0
+        est_cost = est["cost"]
+        sum_pm = sum(m["credits"] for m in est["pricing"]["per_model_credits"])
+        assert est_cost == sum_pm
+
+        # Create a conversation and send a message
+        conv = s.post(f"{BASE_URL}/api/conversations", json={"title": "TEST_v34"})
+        assert conv.status_code in (200, 201), conv.text
+        cid = conv.json()["id"]
+        r = s.post(
+            f"{BASE_URL}/api/conversations/{cid}/message",
+            json={"content": "hello"},
+        )
+        assert r.status_code == 402, f"expected 402, got {r.status_code}: {r.text}"
+        detail = r.json().get("detail")
+        # detail can be dict or string; handle both
+        if isinstance(detail, dict):
+            required = detail.get("required")
+        else:
+            required = None
+        assert required == est_cost, f"required={required} estimate cost={est_cost}"
+
+
 
 # ============================ Balance / can_afford ============================
 
