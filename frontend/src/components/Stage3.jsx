@@ -55,6 +55,89 @@ function markdownToPlain(text) {
   return t.trim();
 }
 
+// ---------------------------------------------------------------------------
+// PDF export helpers
+// ---------------------------------------------------------------------------
+// Rendering the whole report into ONE html2canvas bitmap breaks on long
+// reports: browsers cap canvas size (Chrome/Firefox: 32 767 px per side,
+// Safari/iOS: ~16.7 M px total area), so the capture comes back blank and
+// jsPDF throws. Re-adding that full bitmap on every page also produced PDFs of
+// hundreds of MB. We therefore (1) compute page breaks on block boundaries,
+// (2) capture the surface in bounded chunks, and (3) embed only each page's
+// own slice.
+const PDF_SCALE = 2;
+const PDF_MARGIN_PT = 28;               // top/bottom margin on every A4 page
+const MAX_CANVAS_SIDE = 16000;          // px — well under every browser cap
+const MAX_CANVAS_AREA = 16000000;       // px² — under Safari's ~16.7 M limit
+
+// Blocks we avoid splitting across two pages (lines of text, rows, formulas…).
+const PDF_BLOCK_SELECTOR = [
+  'p', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'blockquote', 'tr',
+  'hr', 'img', '.katex-display', '.export-chairman', '.ranking-note',
+].join(',');
+
+// Returns [[top, bottom], …] page slices (CSS px, relative to `node`).
+function computePdfPages(node, pageHeightPx) {
+  const rootTop = node.getBoundingClientRect().top;
+  const total = Math.ceil(node.scrollHeight);
+  const blocks = [];
+  node.querySelectorAll(PDF_BLOCK_SELECTOR).forEach((el) => {
+    const r = el.getBoundingClientRect();
+    if (r.height <= 0) return;
+    const top = r.top - rootTop;
+    let bottom = r.bottom - rootTop;
+    // Keep headings with the beginning of the content that follows them.
+    if (/^H[1-6]$/.test(el.tagName) && el.nextElementSibling) {
+      const n = el.nextElementSibling.getBoundingClientRect();
+      if (n.height > 0) bottom = Math.max(bottom, Math.min(n.bottom, n.top + 60) - rootTop);
+    }
+    blocks.push([top, bottom]);
+  });
+
+  const pages = [];
+  let start = 0;
+  while (total - start > pageHeightPx) {
+    const hardEnd = start + pageHeightPx;
+    let cut = hardEnd;
+    let moved = true;
+    while (moved) {
+      moved = false;
+      for (const [top, bottom] of blocks) {
+        if (top < cut && bottom > cut && top > start) {
+          cut = top;
+          moved = true;
+        }
+      }
+    }
+    // A block taller than most of a page (huge code block/table): cut through it
+    // rather than producing an almost empty page.
+    if (cut < start + pageHeightPx * 0.3) cut = hardEnd;
+    cut = Math.floor(cut);
+    pages.push([start, cut]);
+    start = cut;
+  }
+  pages.push([start, total]);
+  return pages;
+}
+
+// Group consecutive pages into capture chunks that respect canvas limits.
+function groupPagesIntoChunks(pages, widthPx, scale) {
+  const maxByArea = MAX_CANVAS_AREA / (widthPx * scale * scale);
+  const maxChunkPx = Math.floor(Math.min(MAX_CANVAS_SIDE / scale, maxByArea));
+  const chunks = [];
+  let current = null;
+  for (const page of pages) {
+    if (current && page[1] - current.top <= maxChunkPx) {
+      current.pages.push(page);
+      current.bottom = page[1];
+    } else {
+      current = { top: page[0], bottom: page[1], pages: [page] };
+      chunks.push(current);
+    }
+  }
+  return chunks;
+}
+
 export default function Stage3({
   finalResponse,
   stage1Responses,
@@ -149,38 +232,73 @@ export default function Stage3({
     }
   };
 
-  // WYSIWYG PDF: capture the offscreen, fully-expanded report surface as an image
+  // WYSIWYG PDF: capture the offscreen, fully-expanded report surface as images
   // (browser fonts render all Unicode correctly) and paginate across A4 pages.
+  // Captured in bounded chunks and sliced per page (see computePdfPages).
   const handleExportPdf = async () => {
     if (pdfBusy) return;
     setPdfBusy(true);
     try {
       const node = exportRef.current;
-      const canvas = await html2canvas(node, {
-        scale: 2,
-        backgroundColor: '#ffffff',
-        useCORS: true,
-        windowWidth: node.scrollWidth,
-      });
-      const imgData = canvas.toDataURL('image/png');
+      if (!node) throw new Error('PDF export surface not mounted');
+      // Make sure web fonts (incl. KaTeX) are loaded before capturing.
+      if (document.fonts && document.fonts.ready) {
+        try { await document.fonts.ready; } catch { /* non-blocking */ }
+      }
+
       const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const widthPx = Math.ceil(node.scrollWidth);
+      const ptPerPx = pageWidth / widthPx;
+      const contentHeightPx = (pageHeight - 2 * PDF_MARGIN_PT) / ptPerPx;
 
-      let heightLeft = imgHeight;
-      let position = 0;
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-      while (heightLeft > 0) {
-        position -= pageHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+      const pages = computePdfPages(node, contentHeightPx);
+      const chunks = groupPagesIntoChunks(pages, widthPx, PDF_SCALE);
+
+      let pageIndex = 0;
+      for (const chunk of chunks) {
+        const chunkCanvas = await html2canvas(node, {
+          scale: PDF_SCALE,
+          backgroundColor: '#ffffff',
+          useCORS: true,
+          windowWidth: node.scrollWidth,
+          width: widthPx,
+          y: chunk.top,
+          height: Math.ceil(chunk.bottom - chunk.top),
+        });
+        const pxScale = chunkCanvas.width / widthPx; // effective device scale
+
+        for (const [top, bottom] of chunk.pages) {
+          const srcY = Math.round((top - chunk.top) * pxScale);
+          const srcH = Math.min(
+            Math.round((bottom - top) * pxScale),
+            chunkCanvas.height - srcY,
+          );
+          if (srcH <= 0) continue;
+          const pageCanvas = document.createElement('canvas');
+          pageCanvas.width = chunkCanvas.width;
+          pageCanvas.height = srcH;
+          const ctx = pageCanvas.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+          ctx.drawImage(chunkCanvas, 0, srcY, chunkCanvas.width, srcH,
+            0, 0, pageCanvas.width, srcH);
+
+          if (pageIndex > 0) pdf.addPage();
+          pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG',
+            0, PDF_MARGIN_PT, pageWidth, (srcH / pxScale) * ptPerPx,
+            undefined, 'FAST');
+          pageIndex += 1;
+          pageCanvas.width = 0; pageCanvas.height = 0; // free memory early
+        }
+        chunkCanvas.width = 0; chunkCanvas.height = 0;
       }
+
+      if (pageIndex === 0) throw new Error('PDF export produced no page');
       pdf.save(`council-report-${timestamp()}.pdf`);
-    } catch {
+    } catch (err) {
+      console.error('[Stage3] PDF export failed:', err);
       flashError(t('stage3.pdfError'));
     } finally {
       setPdfBusy(false);
