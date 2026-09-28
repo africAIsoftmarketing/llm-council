@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import MarkdownView from './MarkdownView';
 import { jsPDF } from 'jspdf';
@@ -66,7 +66,11 @@ function markdownToPlain(text) {
 // (2) capture the surface in bounded chunks, and (3) embed only each page's
 // own slice.
 const PDF_SCALE = 2;
+// If a capture fails or comes back blank (GPU/memory limits), retry that chunk
+// at a lower resolution instead of failing the whole export.
+const PDF_RETRY_SCALES = [PDF_SCALE, 1.5, 1];
 const PDF_MARGIN_PT = 28;               // top/bottom margin on every A4 page
+const PDF_JPEG_QUALITY = 0.92;          // sharp text on white, fast to embed
 const MAX_CANVAS_SIDE = 16000;          // px — well under every browser cap
 const MAX_CANVAS_AREA = 16000000;       // px² — under Safari's ~16.7 M limit
 
@@ -120,6 +124,112 @@ function computePdfPages(node, pageHeightPx) {
   return pages;
 }
 
+// html2canvas clones the WHOLE page (the full app + the full report) and lays
+// it out again on every call. On a real council conversation (100k+ DOM nodes,
+// 150+ pages) that is 6-20 s per chunk, i.e. many minutes and enough memory
+// pressure for Edge/Chrome to fail. For each chunk we therefore clone ONLY
+// the elements that intersect it:
+//   - everything outside the report surface is skipped (ignoreElements),
+//   - report blocks entirely above/below the chunk are skipped too,
+//   - in the private clone, an invisible spacer puts the first kept block
+//     back at its exact original offset, so page breaks stay pixel-exact.
+// Tables, formulas, code blocks… are never split (their layout depends on all
+// their content); only plain flow containers are pruned.
+const PDF_SKIP_MARGIN_PX = 64; // safety band for glyphs overflowing their box
+const PDF_SPLITTABLE = new Set(['DIV', 'SECTION', 'ARTICLE', 'UL', 'OL', 'LI', 'BLOCKQUOTE']);
+
+function planChunk(node, top, bottom) {
+  const rootTop = node.getBoundingClientRect().top;
+  const lo = top - PDF_SKIP_MARGIN_PX;
+  const hi = bottom + PDF_SKIP_MARGIN_PX;
+  const ignore = new Set();
+  const olSkips = [];      // [pathToOl, removedLiCount]
+  let anchor = null;
+  let anchorPath = null;   // child indexes from `node`, counting kept elements only
+  let anchorTop = 0;
+  const visit = (el, path) => {
+    let removedLi = 0;
+    let keptIndex = -1;
+    for (const child of el.children) {
+      const r = child.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) { keptIndex += 1; continue; } // no box: keep
+      const cTop = r.top - rootTop;
+      const cBottom = r.bottom - rootTop;
+      const splittable = PDF_SPLITTABLE.has(child.tagName) && child.children.length > 0;
+      if (cBottom < lo && !anchor) {            // entirely above the chunk
+        ignore.add(child);
+        if (child.tagName === 'LI') removedLi += 1;
+        continue;
+      }
+      if (cTop > hi) {                          // entirely below the chunk
+        ignore.add(child);
+        continue;
+      }
+      keptIndex += 1;
+      const childPath = [...path, keptIndex];
+      if (!anchor) {                            // first block reaching the chunk
+        if (cTop < lo && splittable) {
+          visit(child, childPath);              // starts above: drop its head
+        } else {
+          anchor = child; anchorPath = childPath; anchorTop = cTop;
+          if (cBottom > hi && splittable) visit(child, childPath); // drop its tail
+        }
+      } else if (cBottom > hi && splittable) {  // runs past the chunk: prune tail
+        visit(child, childPath);
+      }
+    }
+    if (removedLi > 0 && el.tagName === 'OL') olSkips.push([path, removedLi]);
+  };
+  visit(node, []);
+  return { ignore, olSkips, anchorPath, anchorTop };
+}
+
+// Follow a kept-children index path inside the cloned report.
+// html2canvas injects <html2canvaspseudoelement> nodes for ::before/::after;
+// they are not part of the original structure, so skip them when walking.
+function elementAtPath(root, path) {
+  let el = root;
+  for (const i of path) {
+    if (!el) return null;
+    const kids = [...el.children].filter((c) => c.tagName !== 'HTML2CANVASPSEUDOELEMENT');
+    el = kids[i];
+  }
+  return el || null;
+}
+
+function makeIgnore(node, plan) {
+  const body = node.ownerDocument.body;
+  return (el) => {
+    if (plan.ignore.has(el)) return true;
+    if (el === node || node.contains(el)) return false;
+    // Rest of the app: not needed for the capture, skip unless it holds the report.
+    return body.contains(el) && el !== body && !el.contains(node);
+  };
+}
+
+function restoreChunkLayout(clonedNode, plan) {
+  for (const [path, skipped] of plan.olSkips) {
+    const ol = elementAtPath(clonedNode, path);
+    if (ol && ol.tagName === 'OL') ol.start = (ol.start || 1) + skipped; // keep numbering
+  }
+  if (!plan.anchorPath) return;
+  const anchor = elementAtPath(clonedNode, plan.anchorPath);
+  if (!anchor || !anchor.parentNode) return;
+  const anchorTop = plan.anchorTop;
+  const spacer = clonedNode.ownerDocument.createElement('div');
+  spacer.style.cssText = 'display:block;height:0;margin:0;padding:0;border:0;';
+  anchor.parentNode.insertBefore(spacer, anchor);
+  let offset = 0;
+  for (let i = 0; i < 6; i += 1) {
+    const cur = anchor.getBoundingClientRect().top - clonedNode.getBoundingClientRect().top;
+    const diff = anchorTop - cur;
+    if (Math.abs(diff) < 0.25) break;
+    offset += diff;
+    spacer.style.height = `${Math.max(0, offset)}px`;
+    spacer.style.marginTop = `${Math.min(0, offset)}px`;
+  }
+}
+
 // Group consecutive pages into capture chunks that respect canvas limits.
 function groupPagesIntoChunks(pages, widthPx, scale) {
   const maxByArea = MAX_CANVAS_AREA / (widthPx * scale * scale);
@@ -138,6 +248,60 @@ function groupPagesIntoChunks(pages, widthPx, scale) {
   return chunks;
 }
 
+// Browsers only honour a script-initiated download while the user's click is
+// still "active" (a few seconds). Small reports finish within that window;
+// long ones do not, and Chrome/Edge/Safari then silently block the download
+// (Chrome shows a small "download blocked" icon in the address bar). We
+// therefore download immediately only when generation was quick and the
+// browser does not report an expired activation; otherwise we hand the user a
+// real download button, whose click is always honoured.
+const PDF_AUTO_DOWNLOAD_MAX_MS = 3000;
+function canAutoDownload(startedAt) {
+  if (Date.now() - startedAt > PDF_AUTO_DOWNLOAD_MAX_MS) return false;
+  const ua = typeof navigator !== 'undefined' ? navigator.userActivation : undefined;
+  return !(ua && ua.isActive === false);
+}
+
+function triggerDownload(url, filename) {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// The export surface is only rendered while an export runs (it duplicates the
+// whole report in the DOM). Wait until React has mounted it for this mode.
+function waitForSurface(ref, mode, timeoutMs = 5000) {
+  const started = Date.now();
+  return new Promise((resolve, reject) => {
+    const tick = () => {
+      const el = ref.current;
+      if (el && el.dataset.pdfMode === mode) {
+        // One more frame so layout and KaTeX glyphs are settled.
+        requestAnimationFrame(() => resolve(el));
+      } else if (Date.now() - started > timeoutMs) {
+        reject(new Error('PDF export surface not mounted'));
+      } else {
+        requestAnimationFrame(tick);
+      }
+    };
+    tick();
+  });
+}
+
+function formatMb(bytes, lang) {
+  const mb = bytes / (1024 * 1024);
+  try {
+    return mb.toLocaleString(lang || undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  } catch {
+    return mb.toFixed(1);
+  }
+}
+
+
 export default function Stage3({
   finalResponse,
   stage1Responses,
@@ -147,10 +311,40 @@ export default function Stage3({
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfReady, setPdfReady] = useState(null);       // { url, name, size }
+  const [pdfError, setPdfError] = useState('');         // stays until next export
+  const [pdfMode, setPdfMode] = useState(null);         // 'chairman' | 'members' while exporting
+  const [pdfMenuOpen, setPdfMenuOpen] = useState(false);
+  const pdfMenuRef = useRef(null);
   const [membersOpen, setMembersOpen] = useState(false);
   const [rankingOpen, setRankingOpen] = useState(false);
   const exportRef = useRef(null);
-  const { t } = useTranslation();
+  const pdfUrlRef = useRef(null);
+  const pdfProgressRef = useRef(null); // text updated directly: no re-render
+  const { t, i18n } = useTranslation();
+
+  // Release the generated PDF blob when a new one replaces it or on unmount.
+  const releasePdfUrl = () => {
+    if (pdfUrlRef.current) {
+      URL.revokeObjectURL(pdfUrlRef.current);
+      pdfUrlRef.current = null;
+    }
+  };
+  useEffect(() => releasePdfUrl, []);
+
+  useEffect(() => {
+    if (!pdfMenuOpen) return undefined;
+    const onDown = (e) => {
+      if (pdfMenuRef.current && !pdfMenuRef.current.contains(e.target)) setPdfMenuOpen(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setPdfMenuOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [pdfMenuOpen]);
 
   if (!finalResponse) return null;
 
@@ -235,12 +429,20 @@ export default function Stage3({
   // WYSIWYG PDF: capture the offscreen, fully-expanded report surface as images
   // (browser fonts render all Unicode correctly) and paginate across A4 pages.
   // Captured in bounded chunks and sliced per page (see computePdfPages).
-  const handleExportPdf = async () => {
+  // Two separate documents keep each export small:
+  //   'chairman' → chairman's final synthesis + aggregate ranking
+  //   'members'  → each council member's individual opinion (Stage 1)
+  const handleExportPdf = async (mode) => {
     if (pdfBusy) return;
+    setPdfMenuOpen(false);
+    const startedAt = Date.now();
     setPdfBusy(true);
+    setPdfReady(null);
+    setPdfError('');
+    releasePdfUrl();
+    setPdfMode(mode);
     try {
-      const node = exportRef.current;
-      if (!node) throw new Error('PDF export surface not mounted');
+      const node = await waitForSurface(exportRef, mode);
       // Make sure web fonts (incl. KaTeX) are loaded before capturing.
       if (document.fonts && document.fonts.ready) {
         try { await document.fonts.ready; } catch { /* non-blocking */ }
@@ -255,53 +457,106 @@ export default function Stage3({
 
       const pages = computePdfPages(node, contentHeightPx);
       const chunks = groupPagesIntoChunks(pages, widthPx, PDF_SCALE);
+      const showProgress = (done) => {
+        if (pdfProgressRef.current && pages.length > 1) {
+          pdfProgressRef.current.textContent = ` ${done}/${pages.length}`;
+        }
+      };
+      showProgress(0);
 
-      let pageIndex = 0;
-      for (const chunk of chunks) {
+      // Capture one chunk and slice it into per-page JPEGs. Nothing is added to
+      // the PDF until the whole chunk succeeded, so a retry never duplicates pages.
+      const captureChunkPages = async (chunk, scale) => {
+        const plan = planChunk(node, chunk.top, chunk.bottom);
         const chunkCanvas = await html2canvas(node, {
-          scale: PDF_SCALE,
+          scale,
           backgroundColor: '#ffffff',
           useCORS: true,
           windowWidth: node.scrollWidth,
           width: widthPx,
           y: chunk.top,
           height: Math.ceil(chunk.bottom - chunk.top),
+          ignoreElements: makeIgnore(node, plan),
+          onclone: (_doc, clonedNode) => restoreChunkLayout(clonedNode, plan),
         });
-        const pxScale = chunkCanvas.width / widthPx; // effective device scale
-
-        for (const [top, bottom] of chunk.pages) {
-          const srcY = Math.round((top - chunk.top) * pxScale);
-          const srcH = Math.min(
-            Math.round((bottom - top) * pxScale),
-            chunkCanvas.height - srcY,
-          );
-          if (srcH <= 0) continue;
-          const pageCanvas = document.createElement('canvas');
-          pageCanvas.width = chunkCanvas.width;
-          pageCanvas.height = srcH;
-          const ctx = pageCanvas.getContext('2d');
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
-          ctx.drawImage(chunkCanvas, 0, srcY, chunkCanvas.width, srcH,
-            0, 0, pageCanvas.width, srcH);
-
-          if (pageIndex > 0) pdf.addPage();
-          pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG',
-            0, PDF_MARGIN_PT, pageWidth, (srcH / pxScale) * ptPerPx,
-            undefined, 'FAST');
-          pageIndex += 1;
-          pageCanvas.width = 0; pageCanvas.height = 0; // free memory early
+        try {
+          if (!chunkCanvas || !chunkCanvas.width || !chunkCanvas.height) {
+            throw new Error('empty capture');
+          }
+          const pxScale = chunkCanvas.width / widthPx; // effective device scale
+          const images = [];
+          for (const [top, bottom] of chunk.pages) {
+            const srcY = Math.round((top - chunk.top) * pxScale);
+            const srcH = Math.min(
+              Math.round((bottom - top) * pxScale),
+              chunkCanvas.height - srcY,
+            );
+            if (srcH <= 0) continue;
+            const pageCanvas = document.createElement('canvas');
+            pageCanvas.width = chunkCanvas.width;
+            pageCanvas.height = srcH;
+            const ctx = pageCanvas.getContext('2d');
+            if (!ctx) throw new Error('canvas context unavailable');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+            ctx.drawImage(chunkCanvas, 0, srcY, chunkCanvas.width, srcH,
+              0, 0, pageCanvas.width, srcH);
+            // JPEG is embedded as-is by jsPDF (DCTDecode); PNG would be decoded
+            // and re-deflated in JavaScript, which is far slower.
+            const dataUrl = pageCanvas.toDataURL('image/jpeg', PDF_JPEG_QUALITY);
+            pageCanvas.width = 0; pageCanvas.height = 0; // free memory early
+            if (!dataUrl.startsWith('data:image/jpeg')) throw new Error('canvas export failed');
+            images.push({ dataUrl, heightPt: (srcH / pxScale) * ptPerPx });
+          }
+          return images;
+        } finally {
+          chunkCanvas.width = 0; chunkCanvas.height = 0;
         }
-        chunkCanvas.width = 0; chunkCanvas.height = 0;
+      };
+
+      let pageIndex = 0;
+      for (const chunk of chunks) {
+        let images = null;
+        let lastErr = null;
+        for (const scale of PDF_RETRY_SCALES) {
+          try {
+            images = await captureChunkPages(chunk, scale);
+            break;
+          } catch (err) {
+            lastErr = err;
+            console.warn(`[Stage3] PDF chunk capture failed at scale ${scale}, retrying lower`, err);
+          }
+        }
+        if (!images) throw lastErr || new Error('capture failed');
+        for (const { dataUrl, heightPt } of images) {
+          if (pageIndex > 0) pdf.addPage();
+          pdf.addImage(dataUrl, 'JPEG', 0, PDF_MARGIN_PT, pageWidth, heightPt);
+          pageIndex += 1;
+        }
+        showProgress(pageIndex);
       }
 
       if (pageIndex === 0) throw new Error('PDF export produced no page');
-      pdf.save(`council-report-${timestamp()}.pdf`);
+
+      const blob = pdf.output('blob');
+      const name = mode === 'members'
+        ? `council-members-${timestamp()}.pdf`
+        : `council-report-${timestamp()}.pdf`;
+      const url = URL.createObjectURL(blob);
+      pdfUrlRef.current = url;
+      if (canAutoDownload(startedAt)) {
+        triggerDownload(url, name);
+      } else {
+        // Click expired during generation: let the user trigger the download.
+        setPdfReady({ url, name, size: blob.size });
+      }
     } catch (err) {
       console.error('[Stage3] PDF export failed:', err);
-      flashError(t('stage3.pdfError'));
+      const detail = err && (err.message || String(err));
+      setPdfError(`${t('stage3.pdfError')}${detail ? ` (${detail})` : ''}`);
     } finally {
       setPdfBusy(false);
+      setPdfMode(null); // unmount the heavy export surface
     }
   };
 
@@ -322,15 +577,50 @@ export default function Stage3({
               data-testid="stage3-export-txt-btn" title={t('stage3.exportTxtTitle')}>
               {t('stage3.exportTxt')}
             </button>
-            <button type="button" className="report-action-btn" onClick={handleExportPdf}
-              disabled={pdfBusy} data-testid="stage3-export-pdf-btn" title={t('stage3.exportPdfTitle')}>
-              {pdfBusy ? t('stage3.pdfBusy') : t('stage3.exportPdf')}
-            </button>
+            <div className="report-pdf-menu" ref={pdfMenuRef}>
+              <button type="button" className="report-action-btn"
+                onClick={() => setPdfMenuOpen((v) => !v)}
+                disabled={pdfBusy} data-testid="stage3-export-pdf-btn" title={t('stage3.exportPdfTitle')}
+                aria-haspopup="menu" aria-expanded={pdfMenuOpen}>
+                {pdfBusy ? t('stage3.pdfBusy') : t('stage3.exportPdf')}
+                {pdfBusy && <span ref={pdfProgressRef} data-testid="stage3-pdf-progress" />}
+                {!pdfBusy && <span className="report-pdf-caret" aria-hidden="true"> ▾</span>}
+              </button>
+              {pdfMenuOpen && !pdfBusy && (
+                <div className="report-pdf-options" role="menu" data-testid="stage3-pdf-menu">
+                  <button type="button" role="menuitem" className="report-pdf-option"
+                    onClick={() => handleExportPdf('chairman')} data-testid="stage3-pdf-chairman">
+                    <span className="report-pdf-option-title">{t('stage3.pdfChairman')}</span>
+                    <span className="report-pdf-option-desc">{t('stage3.pdfChairmanDesc')}</span>
+                  </button>
+                  <button type="button" role="menuitem" className="report-pdf-option"
+                    onClick={() => handleExportPdf('members')} data-testid="stage3-pdf-members"
+                    disabled={members.length === 0}>
+                    <span className="report-pdf-option-title">{t('stage3.pdfMembers')}</span>
+                    <span className="report-pdf-option-desc">{t('stage3.pdfMembersDesc', { count: members.length })}</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {error && (
-          <div className="report-action-error" data-testid="stage3-action-error">{error}</div>
+        {(error || pdfError) && (
+          <div className="report-action-error" data-testid="stage3-action-error">{error || pdfError}</div>
+        )}
+
+        {pdfReady && (
+          <div className="report-pdf-ready" data-testid="stage3-pdf-ready">
+            <span>{t('stage3.pdfReady', { size: formatMb(pdfReady.size, i18n.language) })}</span>
+            <a
+              className="report-action-btn report-pdf-download"
+              href={pdfReady.url}
+              download={pdfReady.name}
+              data-testid="stage3-pdf-download-link"
+            >
+              {t('stage3.pdfDownload')}
+            </a>
+          </div>
         )}
 
         {/* Chairman synthesis — always visible */}
@@ -401,50 +691,58 @@ export default function Stage3({
         )}
       </div>
 
-      {/* Offscreen, fully-expanded surface used to render the WYSIWYG PDF. */}
-      <div className="stage3-export-surface" ref={exportRef} aria-hidden="true">
-        <div className="export-doc">
-          <h1 className="export-title">{t('stage3.reportTitle')}</h1>
-          <div className="export-chairman">{t('stage3.chairman', { model: chairman })}</div>
+      {/* Offscreen, fully-expanded surface used to render the WYSIWYG PDF.
+          Mounted only while an export runs, with the content of that export. */}
+      {pdfMode && (
+        <div className="stage3-export-surface" ref={exportRef} aria-hidden="true" data-pdf-mode={pdfMode}>
+          <div className="export-doc">
+            {pdfMode === 'chairman' && (
+              <>
+                <h1 className="export-title">{t('stage3.reportTitle')}</h1>
+                <div className="export-chairman">{t('stage3.chairman', { model: chairman })}</div>
 
-          <h2 className="export-h">{t('stage3.finalSynthesis')}</h2>
-          <div className="markdown-content">{md(finalResponse.response)}</div>
+                <h2 className="export-h">{t('stage3.finalSynthesis')}</h2>
+                <div className="markdown-content">{md(finalResponse.response)}</div>
 
-          {members.length > 0 && (
-            <>
-              <h2 className="export-h">{t('stage3.councilMembers')}</h2>
-              {members.map((m, i) => (
-                <div key={i} className="export-member">
-                  <h3 className="export-h3">{shortModel(m.model)}</h3>
-                  <div className="markdown-content">{md(m.response)}</div>
-                </div>
-              ))}
-            </>
-          )}
+                {ranking.length > 0 && (
+                  <>
+                    <h2 className="export-h">{t('stage3.aggregateRanking')}</h2>
+                    <table className="ranking-table">
+                      <thead>
+                        <tr><th>#</th><th>{t('stage3.colModel')}</th><th>{t('stage3.colAvg')}</th><th>{t('stage3.colVotes')}</th></tr>
+                      </thead>
+                      <tbody>
+                        {ranking.map((agg, i) => (
+                          <tr key={i}>
+                            <td>{i + 1}</td>
+                            <td>{shortModel(agg.model)}</td>
+                            <td>{Number(agg.average_rank).toFixed(2)}</td>
+                            <td>{agg.rankings_count}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <p className="ranking-note">{t('stage3.rankingNote')}</p>
+                  </>
+                )}
+              </>
+            )}
 
-          {ranking.length > 0 && (
-            <>
-              <h2 className="export-h">{t('stage3.aggregateRanking')}</h2>
-              <table className="ranking-table">
-                <thead>
-                  <tr><th>#</th><th>{t('stage3.colModel')}</th><th>{t('stage3.colAvg')}</th><th>{t('stage3.colVotes')}</th></tr>
-                </thead>
-                <tbody>
-                  {ranking.map((agg, i) => (
-                    <tr key={i}>
-                      <td>{i + 1}</td>
-                      <td>{shortModel(agg.model)}</td>
-                      <td>{Number(agg.average_rank).toFixed(2)}</td>
-                      <td>{agg.rankings_count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="ranking-note">{t('stage3.rankingNote')}</p>
-            </>
-          )}
+            {pdfMode === 'members' && (
+              <>
+                <h1 className="export-title">{t('stage3.membersReportTitle')}</h1>
+                <div className="export-chairman">{t('stage3.chairman', { model: chairman })}</div>
+                {members.map((m, i) => (
+                  <div key={i} className="export-member">
+                    <h2 className="export-h">{`${i + 1}. ${shortModel(m.model)}`}</h2>
+                    <div className="markdown-content">{md(m.response)}</div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
