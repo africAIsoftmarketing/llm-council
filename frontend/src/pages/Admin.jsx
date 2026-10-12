@@ -158,11 +158,13 @@ function UsersTab({ showToast }) {
 function PricingTab({ showToast }) {
   const [packs, setPacks] = useState([]);
   const [cost, setCost] = useState({ standard: 10, vision: 15 });
+  const [freeCfg, setFreeCfg] = useState({ enabled: false, pack_id: 'decouverte', max_credits: 40 });
 
   const load = useCallback(async () => {
     const s = await adminApi.getSettings();
     setPacks(s.credit_packs || []);
     setCost(s.request_cost || { standard: 10, vision: 15 });
+    setFreeCfg({ enabled: false, pack_id: 'decouverte', max_credits: 40, ...(s.free_discovery || {}) });
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -177,6 +179,18 @@ function PricingTab({ showToast }) {
   const saveCost = async () => {
     try { await adminApi.updateSetting('request_cost', { standard: Number(cost.standard), vision: Number(cost.vision) }); showToast('Coûts enregistrés', 'success'); }
     catch (err) { showToast(err.message, 'error'); }
+  };
+
+  const saveFree = async () => {
+    try {
+      const saved = await adminApi.updateSetting('free_discovery', {
+        enabled: !!freeCfg.enabled,
+        pack_id: freeCfg.pack_id,
+        max_credits: Math.max(0, parseInt(freeCfg.max_credits, 10) || 0),
+      });
+      if (saved && saved.value) setFreeCfg(saved.value);
+      showToast('Pack gratuit enregistré', 'success');
+    } catch (err) { showToast(err.message, 'error'); }
   };
 
   return (
@@ -204,6 +218,33 @@ function PricingTab({ showToast }) {
         <label>Vision (images) <input type="number" value={cost.vision} onChange={(e) => setCost({ ...cost, vision: e.target.value })} data-testid="cost-vision-input" /></label>
       </div>
       <button className="save-btn" onClick={saveCost} data-testid="save-cost-button">Enregistrer les coûts</button>
+
+      <h3 style={{ marginTop: 32 }}>Pack découverte gratuit</h3>
+      <p className="free-pack-help">
+        Coché : le pack choisi s'obtient sans PayPal, jusqu'à ce que l'utilisateur ait reçu
+        le plafond de crédits gratuits. Au-delà, le pack redevient payant via PayPal.
+      </p>
+      <div className="cost-row free-pack-row">
+        <label className="free-pack-toggle">
+          <input type="checkbox" checked={!!freeCfg.enabled}
+            onChange={(e) => setFreeCfg({ ...freeCfg, enabled: e.target.checked })}
+            data-testid="free-pack-enabled" />
+          Activer le pack gratuit
+        </label>
+        <label>Pack
+          <select value={freeCfg.pack_id} onChange={(e) => setFreeCfg({ ...freeCfg, pack_id: e.target.value })}
+            data-testid="free-pack-id">
+            {packs.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.id})</option>)}
+            {!packs.some((p) => p.id === freeCfg.pack_id) && <option value={freeCfg.pack_id}>{freeCfg.pack_id}</option>}
+          </select>
+        </label>
+        <label>Plafond de crédits gratuits par utilisateur
+          <input type="number" min="0" value={freeCfg.max_credits}
+            onChange={(e) => setFreeCfg({ ...freeCfg, max_credits: e.target.value })}
+            data-testid="free-pack-max" />
+        </label>
+      </div>
+      <button className="save-btn" onClick={saveFree} data-testid="save-free-pack-button">Enregistrer le pack gratuit</button>
     </div>
   );
 }

@@ -572,6 +572,7 @@ export const paymentsApi = {
   transactions: () => jreq('/api/payments/transactions'),
   createOrder: (packId) => jreq('/api/payments/orders', { method: 'POST', body: JSON.stringify({ pack_id: packId }) }),
   captureOrder: (orderId) => jreq(`/api/payments/orders/${orderId}/capture`, { method: 'POST' }),
+  claimFreePack: (packId) => jreq('/api/payments/free-claim', { method: 'POST', body: JSON.stringify({ pack_id: packId }) }),
 };
 
 export const adminApi = {

@@ -205,8 +205,17 @@
       "purchase": "Achat",
       "usage": "Utilisation",
       "admin_grant": "Octroi admin",
-      "refund": "Remboursement"
-    }
+      "refund": "Remboursement",
+      "free_pack": "Pack gratuit"
+    },
+    "freeBadge": "Gratuit",
+    "freePrice": "offert",
+    "freeClaim": "Obtenir {{credits}} crédits gratuits",
+    "freeClaiming": "Ajout…",
+    "freeRemaining": "Crédits gratuits restants : {{remaining}} / {{max}}",
+    "freeClaimed": "{{granted}} crédits gratuits ajoutés. Solde : {{credits}}",
+    "freeQuotaReached": "Plafond de crédits gratuits atteint : ce pack passe désormais par PayPal.",
+    "freeClaimFailed": "Impossible d'obtenir le pack gratuit."
   },
   "creditsModal": {
     "title": "Crédits insuffisants",

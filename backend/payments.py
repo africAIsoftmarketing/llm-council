@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, func
 
 try:
     from .db import SessionLocal, User, CreditTransaction, credit_user
@@ -59,9 +59,79 @@ async def payments_config():
     return {"client_id": PAYPAL_CLIENT_ID, "currency": CURRENCY, "mode": PAYPAL_MODE}
 
 
+# ===================== Free discovery pack =====================
+# Admin setting `free_discovery` = {enabled, pack_id, max_credits}. Every free
+# grant is logged as a CreditTransaction of kind "free_pack", so the per-user
+# total is always recomputed from the ledger (no extra table / migration).
+FREE_PACK_KIND = "free_pack"
+
+
+_normalize_free_cfg = settings_store.normalize_free_discovery
+
+
+async def _free_credits_used(session, user_id) -> int:
+    used = await session.scalar(
+        select(func.coalesce(func.sum(CreditTransaction.amount), 0))
+        .where(CreditTransaction.user_id == user_id, CreditTransaction.kind == FREE_PACK_KIND)
+    )
+    return int(used or 0)
+
+
+async def _free_status(user_id) -> Dict[str, Any]:
+    cfg = _normalize_free_cfg(await settings_store.get_setting("free_discovery", {}))
+    async with SessionLocal() as session:
+        used = await _free_credits_used(session, user_id)
+    remaining = max(0, cfg["max_credits"] - used)
+    return {**cfg, "used": used, "remaining": remaining,
+            "available": cfg["enabled"] and remaining > 0}
+
+
 @router.get("/packs")
 async def list_packs(user: User = Depends(get_current_user)):
-    return {"packs": await settings_store.get_setting("credit_packs", [])}
+    packs = await settings_store.get_setting("credit_packs", [])
+    free = await _free_status(user.id)
+    out = []
+    for p in packs:
+        item = dict(p)
+        if free["available"] and p.get("id") == free["pack_id"]:
+            # Credits granted by the next free claim (capped by what is left).
+            item["free"] = True
+            item["free_credits"] = min(int(p.get("credits", 0) or 0), free["remaining"])
+        out.append(item)
+    return {"packs": out, "free_discovery": {
+        "enabled": free["enabled"], "pack_id": free["pack_id"],
+        "max_credits": free["max_credits"], "used": free["used"],
+        "remaining": free["remaining"], "available": free["available"],
+    }}
+
+
+@router.post("/free-claim")
+async def claim_free_pack(body: dict, user: User = Depends(get_current_user)):
+    """Grant the discovery pack for free (no PayPal), within the admin's cap."""
+    cfg = _normalize_free_cfg(await settings_store.get_setting("free_discovery", {}))
+    pack_id = body.get("pack_id") or cfg["pack_id"]
+    if not cfg["enabled"]:
+        raise HTTPException(status_code=403, detail="free_pack_disabled")
+    if pack_id != cfg["pack_id"]:
+        raise HTTPException(status_code=400, detail="pack_not_free")
+    pack = await _find_pack(pack_id)
+    if not pack:
+        raise HTTPException(status_code=404, detail="pack_not_found")
+    async with SessionLocal() as session:
+        # Lock the user row so two simultaneous claims cannot exceed the cap.
+        await session.execute(select(User.id).where(User.id == user.id).with_for_update())
+        used = await _free_credits_used(session, user.id)
+        remaining = max(0, cfg["max_credits"] - used)
+        grant = min(int(pack.get("credits", 0) or 0), remaining)
+        if grant <= 0:
+            raise HTTPException(status_code=409, detail="free_quota_reached")
+        new_balance = await credit_user(
+            session, user.id, grant, FREE_PACK_KIND,
+            reason=f"Pack {pack.get('name', pack_id)} gratuit",
+        )
+        await session.commit()
+    return {"status": "completed", "credits": new_balance, "granted": grant,
+            "remaining": remaining - grant}
 
 
 @router.get("/transactions")

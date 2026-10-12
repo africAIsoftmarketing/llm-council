@@ -66,3 +66,10 @@
   border-radius: 999px; transition: width 0.4s ease;
 }
 .or-usage-bar-label { font-size: 13px; font-weight: 700; color: #0e7490; min-width: 90px; text-align: right; }
+
+/* Free discovery pack settings */
+.free-pack-help { font-size: 13px; color: #64748b; margin: 0 0 14px; max-width: 640px; }
+.free-pack-row { flex-wrap: wrap; align-items: flex-end; }
+.free-pack-row select { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; }
+.cost-row label.free-pack-toggle { flex-direction: row; align-items: center; gap: 8px; padding-bottom: 9px; }
+.free-pack-toggle input { width: 16px; height: 16px; }

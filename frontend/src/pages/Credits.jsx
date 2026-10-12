@@ -16,6 +16,8 @@ export default function Credits() {
   const { t, i18n } = useTranslation();
   const [config, setConfig] = useState(null);
   const [packs, setPacks] = useState([]);
+  const [freeInfo, setFreeInfo] = useState(null);
+  const [claiming, setClaiming] = useState(false);
   const [transactions, setTransactions] = useState([]);
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -32,6 +34,7 @@ export default function Credits() {
       ]);
       setConfig(cfg);
       setPacks(p.packs || []);
+      setFreeInfo(p.free_discovery || null);
       setTransactions(tx.transactions || []);
     } catch {
       showToast(t('credits.loadFailed'), 'error');
@@ -41,6 +44,39 @@ export default function Credits() {
   }, [t]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Free discovery pack (enabled by an admin): credited without PayPal.
+  const claimFree = async (pack) => {
+    if (claiming) return;
+    setClaiming(true);
+    try {
+      const res = await paymentsApi.claimFreePack(pack.id);
+      await refresh();
+      await loadAll();
+      showToast(t('credits.freeClaimed', { granted: res.granted, credits: res.credits }), 'success');
+    } catch (err) {
+      showToast(err.message === 'free_quota_reached' ? t('credits.freeQuotaReached') : (err.message || t('credits.freeClaimFailed')), 'error');
+      await loadAll();
+    } finally {
+      setClaiming(false);
+    }
+  };
+
+  const freeCard = (pack) => (
+    <div className="pack-card pack-card-free" key={pack.id} data-testid={`pack-card-${pack.id}`}>
+      <div className="pack-free-badge">{t('credits.freeBadge')}</div>
+      <div className="pack-name">{pack.name}</div>
+      <div className="pack-credits"><span>{pack.free_credits}</span> {t('credits.creditsWord')}</div>
+      <div className="pack-price"><s>{pack.price_cad} {config?.currency || 'CAD'}</s> {t('credits.freePrice')}</div>
+      {freeInfo && (
+        <div className="pack-free-note">{t('credits.freeRemaining', { remaining: freeInfo.remaining, max: freeInfo.max_credits })}</div>
+      )}
+      <button type="button" className="pack-free-btn" onClick={() => claimFree(pack)}
+        disabled={claiming} data-testid={`free-claim-${pack.id}`}>
+        {claiming ? t('credits.freeClaiming') : t('credits.freeClaim', { credits: pack.free_credits })}
+      </button>
+    </div>
+  );
 
   const paypalOptions = config?.client_id
     ? { clientId: config.client_id, currency: config.currency || 'CAD', intent: 'capture' }
@@ -60,13 +96,18 @@ export default function Credits() {
         {loading ? (
           <div className="credits-loading">{t('credits.loading')}</div>
         ) : !paypalOptions ? (
-          <div className="credits-warning" data-testid="paypal-not-configured">
-            {t('credits.paypalNotConfigured')}
-          </div>
+          <>
+            <div className="credits-warning" data-testid="paypal-not-configured">
+              {t('credits.paypalNotConfigured')}
+            </div>
+            {packs.some((pack) => pack.free) && (
+              <div className="packs-grid">{packs.filter((pack) => pack.free).map(freeCard)}</div>
+            )}
+          </>
         ) : (
           <PayPalScriptProvider options={paypalOptions}>
             <div className="packs-grid">
-              {packs.map((pack) => (
+              {packs.map((pack) => pack.free ? freeCard(pack) : (
                 <div className="pack-card" key={pack.id} data-testid={`pack-card-${pack.id}`}>
                   <div className="pack-name">{pack.name}</div>
                   <div className="pack-credits"><span>{pack.credits}</span> {t('credits.creditsWord')}</div>

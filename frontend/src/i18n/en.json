@@ -205,8 +205,17 @@
       "purchase": "Purchase",
       "usage": "Usage",
       "admin_grant": "Admin grant",
-      "refund": "Refund"
-    }
+      "refund": "Refund",
+      "free_pack": "Free pack"
+    },
+    "freeBadge": "Free",
+    "freePrice": "free",
+    "freeClaim": "Get {{credits}} free credits",
+    "freeClaiming": "Adding…",
+    "freeRemaining": "Free credits left: {{remaining}} / {{max}}",
+    "freeClaimed": "{{granted}} free credits added. Balance: {{credits}}",
+    "freeQuotaReached": "Free credit limit reached: this pack now goes through PayPal.",
+    "freeClaimFailed": "Could not get the free pack."
   },
   "creditsModal": {
     "title": "Not enough credits",

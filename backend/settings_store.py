@@ -33,7 +33,25 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "request_cost": {"standard": 10, "vision": 15},
     "credits_per_usd": 500.0,
     "minimum_credits_per_request": 2,
+    # Free discovery pack (admin, Tarification tab). While enabled, a user can
+    # take the chosen pack for free (no PayPal) until they have received
+    # `max_credits` free credits in total; PayPal is then required again.
+    "free_discovery": {"enabled": False, "pack_id": "decouverte", "max_credits": 40},
 }
+
+
+def normalize_free_discovery(raw: Any) -> Dict[str, Any]:
+    """Coerce the `free_discovery` setting into {enabled, pack_id, max_credits}."""
+    raw = raw if isinstance(raw, dict) else {}
+    try:
+        max_credits = max(0, int(raw.get("max_credits", 0) or 0))
+    except (TypeError, ValueError):
+        max_credits = 0
+    return {
+        "enabled": bool(raw.get("enabled", False)),
+        "pack_id": str(raw.get("pack_id") or "decouverte"),
+        "max_credits": max_credits,
+    }
 
 
 async def seed_defaults():

@@ -30,3 +30,21 @@
 .tx-refund { background: #fae8ff; color: #86198f; }
 .amt-pos { color: #16a34a; font-weight: 700; }
 .amt-neg { color: #dc2626; font-weight: 700; }
+
+/* Free discovery pack (admin-enabled): claimed without PayPal. */
+.pack-card-free { position: relative; border-color: #67e8f9; }
+.pack-free-badge {
+  position: absolute; top: 14px; right: 14px;
+  background: #cffafe; color: #0e7490; font-size: 12px; font-weight: 700;
+  padding: 3px 10px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.pack-card-free .pack-price s { color: #94a3b8; font-weight: 600; margin-right: 6px; }
+.pack-free-note { font-size: 13px; color: #64748b; margin: -8px 0 14px; }
+.pack-free-btn {
+  width: 100%; min-height: 45px; border: none; border-radius: 999px; cursor: pointer;
+  background: #0e7490; color: #fff; font-size: 15px; font-weight: 700;
+  transition: background-color 0.15s ease;
+}
+.pack-free-btn:hover:not(:disabled) { background: #155e75; }
+.pack-free-btn:disabled { opacity: 0.6; cursor: default; }
+.tx-free_pack { background: #cffafe; color: #0e7490; }

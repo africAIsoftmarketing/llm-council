@@ -170,8 +170,11 @@ async def get_settings(admin: User = Depends(get_current_admin)):
 async def update_setting(key: str, body: dict, admin: User = Depends(get_current_admin)):
     if "value" not in body:
         raise HTTPException(status_code=400, detail="value required")
-    await settings_store.set_setting(key, body["value"], updated_by=admin.id)
-    return {"key": key, "value": body["value"]}
+    value = body["value"]
+    if key == "free_discovery":
+        value = settings_store.normalize_free_discovery(value)
+    await settings_store.set_setting(key, value, updated_by=admin.id)
+    return {"key": key, "value": value}
 
 
 # ===================== Stats =====================
